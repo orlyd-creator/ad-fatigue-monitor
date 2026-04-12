@@ -13,7 +13,7 @@ import { STAGE_COLORS, STAGE_BG, type FatigueResult, type FatigueStage } from "@
 interface Metric {
   date: string; ctr: number; cpm: number; frequency: number;
   conversionRate: number; costPerAction: number; inlinePostEngagement: number;
-  impressions: number; spend: number; clicks: number;
+  impressions: number; spend: number; clicks: number; actions: number;
 }
 interface AdDetail {
   ad: { id: string; adName: string; campaignName: string; adsetName: string; status: string };
@@ -49,7 +49,7 @@ export default function AdDetailPage() {
     <div className="min-h-screen bg-background"><NavBar />
       <main className="max-w-5xl mx-auto px-6 py-8 text-center">
         <h1 className="text-lg font-semibold">Ad not found</h1>
-        <Link href="/dashboard" className="text-[#9b87f5] text-sm mt-4 inline-block hover:underline">Back to Dashboard</Link>
+        <Link href="/dashboard" className="text-[#6B93D8] text-sm mt-4 inline-block hover:underline">Back to Dashboard</Link>
       </main>
     </div>
   );
@@ -96,21 +96,20 @@ export default function AdDetailPage() {
         {/* Charts */}
         <div className="mb-8">
           <h3 className="text-[16px] font-semibold text-foreground mb-2">Performance Over Time</h3>
-          <p className="text-[13px] text-muted-foreground mb-5">Purple = best performance period &middot; Orange = recent data being compared</p>
+          <p className="text-[13px] text-muted-foreground mb-5">Dashed lines show warning (yellow) and danger (red) thresholds where applicable</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MetricTrendChart label="Click-Through Rate" data={metrics.map((m) => ({ date: m.date, value: m.ctr }))} color="#9b87f5" suffix="%"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
-            <MetricTrendChart label="Cost Per 1,000 Views" data={metrics.map((m) => ({ date: m.date, value: m.cpm }))} color="#f59e0b" prefix="$"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
-            <MetricTrendChart label="How Often People See It" data={metrics.map((m) => ({ date: m.date, value: m.frequency }))} color="#f97316" suffix="x"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
-            <MetricTrendChart label="Conversion Rate" data={metrics.map((m) => ({ date: m.date, value: m.conversionRate * 100 }))} color="#22c55e" suffix="%"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
-            <MetricTrendChart label="Cost Per Result" data={metrics.map((m) => ({ date: m.date, value: m.costPerAction }))} color="#ea384c" prefix="$"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
-            <MetricTrendChart label="Engagement Per 1K Views"
-              data={metrics.map((m) => ({ date: m.date, value: m.impressions > 0 ? (m.inlinePostEngagement / m.impressions) * 1000 : 0 }))} color="#8b5cf6"
-              baselineStart={fatigue.baselineWindow?.start} baselineEnd={fatigue.baselineWindow?.end} recentStart={fatigue.recentWindow?.start} recentEnd={fatigue.recentWindow?.end} />
+            <MetricTrendChart label="CTR (Click-Through Rate)" data={metrics.map((m) => ({ date: m.date, value: m.ctr }))} color="#6B93D8" suffix="%"
+              warningThreshold={1.0} dangerThreshold={0.5} invertThreshold={false} />
+            <MetricTrendChart label="CPC (Cost Per Click)" data={metrics.map((m) => ({ date: m.date, value: m.impressions > 0 && m.clicks > 0 ? m.spend / m.clicks : 0 }))} color="#D06AB8" prefix="$"
+              invertThreshold={true} />
+            <MetricTrendChart label="CPM (Cost Per 1K Impressions)" data={metrics.map((m) => ({ date: m.date, value: m.cpm }))} color="#F04E80" prefix="$"
+              invertThreshold={true} />
+            <MetricTrendChart label="Frequency" data={metrics.map((m) => ({ date: m.date, value: m.frequency }))} color="#f97316" suffix="x"
+              warningThreshold={2.5} dangerThreshold={4.0} invertThreshold={true} />
+            <MetricTrendChart label="Daily Spend" data={metrics.map((m) => ({ date: m.date, value: m.spend }))} color="#7B8AD8" prefix="$"
+              invertThreshold={true} />
+            <MetricTrendChart label="Conversions" data={metrics.map((m) => ({ date: m.date, value: m.actions ?? 0 }))} color="#22c55e"
+              invertThreshold={false} />
           </div>
         </div>
 

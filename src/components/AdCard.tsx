@@ -52,7 +52,7 @@ export default function AdCard({ id, adName, campaignName, fatigue, recentMetric
       )}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-[15px] text-foreground truncate group-hover:text-[#DB2777] transition-colors">
+          <h3 className="font-semibold text-[15px] text-foreground truncate group-hover:text-[#6B93D8] transition-colors">
             {adName}
           </h3>
           <div className="flex items-center gap-2 mt-1">
@@ -77,9 +77,9 @@ export default function AdCard({ id, adName, campaignName, fatigue, recentMetric
       </div>
 
       {!isCollecting && recentMetrics.length > 0 && (
-        <div className="mt-5 pt-4 border-t border-pink-100 grid grid-cols-3 gap-4">
+        <div className="mt-5 pt-4 border-t border-blue-100 grid grid-cols-3 gap-4">
           <MiniMetric label="CTR" value={`${recentMetrics[recentMetrics.length - 1]?.ctr?.toFixed(2) ?? 0}%`}
-            data={recentMetrics.map((m) => m.ctr)} color="#EC4899" />
+            data={recentMetrics.map((m) => m.ctr)} color="#6B93D8" />
           <MiniMetric label="Frequency" value={recentMetrics[recentMetrics.length - 1]?.frequency?.toFixed(1) ?? "0"}
             data={recentMetrics.map((m) => m.frequency)}
             color={(recentMetrics[recentMetrics.length - 1]?.frequency ?? 0) > 4 ? "#ea384c" : (recentMetrics[recentMetrics.length - 1]?.frequency ?? 0) > 2.5 ? "#f59e0b" : "#22c55e"} />

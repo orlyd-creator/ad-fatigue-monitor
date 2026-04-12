@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FFF5F7;
+  --background: #F0F4FA;
   --foreground: #1a1a2e;
   --card: #ffffff;
-  --card-border: rgba(236, 72, 153, 0.06);
+  --card-border: rgba(107, 147, 216, 0.06);
   --card-hover: #FFFAFC;
   --muted: #9ca3af;
   --muted-foreground: #6b7280;
-  --surface: #FFF0F3;
+  --surface: #EDF0F8;
   --healthy: #22c55e;
   --healthy-bg: #f0fdf4;
   --warning: #f59e0b;
@@ -17,12 +17,12 @@
   --fatiguing-bg: #fff7ed;
   --fatigued: #ef4444;
   --fatigued-bg: #fef2f2;
-  --accent: #EC4899;
-  --accent-hover: #DB2777;
-  --accent-bg: #FDF2F8;
-  --accent-border: rgba(236, 72, 153, 0.2);
-  --accent-light: #FCE7F3;
-  --ring: rgba(236, 72, 153, 0.25);
+  --accent: #7B8AD8;
+  --accent-hover: #6B78C8;
+  --accent-bg: #EEF0FA;
+  --accent-border: rgba(123, 138, 216, 0.2);
+  --accent-light: #E0E4F5;
+  --ring: rgba(123, 138, 216, 0.25);
 }
 
 @theme inline {
@@ -52,7 +52,7 @@
 }
 
 body {
-  background: linear-gradient(180deg, #FFFFFF 0%, #FFF0F5 8%, #FFDBE8 20%, #F5B8D0 38%, #E890B5 55%, #DB6A9A 72%, #C94D82 88%, #B8367A 100%);
+  background: linear-gradient(180deg, #EBF4FF 0%, #C5D9F5 6%, #9AB8E8 14%, #7BA3E0 22%, #6B93D8 30%, #7B8AD8 38%, #9B7ED0 46%, #BB72C8 52%, #D06AB8 58%, #DE65AA 64%, #E660A0 70%, #EC5890 76%, #F04E80 82%, #F24570 88%, #F43D62 94%, #F53558 100%);
   min-height: 100vh;
   color: var(--foreground);
   font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
@@ -130,7 +130,7 @@ a, button { transition: all 0.2s ease; }
 }
 .status-card-hover:hover {
   transform: perspective(600px) rotateX(1deg) rotateY(-1deg) translateY(-2px);
-  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.12);
+  box-shadow: 0 8px 24px rgba(107, 147, 216, 0.12);
 }
 
 /* Nav link underline animation */
@@ -144,7 +144,7 @@ a, button { transition: all 0.2s ease; }
   left: 50%;
   width: 0;
   height: 2px;
-  background: linear-gradient(90deg, #EC4899, #8B5CF6);
+  background: linear-gradient(90deg, #6B93D8, #D06AB8, #F04E80);
   border-radius: 99px;
   transition: width 0.25s ease, left 0.25s ease;
 }
@@ -169,21 +169,21 @@ a, button { transition: all 0.2s ease; }
   background-clip: padding-box, border-box;
   background-image:
     linear-gradient(white, white),
-    conic-gradient(from var(--angle), #EC4899, #8B5CF6, #EC4899);
+    conic-gradient(from var(--angle), #6B93D8, #D06AB8, #F04E80, #6B93D8);
   animation: borderSpin 1.5s linear infinite;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #F9A8D4; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: #B8C8E8; border-radius: 99px; }
 
 /* Range input */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
-  background: #FCE7F3;
+  background: #E0E4F5;
   border-radius: 99px;
   outline: none;
 }
@@ -192,22 +192,22 @@ input[type="range"]::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #EC4899, #8B5CF6);
+  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
   cursor: pointer;
   border: 3px solid white;
-  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+  box-shadow: 0 2px 8px rgba(107, 147, 216, 0.3);
 }
 
 /* Loveable-style cards */
 .lv-card {
   background: white;
   border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(236, 72, 153, 0.06), 0 4px 12px rgba(236, 72, 153, 0.04);
-  border: 1px solid rgba(236, 72, 153, 0.06);
+  box-shadow: 0 1px 3px rgba(107, 147, 216, 0.06), 0 4px 12px rgba(107, 147, 216, 0.04);
+  border: 1px solid rgba(107, 147, 216, 0.06);
   transition: all 0.2s ease;
 }
 .lv-card:hover {
-  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.1), 0 8px 24px rgba(236, 72, 153, 0.06);
+  box-shadow: 0 2px 8px rgba(107, 147, 216, 0.1), 0 8px 24px rgba(107, 147, 216, 0.06);
   transform: translateY(-1px);
 }
 
@@ -219,15 +219,15 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Utility classes */
 .gradient-text {
-  background: linear-gradient(135deg, #EC4899, #8B5CF6);
+  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .gradient-bg {
-  background: linear-gradient(135deg, #EC4899, #8B5CF6);
+  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
 }
 
 .gradient-bg-soft {
-  background: linear-gradient(135deg, #FDF2F8, #EDE9FE);
+  background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE);
 }

@@ -2,12 +2,23 @@
 
 import { db } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { syncAccount } from "@/lib/meta/sync";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
 
 export async function refreshData() {
   try {
-    const account = await db.select().from(accounts).limit(1).get();
+    const session = await auth();
+    if (!session) {
+      return { error: "Not authenticated. Go to /login first." };
+    }
+    const accountId = (session as any).accountId as string;
+    if (!accountId) {
+      return { error: "No account connected. Go to /login first." };
+    }
+
+    const account = await db.select().from(accounts).where(eq(accounts.id, accountId)).get();
     if (!account) {
       return { error: "No account connected. Go to /login first." };
     }

@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import NavBar from "@/components/NavBar";
 import DashboardClient from "./DashboardClient";
 import { format, subDays } from "date-fns";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +19,20 @@ const RANGE_DAYS: Record<string, number> = {
   "90d": 90,
 };
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  const session = await auth();
+  if (!session) redirect("/login");
+  const accountId = (session as any).accountId as string;
+  if (!accountId) redirect("/login");
+
   const params = await searchParams;
-  const range = params.range && RANGE_DAYS[params.range] ? params.range : "30d";
-  const rangeDays = RANGE_DAYS[range];
+
+  // Handle custom date range
+  const isCustom = params.range === "custom" && params.from && params.to;
+  const range = isCustom ? "custom" : (params.range && RANGE_DAYS[params.range] ? params.range : "30d");
+  const rangeDays = isCustom
+    ? Math.max(1, Math.ceil((new Date(params.to!).getTime() - new Date(params.from!).getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    : RANGE_DAYS[range] ?? 30;
 
   // Get settings
   const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
@@ -38,11 +50,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       }
     : DEFAULT_SETTINGS;
 
-  // Get active ads
-  const allAds = await db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
+  // Get active ads for this user's account
+  const allAds = await db.select().from(ads).where(and(eq(ads.status, "ACTIVE"), eq(ads.accountId, accountId))).all();
 
   const now = new Date();
-  const rangeStart = format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const rangeStart = isCustom ? params.from! : format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const rangeEnd = isCustom ? params.to! : format(now, "yyyy-MM-dd");
 
   const results = await Promise.all(allAds.map(async (ad) => {
     const allMetrics = await db
@@ -56,7 +69,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const fatigue = calculateFatigueScore(allMetrics, scoringSettings);
 
     // Filter to range for display metrics
-    const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart);
+    const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
     const recentMetrics = rangeMetrics.slice(-7);
 
     // Compute summary stats for the range
@@ -85,12 +98,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Sort worst first
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);
 
-  // Compute spend data for the selected range
-  const allMetricsRange = await db
+  // Build set of ad IDs belonging to this user's account (for filtering aggregate queries)
+  const userAdIds = new Set(allAds.map(a => a.id));
+
+  // Compute spend data for the selected range (filtered to user's ads)
+  const allMetricsRangeRaw = await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, rangeStart))
     .all();
+  const allMetricsRange = allMetricsRangeRaw.filter(m => m.date <= rangeEnd && userAdIds.has(m.adId));
 
   const totalSpendRange = allMetricsRange.reduce((sum, m) => sum + (m.spend ?? 0), 0);
   const totalImpressionsRange = allMetricsRange.reduce((sum, m) => sum + (m.impressions ?? 0), 0);
@@ -99,8 +116,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   // Daily spend for the range
   const dailySpendMap = new Map<string, number>();
-  for (let i = rangeDays - 1; i >= 0; i--) {
-    dailySpendMap.set(format(subDays(now, i), "yyyy-MM-dd"), 0);
+  if (isCustom) {
+    const start = new Date(params.from!);
+    const end = new Date(params.to!);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      dailySpendMap.set(format(d, "yyyy-MM-dd"), 0);
+    }
+  } else {
+    for (let i = rangeDays - 1; i >= 0; i--) {
+      dailySpendMap.set(format(subDays(now, i), "yyyy-MM-dd"), 0);
+    }
   }
   for (const m of allMetricsRange) {
     if (dailySpendMap.has(m.date)) {
@@ -110,13 +135,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const dailySpend = Array.from(dailySpendMap.entries()).map(([date, spend]) => ({ date, spend }));
 
   // --- Period-over-period comparison ---
-  const prevRangeStart = format(subDays(now, rangeDays * 2), "yyyy-MM-dd");
+  const prevRangeEnd = isCustom ? format(subDays(new Date(params.from!), 1), "yyyy-MM-dd") : format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const prevRangeStart = format(subDays(new Date(prevRangeEnd), rangeDays - 1), "yyyy-MM-dd");
   const allMetricsPrev = (await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, prevRangeStart))
     .all())
-    .filter(m => m.date >= prevRangeStart && m.date < rangeStart);
+    .filter(m => m.date >= prevRangeStart && m.date <= prevRangeEnd && userAdIds.has(m.adId));
 
   const prevSpend = allMetricsPrev.reduce((sum, m) => sum + (m.spend ?? 0), 0);
   const prevImpressions = allMetricsPrev.reduce((sum, m) => sum + (m.impressions ?? 0), 0);

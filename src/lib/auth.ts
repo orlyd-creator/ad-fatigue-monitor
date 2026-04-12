@@ -37,11 +37,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return false;
         }
 
-        // Store the first ad account (single-account app)
+        // Store the first ad account for this user
         const adAccount = adAccounts[0];
         const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
 
-        console.log(`[auth] Storing account ${accountId} (${adAccount.name})`);
+        console.log(`[auth] Storing account ${accountId} (${adAccount.name}) for user ${account.providerAccountId}`);
 
         await db.insert(accounts)
           .values({
@@ -56,6 +56,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             set: {
               accessToken: longLived.access_token,
               tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
+              userId: account.providerAccountId || "default",
               updatedAt: Date.now(),
             },
           })
@@ -67,14 +68,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false;
       }
     },
-    async session({ session }) {
-      // Attach account ID to the session
-      const account = await db.select().from(accounts).limit(1).get();
-      if (account) {
-        (session as any).accountId = account.id;
-        (session as any).accountName = account.name;
-        (session as any).tokenExpiring =
-          account.tokenExpiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000;
+    async jwt({ token, account }) {
+      // On initial sign-in, persist the provider account ID in the JWT
+      if (account?.providerAccountId) {
+        token.providerAccountId = account.providerAccountId;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      // Look up the account belonging to THIS user via their provider ID
+      const providerAccountId = token.providerAccountId as string | undefined;
+      if (providerAccountId) {
+        const account = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.userId, providerAccountId))
+          .limit(1)
+          .get();
+        if (account) {
+          (session as any).accountId = account.id;
+          (session as any).accountName = account.name;
+          (session as any).tokenExpiring =
+            account.tokenExpiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000;
+        }
       }
       return session;
     },

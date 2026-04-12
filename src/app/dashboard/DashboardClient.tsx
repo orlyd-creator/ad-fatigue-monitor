@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { DayPicker } from "react-day-picker";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import "react-day-picker/style.css";
 import AdCard from "@/components/AdCard";
 import SparklineChart from "@/components/SparklineChart";
 import type { FatigueStage } from "@/lib/fatigue/types";
@@ -53,10 +56,12 @@ const STAGE_META: Record<string, { color: string; bg: string; label: string; des
 };
 
 const RANGE_OPTIONS = [
-  { value: "7d", label: "7 days" },
-  { value: "14d", label: "14 days" },
-  { value: "30d", label: "30 days" },
-  { value: "90d", label: "90 days" },
+  { value: "7d", label: "7d" },
+  { value: "14d", label: "14d" },
+  { value: "30d", label: "30d" },
+  { value: "90d", label: "90d" },
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
 ];
 
 type ViewMode = "grid" | "campaign";
@@ -312,11 +317,70 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
     return items.slice(0, 5);
   }, [ads, spendData]);
 
+  const searchParamsObj = useSearchParams();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [selectedRange, setSelectedRange] = useState<{ from?: Date; to?: Date }>(() => {
+    if (range === "custom") {
+      const fromParam = searchParamsObj.get("from");
+      const toParam = searchParamsObj.get("to");
+      return {
+        from: fromParam ? new Date(fromParam + "T00:00:00") : undefined,
+        to: toParam ? new Date(toParam + "T00:00:00") : undefined,
+      };
+    }
+    return {};
+  });
+  const calendarRef = useRef<HTMLDivElement>(null);
+
+  // Close calendar on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
+        setCalendarOpen(false);
+      }
+    }
+    if (calendarOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [calendarOpen]);
+
   const handleRangeChange = (newRange: string) => {
-    router.push(`/dashboard?range=${newRange}`);
+    setCalendarOpen(false);
+    if (newRange === "this_month") {
+      const now = new Date();
+      const from = format(startOfMonth(now), "yyyy-MM-dd");
+      const to = format(now, "yyyy-MM-dd");
+      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
+    } else if (newRange === "last_month") {
+      const lastMonth = subMonths(new Date(), 1);
+      const from = format(startOfMonth(lastMonth), "yyyy-MM-dd");
+      const to = format(endOfMonth(lastMonth), "yyyy-MM-dd");
+      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
+    } else {
+      router.push(`/dashboard?range=${newRange}`);
+    }
   };
 
-  const rangeLabel = RANGE_OPTIONS.find(r => r.value === range)?.label || "30 days";
+  const handleCalendarSelect = (selected: { from: Date | undefined; to?: Date | undefined } | undefined) => {
+    if (!selected) return;
+    setSelectedRange({ from: selected.from, to: selected.to });
+    if (selected.from && selected.to) {
+      const from = format(selected.from, "yyyy-MM-dd");
+      const to = format(selected.to, "yyyy-MM-dd");
+      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
+      setCalendarOpen(false);
+    }
+  };
+
+  const isCustomRange = range === "custom";
+  const customLabel = isCustomRange
+    ? `${searchParamsObj.get("from") ? format(new Date(searchParamsObj.get("from")! + "T00:00:00"), "MMM d") : ""} - ${searchParamsObj.get("to") ? format(new Date(searchParamsObj.get("to")! + "T00:00:00"), "MMM d, yyyy") : ""}`
+    : null;
+
+  const rangeLabel = isCustomRange
+    ? customLabel || "Custom"
+    : RANGE_OPTIONS.find(r => r.value === range)?.label || "30d";
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-8">
@@ -335,20 +399,96 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {/* Date Range Selector */}
-            <div className="flex items-center bg-white rounded-xl p-1 shadow-sm border border-pink-100/50">
-              {RANGE_OPTIONS.map((opt) => (
+            <div className="flex items-center bg-white rounded-xl p-1 shadow-sm border border-blue-100/50 flex-wrap">
+              {RANGE_OPTIONS.map((opt) => {
+                const isThisOrLastMonth = opt.value === "this_month" || opt.value === "last_month";
+                const isActive = isThisOrLastMonth
+                  ? false // These redirect to custom, so we highlight via custom logic below
+                  : range === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleRangeChange(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                      isActive
+                        ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+
+              {/* Calendar icon / custom date trigger */}
+              <div className="relative" ref={calendarRef}>
                 <button
-                  key={opt.value}
-                  onClick={() => handleRangeChange(opt.value)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
-                    range === opt.value
-                      ? "bg-gradient-to-r from-[#EC4899] to-[#8B5CF6] text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-pink-50"
+                  onClick={() => setCalendarOpen(!calendarOpen)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                    isCustomRange
+                      ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
                   }`}
+                  title="Pick custom date range"
                 >
-                  {opt.label}
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                  </svg>
+                  {isCustomRange ? customLabel : "Custom"}
                 </button>
-              ))}
+
+                {/* Calendar dropdown */}
+                {calendarOpen && (
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-xl border border-blue-100/50 p-3" style={{ minWidth: 300 }}>
+                    <style>{`
+                      .fatigue-calendar .rdp-root {
+                        --rdp-accent-color: #6B93D8;
+                        --rdp-accent-background-color: #EEF0FA;
+                        --rdp-range_middle-background-color: #EEF0FA;
+                        --rdp-range_start-color: #fff;
+                        --rdp-range_start-background: linear-gradient(135deg, #6B93D8, #D06AB8);
+                        --rdp-range_end-color: #fff;
+                        --rdp-range_end-background: linear-gradient(135deg, #6B93D8, #D06AB8);
+                        font-family: var(--font-inter), Inter, system-ui, sans-serif;
+                        font-size: 13px;
+                      }
+                      .fatigue-calendar .rdp-day {
+                        border-radius: 8px;
+                      }
+                      .fatigue-calendar .rdp-range_start .rdp-day_button,
+                      .fatigue-calendar .rdp-range_end .rdp-day_button {
+                        background: linear-gradient(135deg, #6B93D8, #D06AB8);
+                        color: white;
+                        border-radius: 8px;
+                      }
+                      .fatigue-calendar .rdp-range_middle .rdp-day_button {
+                        background-color: #EEF0FA;
+                        color: #6B78C8;
+                      }
+                      .fatigue-calendar .rdp-today:not(.rdp-range_start):not(.rdp-range_end) .rdp-day_button {
+                        border: 2px solid #6B93D8;
+                        font-weight: 700;
+                      }
+                      .fatigue-calendar .rdp-day_button:hover {
+                        background-color: #E0E4F5;
+                      }
+                      .fatigue-calendar .rdp-chevron {
+                        fill: #6B93D8;
+                      }
+                    `}</style>
+                    <div className="fatigue-calendar">
+                      <DayPicker
+                        mode="range"
+                        selected={selectedRange.from ? { from: selectedRange.from, to: selectedRange.to } : undefined}
+                        onSelect={handleCalendarSelect}
+                        numberOfMonths={1}
+                        disabled={{ after: new Date() }}
+                        defaultMonth={selectedRange.from || new Date()}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -371,7 +511,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           return (
             <button key={stage} onClick={() => setFilter(filter === stage ? "all" : stage)}
               className={`rounded-2xl p-5 text-left transition-all status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
-                isActive ? "ring-2 ring-[#9b87f5] shadow-lg shadow-purple-100" : "lv-card"
+                isActive ? "ring-2 ring-[#6B93D8] shadow-lg shadow-blue-100" : "lv-card"
               }`}
               style={{ backgroundColor: isActive ? meta.bg : "white" }}>
               <div className="flex items-center gap-2 mb-3">
@@ -390,12 +530,12 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
         <div className="rounded-2xl lv-card p-6 mb-6 bg-white">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[#9b87f5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-5 h-5 text-[#6B93D8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
               </svg>
               <h2 className="text-[15px] font-semibold text-foreground">Performance</h2>
             </div>
-            <span className="text-[11px] text-muted-foreground bg-pink-50 px-2.5 py-1 rounded-full">vs previous {rangeLabel}</span>
+            <span className="text-[11px] text-muted-foreground bg-blue-50 px-2.5 py-1 rounded-full">vs previous {rangeLabel}</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             <MetricCard label="Spend" value={`$${spendData.totalSpendRange.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} change={spendData.spendChange} invertColor />
@@ -405,7 +545,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
           <div>
             <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Daily spend ({rangeLabel})</div>
-            <SparklineChart data={spendData.dailySpend.map((d) => d.spend)} color="#9b87f5" height={48} />
+            <SparklineChart data={spendData.dailySpend.map((d) => d.spend)} color="#6B93D8" height={48} />
           </div>
         </div>
       )}
@@ -491,7 +631,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
       {insights.length > 0 && (
         <div className="rounded-2xl lv-card p-6 mb-8 bg-white">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#EC4899] to-[#8B5CF6] flex items-center justify-center">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#6B93D8] via-[#D06AB8] to-[#F04E80] flex items-center justify-center">
               <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
               </svg>
@@ -516,7 +656,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
             <>
               <span className="text-[13px] text-muted">Showing:</span>
               <button onClick={() => setFilter("all")}
-                className="text-[12px] px-3 py-1.5 rounded-full bg-accent-light text-[#7E69AB] hover:bg-purple-100 transition-colors flex items-center gap-1.5 font-medium">
+                className="text-[12px] px-3 py-1.5 rounded-full bg-accent-light text-[#6B78C8] hover:bg-blue-100 transition-colors flex items-center gap-1.5 font-medium">
                 {STAGE_META[filter]?.label}
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -561,7 +701,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
       {ads.length === 0 ? (
         <div className="text-center py-24">
           <div className="w-20 h-20 rounded-3xl bg-accent-light flex items-center justify-center mx-auto mb-5">
-            <svg className="w-9 h-9 text-[#9b87f5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="w-9 h-9 text-[#6B93D8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
             </svg>
           </div>
@@ -570,7 +710,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
             Connect your Meta ad account and hit &quot;Refresh Data&quot; to start monitoring your ads for fatigue.
           </p>
           <a href="/login"
-            className="inline-flex px-6 py-3 rounded-full bg-gradient-to-r from-[#9b87f5] to-[#7E69AB] hover:opacity-90 text-white text-[14px] font-medium transition-all shadow-lg shadow-purple-200">
+            className="inline-flex px-6 py-3 rounded-full bg-gradient-to-r from-[#6B93D8] to-[#6B78C8] hover:opacity-90 text-white text-[14px] font-medium transition-all shadow-lg shadow-blue-200">
             Connect Meta Account
           </a>
         </div>

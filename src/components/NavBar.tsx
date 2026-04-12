@@ -47,12 +47,12 @@ export default function NavBar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-2xl border-b border-pink-100/30">
+    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-2xl border-b border-blue-100/30">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-10">
             <Link href="/dashboard" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EC4899] to-[#8B5CF6] flex items-center justify-center text-white font-bold text-sm shadow-md shadow-pink-200/50">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6B93D8] via-[#D06AB8] to-[#F04E80] flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-200/50">
                 AF
               </div>
               <span className="font-semibold text-foreground tracking-tight">
@@ -69,7 +69,7 @@ export default function NavBar() {
                     className={clsx(
                       "px-4 py-2 rounded-full text-[13px] font-medium transition-all nav-link-animated",
                       isActive
-                        ? "bg-accent-light text-[#DB2777]"
+                        ? "bg-accent-light text-[#6B78C8]"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
