@@ -25,8 +25,8 @@ interface AdSummary {
   recentAvgCPC: number;
 }
 
-function loadAdData() {
-  const userSettings = db
+async function loadAdData() {
+  const userSettings = await db
     .select()
     .from(settings)
     .where(eq(settings.id, 1))
@@ -46,10 +46,10 @@ function loadAdData() {
       }
     : DEFAULT_SETTINGS;
 
-  const allAds = db.select().from(ads).all();
+  const allAds = await db.select().from(ads).all();
 
-  const adSummaries: AdSummary[] = allAds.map((ad) => {
-    const metrics = db
+  const adSummaries: AdSummary[] = await Promise.all(allAds.map(async (ad) => {
+    const metrics = await db
       .select()
       .from(dailyMetrics)
       .where(eq(dailyMetrics.adId, ad.id))
@@ -98,9 +98,9 @@ function loadAdData() {
       recentAvgFrequency: Math.round(avgFrequency * 100) / 100,
       recentAvgCPC: Math.round(avgCPC * 100) / 100,
     };
-  });
+  }));
 
-  const recentAlerts = db
+  const recentAlerts = await db
     .select()
     .from(alerts)
     .orderBy(desc(alerts.createdAt))
@@ -622,7 +622,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { adSummaries } = loadAdData();
+    const { adSummaries } = await loadAdData();
     const intent = detectIntent(message);
     const response = generateResponse(intent, adSummaries);
 

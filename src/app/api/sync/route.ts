@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Get the stored account (created by OAuth login)
-  const account = db.select().from(accounts).limit(1).get();
+  const account = await db.select().from(accounts).limit(1).get();
   if (!account) {
     return NextResponse.json(
       { error: "No account connected. Please click 'Connect with Facebook' on the login page first." },

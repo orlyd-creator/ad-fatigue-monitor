@@ -12,12 +12,12 @@ export async function GET(
 ) {
   const { adId } = await params;
 
-  const ad = db.select().from(ads).where(eq(ads.id, adId)).get();
+  const ad = await db.select().from(ads).where(eq(ads.id, adId)).get();
   if (!ad) {
     return NextResponse.json({ error: "Ad not found" }, { status: 404 });
   }
 
-  const userSettings = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
   const scoringSettings: ScoringSettings = userSettings
     ? {
         ctrWeight: userSettings.ctrWeight,
@@ -32,7 +32,7 @@ export async function GET(
       }
     : DEFAULT_SETTINGS;
 
-  const metrics = db
+  const metrics = await db
     .select()
     .from(dailyMetrics)
     .where(eq(dailyMetrics.adId, adId))
@@ -41,7 +41,7 @@ export async function GET(
 
   const fatigue = calculateFatigueScore(metrics, scoringSettings);
 
-  const adAlerts = db
+  const adAlerts = await db
     .select()
     .from(alerts)
     .where(eq(alerts.adId, adId))

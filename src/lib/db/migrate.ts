@@ -1,12 +1,21 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import path from "path";
+import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client";
+import { migrate } from "drizzle-orm/libsql/migrator";
 
-const dbPath = path.join(process.cwd(), "sqlite.db");
-const sqlite = new Database(dbPath);
-const db = drizzle(sqlite);
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
-migrate(db, { migrationsFolder: "./drizzle" });
-console.log("Database migrated successfully");
-sqlite.close();
+const db = drizzle(client);
+
+async function main() {
+  await migrate(db, { migrationsFolder: "./drizzle" });
+  console.log("Database migrated successfully");
+  client.close();
+}
+
+main().catch((err) => {
+  console.error("Migration failed:", err);
+  process.exit(1);
+});

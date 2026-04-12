@@ -4,7 +4,7 @@ import { alerts, ads } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
 
 export async function GET() {
-  const allAlerts = db
+  const allAlerts = await db
     .select({
       id: alerts.id,
       adId: alerts.adId,

@@ -8,12 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate": "npx tsx src/lib/db/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@auth/drizzle-adapter": "^1.7.0",
-    "better-sqlite3": "^11.0.0",
+    "@libsql/client": "^0.17.2",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
     "drizzle-orm": "^0.34.0",
@@ -25,7 +26,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

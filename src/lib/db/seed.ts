@@ -1,19 +1,20 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 import { format, subDays } from "date-fns";
-import path from "path";
 
-const dbPath = path.join(process.cwd(), "sqlite.db");
-const sqlite = new Database(dbPath);
-const db = drizzle(sqlite, { schema });
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+const db = drizzle(client, { schema });
 
 // Seed demo data
-function seed() {
+async function seed() {
   console.log("Seeding demo data...");
 
   // Create a demo account
-  db.insert(schema.accounts)
+  await db.insert(schema.accounts)
     .values({
       id: "demo_account",
       name: "Demo Ad Account",
@@ -40,7 +41,7 @@ function seed() {
   ];
 
   for (const ad of demoAds) {
-    db.insert(schema.ads)
+    await db.insert(schema.ads)
       .values({
         id: ad.id,
         accountId: "demo_account",
@@ -63,124 +64,58 @@ function seed() {
   const now = new Date();
 
   // Ad 1: HEALTHY - stable good performance
-  generateMetrics("ad_001", {
-    baseCtr: 2.5,
-    baseCpm: 12,
-    baseFreq: 1.5,
-    baseConvRate: 0.08,
-    baseEngagement: 45,
-    ctrTrend: 0.02,    // slight improvement
-    cpmTrend: -0.1,
-    freqGrowth: 0.03,
-    convTrend: 0.01,
-    engTrend: 0.5,
+  await generateMetrics("ad_001", {
+    baseCtr: 2.5, baseCpm: 12, baseFreq: 1.5, baseConvRate: 0.08, baseEngagement: 45,
+    ctrTrend: 0.02, cpmTrend: -0.1, freqGrowth: 0.03, convTrend: 0.01, engTrend: 0.5,
   });
 
   // Ad 2: EARLY WARNING - starting to show signs
-  generateMetrics("ad_002", {
-    baseCtr: 3.0,
-    baseCpm: 15,
-    baseFreq: 2.0,
-    baseConvRate: 0.06,
-    baseEngagement: 60,
-    ctrTrend: -0.06,   // CTR declining
-    cpmTrend: 0.3,     // CPM rising slightly
-    freqGrowth: 0.12,  // frequency climbing
-    convTrend: -0.002,
-    engTrend: -1.0,
+  await generateMetrics("ad_002", {
+    baseCtr: 3.0, baseCpm: 15, baseFreq: 2.0, baseConvRate: 0.06, baseEngagement: 60,
+    ctrTrend: -0.06, cpmTrend: 0.3, freqGrowth: 0.12, convTrend: -0.002, engTrend: -1.0,
   });
 
   // Ad 3: FATIGUING - clear fatigue signals
-  generateMetrics("ad_003", {
-    baseCtr: 2.8,
-    baseCpm: 10,
-    baseFreq: 2.5,
-    baseConvRate: 0.05,
-    baseEngagement: 35,
-    ctrTrend: -0.1,    // strong CTR decline
-    cpmTrend: 0.6,     // CPM climbing fast
-    freqGrowth: 0.18,  // frequency getting high
-    convTrend: -0.003,
-    engTrend: -2.0,
+  await generateMetrics("ad_003", {
+    baseCtr: 2.8, baseCpm: 10, baseFreq: 2.5, baseConvRate: 0.05, baseEngagement: 35,
+    ctrTrend: -0.1, cpmTrend: 0.6, freqGrowth: 0.18, convTrend: -0.003, engTrend: -2.0,
   });
 
   // Ad 4: FATIGUED - severe fatigue
-  generateMetrics("ad_004", {
-    baseCtr: 3.5,
-    baseCpm: 8,
-    baseFreq: 3.0,
-    baseConvRate: 0.10,
-    baseEngagement: 80,
-    ctrTrend: -0.15,   // CTR tanking
-    cpmTrend: 1.2,     // CPM spiking
-    freqGrowth: 0.25,  // frequency very high
-    convTrend: -0.005,
-    engTrend: -4.0,
+  await generateMetrics("ad_004", {
+    baseCtr: 3.5, baseCpm: 8, baseFreq: 3.0, baseConvRate: 0.10, baseEngagement: 80,
+    ctrTrend: -0.15, cpmTrend: 1.2, freqGrowth: 0.25, convTrend: -0.005, engTrend: -4.0,
   });
 
   // Ad 5: HEALTHY - new ad, doing great
-  generateMetrics("ad_005", {
-    baseCtr: 4.0,
-    baseCpm: 14,
-    baseFreq: 1.2,
-    baseConvRate: 0.12,
-    baseEngagement: 90,
-    ctrTrend: 0.05,
-    cpmTrend: -0.2,
-    freqGrowth: 0.02,
-    convTrend: 0.002,
-    engTrend: 1.0,
+  await generateMetrics("ad_005", {
+    baseCtr: 4.0, baseCpm: 14, baseFreq: 1.2, baseConvRate: 0.12, baseEngagement: 90,
+    ctrTrend: 0.05, cpmTrend: -0.2, freqGrowth: 0.02, convTrend: 0.002, engTrend: 1.0,
   });
 
   // Ad 6: EARLY WARNING - engagement dropping
-  generateMetrics("ad_006", {
-    baseCtr: 2.2,
-    baseCpm: 11,
-    baseFreq: 2.2,
-    baseConvRate: 0.04,
-    baseEngagement: 55,
-    ctrTrend: -0.04,
-    cpmTrend: 0.2,
-    freqGrowth: 0.10,
-    convTrend: -0.001,
-    engTrend: -2.5,
+  await generateMetrics("ad_006", {
+    baseCtr: 2.2, baseCpm: 11, baseFreq: 2.2, baseConvRate: 0.04, baseEngagement: 55,
+    ctrTrend: -0.04, cpmTrend: 0.2, freqGrowth: 0.10, convTrend: -0.001, engTrend: -2.5,
   });
 
   // Ad 7: FATIGUING - costs rising fast
-  generateMetrics("ad_007", {
-    baseCtr: 2.0,
-    baseCpm: 18,
-    baseFreq: 2.8,
-    baseConvRate: 0.07,
-    baseEngagement: 40,
-    ctrTrend: -0.08,
-    cpmTrend: 0.8,
-    freqGrowth: 0.15,
-    convTrend: -0.004,
-    engTrend: -1.5,
+  await generateMetrics("ad_007", {
+    baseCtr: 2.0, baseCpm: 18, baseFreq: 2.8, baseConvRate: 0.07, baseEngagement: 40,
+    ctrTrend: -0.08, cpmTrend: 0.8, freqGrowth: 0.15, convTrend: -0.004, engTrend: -1.5,
   });
 
   // Ad 8: HEALTHY - just launched
-  generateMetrics("ad_008", {
-    baseCtr: 3.2,
-    baseCpm: 9,
-    baseFreq: 1.0,
-    baseConvRate: 0.09,
-    baseEngagement: 70,
-    ctrTrend: 0.01,
-    cpmTrend: 0.0,
-    freqGrowth: 0.04,
-    convTrend: 0.001,
-    engTrend: 0.3,
-  }, 8); // only 8 days of data
+  await generateMetrics("ad_008", {
+    baseCtr: 3.2, baseCpm: 9, baseFreq: 1.0, baseConvRate: 0.09, baseEngagement: 70,
+    ctrTrend: 0.01, cpmTrend: 0.0, freqGrowth: 0.04, convTrend: 0.001, engTrend: 0.3,
+  }, 8);
 
   // Create some alerts
-  db.insert(schema.alerts)
+  await db.insert(schema.alerts)
     .values([
       {
-        adId: "ad_004",
-        fatigueScore: 82,
-        stage: "fatigued",
+        adId: "ad_004", fatigueScore: 82, stage: "fatigued",
         signals: JSON.stringify([
           { name: "ctr_decline", label: "CTR Decline", score: 78, weight: 0.20 },
           { name: "frequency", label: "Frequency", score: 90, weight: 0.25 },
@@ -189,9 +124,7 @@ function seed() {
         createdAt: Date.now() - 2 * 60 * 60 * 1000,
       },
       {
-        adId: "ad_003",
-        fatigueScore: 58,
-        stage: "fatiguing",
+        adId: "ad_003", fatigueScore: 58, stage: "fatiguing",
         signals: JSON.stringify([
           { name: "ctr_decline", label: "CTR Decline", score: 62, weight: 0.20 },
           { name: "frequency", label: "Frequency", score: 55, weight: 0.25 },
@@ -199,9 +132,7 @@ function seed() {
         createdAt: Date.now() - 6 * 60 * 60 * 1000,
       },
       {
-        adId: "ad_002",
-        fatigueScore: 35,
-        stage: "early_warning",
+        adId: "ad_002", fatigueScore: 35, stage: "early_warning",
         signals: JSON.stringify([
           { name: "frequency", label: "Frequency", score: 42, weight: 0.25 },
           { name: "engagement_decay", label: "Engagement", score: 38, weight: 0.10 },
@@ -209,9 +140,7 @@ function seed() {
         createdAt: Date.now() - 12 * 60 * 60 * 1000,
       },
       {
-        adId: "ad_007",
-        fatigueScore: 55,
-        stage: "fatiguing",
+        adId: "ad_007", fatigueScore: 55, stage: "fatiguing",
         signals: JSON.stringify([
           { name: "cpm_rising", label: "CPM Rising", score: 70, weight: 0.15 },
           { name: "frequency", label: "Frequency", score: 60, weight: 0.25 },
@@ -219,9 +148,7 @@ function seed() {
         createdAt: Date.now() - 18 * 60 * 60 * 1000,
       },
       {
-        adId: "ad_006",
-        fatigueScore: 30,
-        stage: "early_warning",
+        adId: "ad_006", fatigueScore: 30, stage: "early_warning",
         signals: JSON.stringify([
           { name: "engagement_decay", label: "Engagement", score: 50, weight: 0.10 },
           { name: "frequency", label: "Frequency", score: 35, weight: 0.25 },
@@ -232,7 +159,7 @@ function seed() {
     .run();
 
   // Create default settings
-  db.insert(schema.settings)
+  await db.insert(schema.settings)
     .values({ id: 1 })
     .onConflictDoUpdate({ target: schema.settings.id, set: { sensitivityPreset: "medium" } })
     .run();
@@ -242,19 +169,13 @@ function seed() {
   console.log("  - 8 demo ads with varying fatigue levels");
   console.log("  - 5 alerts");
 
-  function generateMetrics(
+  async function generateMetrics(
     adId: string,
     params: {
-      baseCtr: number;
-      baseCpm: number;
-      baseFreq: number;
-      baseConvRate: number;
-      baseEngagement: number;
-      ctrTrend: number;
-      cpmTrend: number;
-      freqGrowth: number;
-      convTrend: number;
-      engTrend: number;
+      baseCtr: number; baseCpm: number; baseFreq: number;
+      baseConvRate: number; baseEngagement: number;
+      ctrTrend: number; cpmTrend: number; freqGrowth: number;
+      convTrend: number; engTrend: number;
     },
     days = 20
   ) {
@@ -273,11 +194,9 @@ function seed() {
       const actions = Math.round(clicks * convRate);
       const engagement = Math.max(0, Math.round(params.baseEngagement + params.engTrend * dayIndex + noise() * 5));
 
-      db.insert(schema.dailyMetrics)
+      await db.insert(schema.dailyMetrics)
         .values({
-          adId,
-          date,
-          impressions,
+          adId, date, impressions,
           reach: Math.round(impressions / frequency),
           clicks,
           spend: Math.round(spend * 100) / 100,
@@ -295,12 +214,17 @@ function seed() {
         })
         .onConflictDoUpdate({
           target: [schema.dailyMetrics.adId, schema.dailyMetrics.date],
-          set: { impressions }, // just update something to avoid error
+          set: { impressions },
         })
         .run();
     }
   }
 }
 
-seed();
-sqlite.close();
+seed().then(() => {
+  client.close();
+}).catch((err) => {
+  console.error("Seed failed:", err);
+  client.close();
+  process.exit(1);
+});

@@ -43,7 +43,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         console.log(`[auth] Storing account ${accountId} (${adAccount.name})`);
 
-        db.insert(accounts)
+        await db.insert(accounts)
           .values({
             id: accountId,
             name: adAccount.name || "My Ad Account",
@@ -69,7 +69,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async session({ session }) {
       // Attach account ID to the session
-      const account = db.select().from(accounts).limit(1).get();
+      const account = await db.select().from(accounts).limit(1).get();
       if (account) {
         (session as any).accountId = account.id;
         (session as any).accountName = account.name;

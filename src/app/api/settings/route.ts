@@ -4,12 +4,12 @@ import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET() {
-  let userSettings = db.select().from(settings).where(eq(settings.id, 1)).get();
+  let userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
 
   // Create default settings if none exist
   if (!userSettings) {
-    db.insert(settings).values({ id: 1 }).run();
-    userSettings = db.select().from(settings).where(eq(settings.id, 1)).get();
+    await db.insert(settings).values({ id: 1 }).run();
+    userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
   }
 
   return NextResponse.json(userSettings);
@@ -19,12 +19,12 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
 
   // Ensure settings row exists
-  const existing = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const existing = await db.select().from(settings).where(eq(settings.id, 1)).get();
   if (!existing) {
-    db.insert(settings).values({ id: 1 }).run();
+    await db.insert(settings).values({ id: 1 }).run();
   }
 
-  db.update(settings)
+  await db.update(settings)
     .set({
       sensitivityPreset: body.sensitivityPreset,
       ctrWeight: body.ctrWeight,
@@ -40,6 +40,6 @@ export async function PUT(req: NextRequest) {
     .where(eq(settings.id, 1))
     .run();
 
-  const updated = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const updated = await db.select().from(settings).where(eq(settings.id, 1)).get();
   return NextResponse.json(updated);
 }

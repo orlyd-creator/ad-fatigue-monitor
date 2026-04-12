@@ -47,7 +47,7 @@ async function paginateAll(url: string, token: string, params: Record<string, st
 export async function syncAccount(accountId: string): Promise<SyncResult> {
   const result: SyncResult = { adsFound: 0, metricsUpserted: 0, alertsGenerated: 0, errors: [] };
 
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  const account = await db.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!account) { result.errors.push("Account not found"); return result; }
 
   const token = account.accessToken;
@@ -55,7 +55,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
   const now = new Date();
 
   // First sync = 30 days, subsequent = 3 days
-  const existingMetrics = db.select({ id: dailyMetrics.id }).from(dailyMetrics).limit(1).all();
+  const existingMetrics = await db.select({ id: dailyMetrics.id }).from(dailyMetrics).limit(1).all();
   const isFirstSync = existingMetrics.length === 0;
   const lookbackDays = isFirstSync ? 30 : 3;
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
@@ -79,7 +79,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     for (const ad of trulyActive) {
       result.adsFound++;
-      db.insert(ads)
+      await db.insert(ads)
         .values({
           id: ad.id,
           accountId,
@@ -109,10 +109,10 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     // Mark any ads in DB that are no longer active
     const activeIds = new Set(trulyActive.map(a => a.id));
-    const dbAds = db.select().from(ads).where(eq(ads.accountId, accountId)).all();
+    const dbAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
     for (const dbAd of dbAds) {
       if (!activeIds.has(dbAd.id)) {
-        db.update(ads).set({ status: "PAUSED" }).where(eq(ads.id, dbAd.id)).run();
+        await db.update(ads).set({ status: "PAUSED" }).where(eq(ads.id, dbAd.id)).run();
       }
     }
 
@@ -164,7 +164,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         postShares: 0,
       };
 
-      db.insert(dailyMetrics)
+      await db.insert(dailyMetrics)
         .values(row)
         .onConflictDoUpdate({ target: [dailyMetrics.adId, dailyMetrics.date], set: row })
         .run();
@@ -173,19 +173,19 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     // Step 3: Run fatigue scoring
     console.log("[sync] Running fatigue scoring...");
-    const activeAds = db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
+    const activeAds = await db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
 
     for (const ad of activeAds) {
-      const metrics = db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, ad.id)).orderBy(dailyMetrics.date).all();
+      const metrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, ad.id)).orderBy(dailyMetrics.date).all();
       const fatigueResult = calculateFatigueScore(metrics);
       if (fatigueResult.dataStatus !== "sufficient") continue;
 
-      const lastAlert = db.select().from(alerts).where(eq(alerts.adId, ad.id)).orderBy(desc(alerts.createdAt)).limit(1).get();
+      const lastAlert = await db.select().from(alerts).where(eq(alerts.adId, ad.id)).orderBy(desc(alerts.createdAt)).limit(1).get();
       const stageOrder = { healthy: 0, early_warning: 1, fatiguing: 2, fatigued: 3 } as const;
       const previousStage = (lastAlert?.stage as keyof typeof stageOrder) ?? "healthy";
 
       if (stageOrder[fatigueResult.stage] > stageOrder[previousStage]) {
-        db.insert(alerts).values({
+        await db.insert(alerts).values({
           adId: ad.id,
           fatigueScore: fatigueResult.fatigueScore,
           stage: fatigueResult.stage,

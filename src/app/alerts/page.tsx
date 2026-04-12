@@ -6,8 +6,8 @@ import AlertFeed from "@/components/AlertFeed";
 
 export const dynamic = "force-dynamic";
 
-export default function AlertsPage() {
-  const allAlerts = db
+export default async function AlertsPage() {
+  const allAlerts = await db
     .select({
       id: alerts.id,
       adId: alerts.adId,
@@ -23,10 +23,10 @@ export default function AlertsPage() {
     .all();
 
   // Attach ad names
-  const alertsWithNames = allAlerts.map((alert) => {
-    const ad = db.select({ adName: ads.adName }).from(ads).where(eq(ads.id, alert.adId)).get();
+  const alertsWithNames = await Promise.all(allAlerts.map(async (alert) => {
+    const ad = await db.select({ adName: ads.adName }).from(ads).where(eq(ads.id, alert.adId)).get();
     return { ...alert, adName: ad?.adName || `Ad ${alert.adId}` };
-  });
+  }));
 
   return (
     <div className="min-h-screen bg-background">

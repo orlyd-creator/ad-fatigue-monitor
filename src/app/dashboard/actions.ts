@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 
 export async function refreshData() {
   try {
-    const account = db.select().from(accounts).limit(1).get();
+    const account = await db.select().from(accounts).limit(1).get();
     if (!account) {
       return { error: "No account connected. Go to /login first." };
     }

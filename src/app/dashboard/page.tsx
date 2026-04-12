@@ -23,7 +23,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const rangeDays = RANGE_DAYS[range];
 
   // Get settings
-  const userSettings = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
   const scoringSettings: ScoringSettings = userSettings
     ? {
         ctrWeight: userSettings.ctrWeight,
@@ -39,13 +39,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     : DEFAULT_SETTINGS;
 
   // Get active ads
-  const allAds = db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
+  const allAds = await db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
 
   const now = new Date();
   const rangeStart = format(subDays(now, rangeDays), "yyyy-MM-dd");
 
-  const results = allAds.map((ad) => {
-    const allMetrics = db
+  const results = await Promise.all(allAds.map(async (ad) => {
+    const allMetrics = await db
       .select()
       .from(dailyMetrics)
       .where(eq(dailyMetrics.adId, ad.id))
@@ -80,13 +80,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       rangeClicks: totalClicks,
       rangeAvgCTR: Math.round(avgCTR * 100) / 100,
     };
-  });
+  }));
 
   // Sort worst first
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);
 
   // Compute spend data for the selected range
-  const allMetricsRange = db
+  const allMetricsRange = await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, rangeStart))
@@ -111,11 +111,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   // --- Period-over-period comparison ---
   const prevRangeStart = format(subDays(now, rangeDays * 2), "yyyy-MM-dd");
-  const allMetricsPrev = db
+  const allMetricsPrev = (await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, prevRangeStart))
-    .all()
+    .all())
     .filter(m => m.date >= prevRangeStart && m.date < rangeStart);
 
   const prevSpend = allMetricsPrev.reduce((sum, m) => sum + (m.spend ?? 0), 0);

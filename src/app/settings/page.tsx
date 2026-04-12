@@ -6,13 +6,13 @@ import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
   // Get or create default settings
-  let userSettings = db.select().from(settings).where(eq(settings.id, 1)).get();
+  let userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
 
   if (!userSettings) {
-    db.insert(settings).values({ id: 1 }).run();
-    userSettings = db.select().from(settings).where(eq(settings.id, 1)).get()!;
+    await db.insert(settings).values({ id: 1 }).run();
+    userSettings = (await db.select().from(settings).where(eq(settings.id, 1)).get())!;
   }
 
   const data = {
