@@ -132,7 +132,7 @@ function CampaignSection({ group, filter }: { group: CampaignGroup; filter: Fati
     <div className="mb-6">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white hover:bg-gray-50 transition-colors lv-card"
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-colors lv-card"
       >
         <ChevronIcon expanded={expanded} />
         <div className="flex-1 text-left min-w-0">
@@ -194,7 +194,7 @@ function MetricCard({ label, value, change, invertColor }: { label: string; valu
   const arrow = isPositive ? "↑" : "↓";
 
   return (
-    <div className="bg-[#FFFAFC] rounded-xl px-4 py-3">
+    <div className="glass rounded-xl px-4 py-3">
       <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">{label}</div>
       <div className="text-xl font-bold text-foreground tabular-nums">{value}</div>
       {Math.abs(change) >= 0.1 && (
@@ -399,7 +399,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {/* Date Range Selector */}
-            <div className="flex items-center bg-white rounded-xl p-1 shadow-sm border border-blue-100/50 flex-wrap">
+            <div className="flex items-center glass rounded-xl p-1 shadow-sm flex-wrap">
               {RANGE_OPTIONS.map((opt) => {
                 const isThisOrLastMonth = opt.value === "this_month" || opt.value === "last_month";
                 const isActive = isThisOrLastMonth
@@ -439,7 +439,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
 
                 {/* Calendar dropdown */}
                 {calendarOpen && (
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-xl border border-blue-100/50 p-3" style={{ minWidth: 300 }}>
+                  <div className="absolute right-0 top-full mt-2 z-50 glass rounded-2xl shadow-xl p-3" style={{ minWidth: 300 }}>
                     <style>{`
                       .fatigue-calendar .rdp-root {
                         --rdp-accent-color: #6B93D8;
@@ -513,7 +513,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
               className={`rounded-2xl p-5 text-left transition-all status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
                 isActive ? "ring-2 ring-[#6B93D8] shadow-lg shadow-blue-100" : "lv-card"
               }`}
-              style={{ backgroundColor: isActive ? meta.bg : "white" }}>
+              style={{ backgroundColor: isActive ? meta.bg : "rgba(255,255,255,0.55)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" }}>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meta.color }} />
                 <span className="text-[12px] font-medium text-muted-foreground">{meta.label}</span>
@@ -527,7 +527,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
 
       {/* Performance Overview with Period Comparison */}
       {ads.length > 0 && (
-        <div className="rounded-2xl lv-card p-6 mb-6 bg-white">
+        <div className="rounded-2xl lv-card p-6 mb-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-[#6B93D8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -535,7 +535,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
               </svg>
               <h2 className="text-[15px] font-semibold text-foreground">Performance</h2>
             </div>
-            <span className="text-[11px] text-muted-foreground bg-blue-50 px-2.5 py-1 rounded-full">vs previous {rangeLabel}</span>
+            <span className="text-[11px] text-muted-foreground bg-white/30 backdrop-blur-sm px-2.5 py-1 rounded-full">vs previous {rangeLabel}</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             <MetricCard label="Spend" value={`$${spendData.totalSpendRange.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} change={spendData.spendChange} invertColor />
@@ -554,7 +554,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
       {ads.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Wasted Spend */}
-          <div className="rounded-2xl lv-card p-5 bg-white">
+          <div className="rounded-2xl lv-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -582,7 +582,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
 
           {/* Top Performer */}
-          <div className="rounded-2xl lv-card p-5 bg-white">
+          <div className="rounded-2xl lv-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -604,7 +604,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
 
           {/* Weakest Ad */}
-          <div className="rounded-2xl lv-card p-5 bg-white">
+          <div className="rounded-2xl lv-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -629,7 +629,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
 
       {/* What You Should Do */}
       {insights.length > 0 && (
-        <div className="rounded-2xl lv-card p-6 mb-8 bg-white">
+        <div className="rounded-2xl lv-card p-6 mb-8">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#6B93D8] via-[#D06AB8] to-[#F04E80] flex items-center justify-center">
               <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -640,7 +640,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
           <div className="space-y-2.5">
             {insights.map((insight, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-xl bg-[#FFFAFC] hover:bg-[#FFF0F3] transition-colors">
+              <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/30 hover:bg-white/40 transition-colors">
                 <span className="text-base flex-shrink-0 mt-0.5">{insight.icon}</span>
                 <p className="text-[13px] text-foreground leading-relaxed">{insight.text}</p>
               </div>
@@ -656,7 +656,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
             <>
               <span className="text-[13px] text-muted">Showing:</span>
               <button onClick={() => setFilter("all")}
-                className="text-[12px] px-3 py-1.5 rounded-full bg-accent-light text-[#6B78C8] hover:bg-blue-100 transition-colors flex items-center gap-1.5 font-medium">
+                className="text-[12px] px-3 py-1.5 rounded-full bg-gradient-to-r from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 text-[#6B78C8] hover:from-[#6B93D8]/25 hover:via-[#9B7ED0]/25 hover:to-[#D06AB8]/25 transition-colors flex items-center gap-1.5 font-medium backdrop-blur-sm">
                 {STAGE_META[filter]?.label}
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -667,12 +667,12 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
         </div>
 
         {ads.length > 0 && (
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+          <div className="flex items-center glass rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("grid")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
                 viewMode === "grid"
-                  ? "bg-white text-foreground shadow-sm"
+                  ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -685,7 +685,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
               onClick={() => setViewMode("campaign")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
                 viewMode === "campaign"
-                  ? "bg-white text-foreground shadow-sm"
+                  ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >

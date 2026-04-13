@@ -10,7 +10,7 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-[#EBF4FF] via-[#E8E0F5] to-[#F5E8F0] px-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-white/80 via-[#C5D9F5]/40 via-[#9B7ED0]/30 to-[#D06AB8]/20 px-4 py-12">
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-10">
@@ -40,7 +40,7 @@ export default async function LoginPage() {
           </button>
           </form>
 
-          <div className="mt-5 flex items-start gap-3 p-4 rounded-2xl bg-green-50">
+          <div className="mt-5 flex items-start gap-3 p-4 rounded-2xl bg-green-50/60 backdrop-blur-sm">
             <svg className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
@@ -50,47 +50,12 @@ export default async function LoginPage() {
           </div>
         </div>
 
-        {/* Setup Guide */}
-        <div className="lv-card p-7">
-          <h3 className="text-[15px] font-semibold text-foreground mb-5">First time? Here&apos;s how to set it up</h3>
-
-          <div className="space-y-5">
-            <Step n={1} title="Create a Meta Developer App">
-              Go to <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-[#EC4899] font-medium hover:underline">developers.facebook.com/apps</a> and click &quot;Create App&quot;. Pick &quot;Other&quot;, then &quot;Business&quot;.
-            </Step>
-            <Step n={2} title="Add Marketing API">
-              In your app dashboard, find &quot;Add Products&quot; and add <strong>Marketing API</strong>.
-            </Step>
-            <Step n={3} title="Get your App ID and Secret">
-              Go to Settings &rarr; Basic. Copy the <strong>App ID</strong> and <strong>App Secret</strong>.
-            </Step>
-            <Step n={4} title="Paste into .env.local">
-              Open <code className="text-[11px] px-2 py-1 bg-accent-light rounded-lg text-[#DB2777] font-mono">~/ad-fatigue-monitor/.env.local</code> and fill in your credentials.
-            </Step>
-            <Step n={5} title="Click Connect above!">
-              Your ads will appear on the dashboard after you hit &quot;Refresh Data&quot;.
-            </Step>
-          </div>
-
-          <div className="mt-6 p-5 rounded-2xl bg-accent-light">
-            <p className="text-[13px] text-[#DB2777] leading-relaxed">
-              <strong className="text-foreground">Day-to-day:</strong> Just open <code className="text-[11px] px-1.5 py-0.5 bg-white rounded-lg font-mono text-[#DB2777]">localhost:3000</code> in your browser. Click &quot;Refresh Data&quot; for latest numbers. Check once a day,orange or red cards mean it&apos;s time to swap creatives.
-            </p>
-          </div>
-        </div>
+        {/* Tagline */}
+        <p className="text-center text-[13px] text-muted-foreground mt-2">
+          Trusted by marketers who hate wasting ad spend.
+        </p>
       </div>
     </div>
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-4">
-      <div className="w-7 h-7 rounded-full bg-accent-light text-[#DB2777] flex items-center justify-center flex-shrink-0 text-[12px] font-bold">{n}</div>
-      <div>
-        <div className="text-[14px] font-medium text-foreground">{title}</div>
-        <div className="text-[13px] text-muted-foreground mt-0.5 leading-relaxed">{children}</div>
-      </div>
-    </div>
-  );
-}

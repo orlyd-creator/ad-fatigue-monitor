@@ -47,7 +47,7 @@ export default function NavBar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-white/30 shadow-sm">
+    <nav className="sticky top-0 z-50 bg-white/50 backdrop-blur-2xl border-b border-white/30 shadow-sm">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-10">
@@ -98,7 +98,7 @@ export default function NavBar() {
                   ? "bg-red-50 text-red-500 border border-red-200"
                   : isPending
                   ? "sync-border-spin text-muted-foreground"
-                  : "bg-white text-muted-foreground hover:text-foreground shadow-sm border border-black/[0.06] hover:shadow-md"
+                  : "glass text-muted-foreground hover:text-foreground shadow-sm border border-white/40 hover:shadow-md"
               )}
             >
               {isPending && !syncDone && (

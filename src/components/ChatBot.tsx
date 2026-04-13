@@ -89,9 +89,9 @@ export default function ChatBot() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[520px] rounded-3xl bg-white shadow-2xl shadow-green-200/30 border border-green-100 flex flex-col overflow-hidden animate-slide-up">
+        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[520px] rounded-3xl bg-white/70 backdrop-blur-2xl shadow-2xl shadow-green-200/30 border border-white/40 flex flex-col overflow-hidden animate-slide-up">
           {/* Header */}
-          <div className="px-5 py-4 bg-gradient-to-r from-[#22C55E] to-[#15803d] text-white">
+          <div className="px-5 py-4 bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
                 🐸
@@ -110,8 +110,8 @@ export default function ChatBot() {
                 <div
                   className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-gradient-to-r from-[#EC4899] to-[#8B5CF6] text-white rounded-br-md"
-                      : "bg-[#F0FDF4] text-foreground rounded-bl-md"
+                      ? "bg-gradient-to-r from-[#D06AB8] to-[#9B7ED0] text-white rounded-br-md"
+                      : "bg-white/50 backdrop-blur-sm text-foreground rounded-bl-md"
                   }`}
                 >
                   {msg.role === "assistant" ? (
@@ -128,11 +128,11 @@ export default function ChatBot() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="px-4 py-3 rounded-2xl bg-[#F0FDF4] rounded-bl-md">
+                <div className="px-4 py-3 rounded-2xl bg-white/50 backdrop-blur-sm rounded-bl-md">
                   <div className="flex gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-300 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="w-2 h-2 rounded-full bg-green-300 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="w-2 h-2 rounded-full bg-green-300 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <div className="w-2 h-2 rounded-full bg-[#6B93D8] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 rounded-full bg-[#9B7ED0] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 rounded-full bg-[#D06AB8] animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export default function ChatBot() {
           </div>
 
           {/* Input */}
-          <div className="px-4 py-3 border-t border-green-50">
+          <div className="px-4 py-3 border-t border-white/30">
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -149,12 +149,12 @@ export default function ChatBot() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ask about your ads..."
-                className="flex-1 px-4 py-2.5 rounded-xl bg-[#F0FDF4] border border-green-100 text-[13px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-300 transition-all"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/40 backdrop-blur-sm border border-white/40 text-[13px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-[#9B7ED0]/30 focus:border-[#9B7ED0]/40 transition-all"
               />
               <button
                 onClick={() => sendMessage()}
                 disabled={loading || !input.trim()}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#22C55E] to-[#15803d] text-white text-[13px] font-medium disabled:opacity-40 hover:shadow-md transition-all btn-hover-scale"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[13px] font-medium disabled:opacity-40 hover:shadow-md transition-all btn-hover-scale"
               >
                 Send
               </button>
@@ -164,7 +164,7 @@ export default function ChatBot() {
                 <button
                   key={q}
                   onClick={() => { sendMessage(q); }}
-                  className="text-[10px] px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#15803d] hover:bg-green-200 transition-colors"
+                  className="text-[10px] px-2.5 py-1 rounded-full bg-[#6B93D8]/10 text-[#6B78C8] hover:bg-[#9B7ED0]/15 transition-colors"
                 >
                   {q}
                 </button>

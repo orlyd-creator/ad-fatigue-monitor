@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #F0F4FA;
+  --background: transparent;
   --foreground: #1a1a2e;
-  --card: #ffffff;
+  --card: rgba(255, 255, 255, 0.55);
   --card-border: rgba(107, 147, 216, 0.06);
-  --card-hover: #FFFAFC;
+  --card-hover: rgba(255, 255, 255, 0.65);
   --muted: #9ca3af;
   --muted-foreground: #6b7280;
-  --surface: #EDF0F8;
+  --surface: rgba(237, 240, 248, 0.6);
   --healthy: #22c55e;
   --healthy-bg: #f0fdf4;
   --warning: #f59e0b;
@@ -19,9 +19,9 @@
   --fatigued-bg: #fef2f2;
   --accent: #7B8AD8;
   --accent-hover: #6B78C8;
-  --accent-bg: #EEF0FA;
+  --accent-bg: rgba(238, 240, 250, 0.6);
   --accent-border: rgba(123, 138, 216, 0.2);
-  --accent-light: #E0E4F5;
+  --accent-light: rgba(224, 228, 245, 0.6);
   --ring: rgba(123, 138, 216, 0.25);
 }
 
@@ -52,7 +52,8 @@
 }
 
 body {
-  background: linear-gradient(180deg, #EBF4FF 0%, #C5D9F5 6%, #9AB8E8 14%, #7BA3E0 22%, #6B93D8 30%, #7B8AD8 38%, #9B7ED0 46%, #BB72C8 52%, #D06AB8 58%, #DE65AA 64%, #E660A0 70%, #EC5890 76%, #F04E80 82%, #F24570 88%, #F43D62 94%, #F53558 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #EBF4FF 4%, #C5D9F5 10%, #9AB8E8 18%, #7BA3E0 26%, #6B93D8 34%, #7B8AD8 42%, #9B7ED0 50%, #BB72C8 56%, #D06AB8 62%, #DE65AA 68%, #E660A0 74%, #EC5890 80%, #F04E80 86%, #F24570 92%, #F53558 100%);
+  background-attachment: fixed;
   min-height: 100vh;
   color: var(--foreground);
   font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
@@ -168,7 +169,7 @@ a, button { transition: all 0.2s ease; }
   background-origin: border-box;
   background-clip: padding-box, border-box;
   background-image:
-    linear-gradient(white, white),
+    linear-gradient(rgba(255,255,255,0.7), rgba(255,255,255,0.7)),
     conic-gradient(from var(--angle), #6B93D8, #D06AB8, #F04E80, #6B93D8);
   animation: borderSpin 1.5s linear infinite;
 }
@@ -198,17 +199,28 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 2px 8px rgba(107, 147, 216, 0.3);
 }
 
-/* Loveable-style cards */
+/* Loveable-style cards — glassmorphism over gradient */
 .lv-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(107, 147, 216, 0.06), 0 4px 12px rgba(107, 147, 216, 0.04);
-  border: 1px solid rgba(107, 147, 216, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   transition: all 0.2s ease;
 }
 .lv-card:hover {
+  background: rgba(255, 255, 255, 0.68);
   box-shadow: 0 2px 8px rgba(107, 147, 216, 0.1), 0 8px 24px rgba(107, 147, 216, 0.06);
   transform: translateY(-1px);
+}
+
+/* Glass utility class */
+.glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 /* Stage borders on hover */

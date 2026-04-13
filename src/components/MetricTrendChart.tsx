@@ -56,7 +56,7 @@ export default function MetricTrendChart({
             axisLine={{ stroke: "#E8E8E4" }} tickLine={false} />
           <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={45} axisLine={false} tickLine={false}
             tickFormatter={(v: number) => `${prefix}${v % 1 === 0 ? v : v.toFixed(1)}${suffix}`} />
-          <Tooltip contentStyle={{ backgroundColor: "white", border: "none", borderRadius: 16, fontSize: 12,
+          <Tooltip contentStyle={{ backgroundColor: "rgba(255,255,255,0.75)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 16, fontSize: 12,
             padding: "10px 14px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
             formatter={(value: number) => [`${prefix}${value.toFixed(2)}${suffix}`, label]}
             labelFormatter={(d: string) => {
