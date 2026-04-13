@@ -223,6 +223,13 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
+/* Sidebar glass effect */
+.sidebar-container {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+}
+
 /* Stage borders on hover */
 .glow-green:hover { border-color: rgba(34, 197, 94, 0.3) !important; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1) !important; }
 .glow-yellow:hover { border-color: rgba(245, 158, 11, 0.3) !important; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1) !important; }

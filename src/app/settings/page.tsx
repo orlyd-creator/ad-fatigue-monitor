@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import NavBar from "@/components/NavBar";
 import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +29,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
       <SettingsClient initialSettings={data} />
     </div>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import ChatBotLoader from "@/components/ChatBotLoader";
+import SidebarLayout from "@/components/SidebarLayout";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,8 +25,8 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {children}
+      <body className="min-h-full">
+        <SidebarLayout>{children}</SidebarLayout>
         <ChatBotLoader />
       </body>
     </html>

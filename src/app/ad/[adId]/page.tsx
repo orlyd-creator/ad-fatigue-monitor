@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import NavBar from "@/components/NavBar";
 import FatigueScoreBadge from "@/components/FatigueScoreBadge";
 import MetricTrendChart from "@/components/MetricTrendChart";
 import SignalBreakdown from "@/components/SignalBreakdown";
@@ -38,7 +37,7 @@ export default function AdDetailPage() {
   }, [adId]);
 
   if (loading) return (
-    <div className="min-h-screen bg-transparent"><NavBar />
+    <div className="min-h-screen bg-transparent">
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="animate-pulse space-y-4"><div className="h-4 bg-surface rounded-lg w-48" /><div className="h-8 bg-surface rounded-lg w-72" /><div className="h-64 bg-surface rounded-2xl mt-6" /></div>
       </main>
@@ -46,7 +45,7 @@ export default function AdDetailPage() {
   );
 
   if (!data?.ad) return (
-    <div className="min-h-screen bg-transparent"><NavBar />
+    <div className="min-h-screen bg-transparent">
       <main className="max-w-5xl mx-auto px-6 py-8 text-center">
         <h1 className="text-lg font-semibold">Ad not found</h1>
         <Link href="/dashboard" className="text-[#6B93D8] text-sm mt-4 inline-block hover:underline">Back to Dashboard</Link>
@@ -61,7 +60,6 @@ export default function AdDetailPage() {
 
   return (
     <div className="min-h-screen bg-transparent">
-      <NavBar />
       <main className="max-w-5xl mx-auto px-6 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 text-[13px] text-muted mb-6">

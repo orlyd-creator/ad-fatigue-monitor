@@ -4,7 +4,6 @@ import { eq, and, gte } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
-import NavBar from "@/components/NavBar";
 import DashboardClient from "./DashboardClient";
 import { format, subDays } from "date-fns";
 import { auth } from "@/lib/auth";
@@ -206,7 +205,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="min-h-screen">
-      <NavBar />
       <DashboardClient ads={results} spendData={spendData} range={range} />
     </div>
   );

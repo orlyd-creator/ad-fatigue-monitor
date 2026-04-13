@@ -388,8 +388,8 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Your Ads</h1>
-            <p className="text-[14px] text-muted-foreground mt-1">
+            <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-sm">Your Ads</h1>
+            <p className="text-[14px] text-white/80 mt-1">
               {ads.length > 0
                 ? urgentCount > 0
                   ? `${urgentCount} ad${urgentCount > 1 ? "s" : ""} need${urgentCount === 1 ? "s" : ""} your attention right now`
@@ -493,7 +493,7 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
         </div>
         {ads.length > 0 && (
-          <div className="flex items-center gap-1.5 text-muted mt-2">
+          <div className="flex items-center gap-1.5 text-white/60 mt-2">
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
             </svg>
@@ -705,15 +705,15 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-foreground mb-2">You&apos;re connected! 🎉</h2>
-          <p className="text-[14px] text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-            Your Meta account is linked. Click <strong>&quot;Refresh Data&quot;</strong> in the top right to pull your ads in.
+          <h2 className="text-xl font-bold text-white mb-2 drop-shadow-sm">You&apos;re connected! 🎉</h2>
+          <p className="text-[14px] text-white/80 mb-8 max-w-md mx-auto leading-relaxed">
+            Your Meta account is linked. Click <strong>&quot;Refresh Data&quot;</strong> in the sidebar to pull your ads in.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <svg className="w-5 h-5 text-[#6B93D8] animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            <svg className="w-5 h-5 text-white animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            <span className="text-[14px] font-medium text-[#6B93D8]">Hit &quot;Refresh Data&quot; up there ↗</span>
+            <span className="text-[14px] font-bold text-white drop-shadow-sm">Hit &quot;Refresh Data&quot; in the sidebar</span>
           </div>
         </div>
       ) : viewMode === "grid" ? (

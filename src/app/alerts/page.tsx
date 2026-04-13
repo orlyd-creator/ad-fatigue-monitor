@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { alerts, ads } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
-import NavBar from "@/components/NavBar";
 import AlertFeed from "@/components/AlertFeed";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -21,11 +20,10 @@ export default async function AlertsPage() {
   if (userAdIds.length === 0) {
     return (
       <div className="min-h-screen">
-        <NavBar />
         <main className="max-w-3xl mx-auto px-6 py-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts</h1>
-            <p className="text-[14px] text-muted-foreground mt-1">No ads found for your account.</p>
+            <h1 className="text-2xl font-bold text-white tracking-tight drop-shadow-sm">Alerts</h1>
+            <p className="text-[14px] text-white/80 mt-1">No ads found for your account.</p>
           </div>
           <AlertFeed alerts={[]} />
         </main>
@@ -57,11 +55,10 @@ export default async function AlertsPage() {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
       <main className="max-w-3xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold text-white tracking-tight drop-shadow-sm">Alerts</h1>
+          <p className="text-[14px] text-white/80 mt-1">
             When an ad crosses into a worse stage, it shows up here. Click any to see the full breakdown.
           </p>
         </div>

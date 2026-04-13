@@ -20,12 +20,19 @@ async function metaFetch(url: string, token: string, params: Record<string, stri
   u.searchParams.set("access_token", token);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
 
+  console.log(`[meta] GET ${u.pathname}${u.search.replace(/access_token=[^&]+/, "access_token=***")}`);
+
   const res = await fetch(u.toString());
+  const body = await res.json().catch(() => ({ error: { message: res.statusText } }));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
-    throw new Error(`Meta API Error: ${err.error?.message || res.statusText}`);
+    const msg = body?.error?.message || res.statusText;
+    console.error(`[meta] ERROR ${res.status}: ${msg}`);
+    throw new Error(`Meta API ${res.status}: ${msg}`);
   }
-  return res.json();
+
+  console.log(`[meta] OK — ${Array.isArray(body?.data) ? body.data.length + " items" : "object"}`);
+  return body;
 }
 
 async function paginateAll(url: string, token: string, params: Record<string, string> = {}) {
@@ -33,8 +40,11 @@ async function paginateAll(url: string, token: string, params: Record<string, st
   const first = await metaFetch(url, token, { ...params, limit: "500" });
   all.push(...(first.data || []));
   let next = first.paging?.next;
-  while (next) {
+  let page = 1;
+  while (next && page < 20) {
     await delay(500);
+    page++;
+    console.log(`[meta] Paginating page ${page}...`);
     const res = await fetch(next);
     if (!res.ok) break;
     const data = await res.json();
@@ -47,33 +57,114 @@ async function paginateAll(url: string, token: string, params: Record<string, st
 export async function syncAccount(accountId: string): Promise<SyncResult> {
   const result: SyncResult = { adsFound: 0, metricsUpserted: 0, alertsGenerated: 0, errors: [] };
 
+  // Step 0: Load account from DB
   const account = await db.select().from(accounts).where(eq(accounts.id, accountId)).get();
-  if (!account) { result.errors.push("Account not found"); return result; }
+  if (!account) {
+    result.errors.push("Account not found in database");
+    return result;
+  }
 
   const token = account.accessToken;
   const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
   const now = new Date();
 
-  // First sync = 30 days, subsequent = 3 days
+  // Check token expiry
+  if (account.tokenExpiresAt < Date.now()) {
+    result.errors.push("Token expired. Please reconnect your Meta account.");
+    return result;
+  }
+
+  // Determine lookback window
   const existingMetrics = await db.select({ id: dailyMetrics.id }).from(dailyMetrics).limit(1).all();
   const isFirstSync = existingMetrics.length === 0;
   const lookbackDays = isFirstSync ? 30 : 3;
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
   const until = format(now, "yyyy-MM-dd");
 
-  console.log(`[sync] ${isFirstSync ? "First sync (30 days)" : "Incremental (3 days)"}: ${since} → ${until}`);
+  console.log(`[sync] Account: ${actId} | ${isFirstSync ? "First sync (30d)" : "Incremental (3d)"}: ${since} → ${until}`);
 
   try {
-    // Step 1: Get ALL ads at the account level in ONE call (instead of campaign→adset→ad)
-    console.log("[sync] Fetching ads from account...");
-    // Fetch ALL ads regardless of status (active, paused, archived, etc.)
-    const allAds = await paginateAll(`/${actId}/ads`, token, {
-      fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
-      effective_status: JSON.stringify(["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES"]),
-    });
+    // ── Step 1: Verify account access ────────────────────────────
+    console.log("[sync] Step 1: Verifying account access...");
+    let accountInfo;
+    try {
+      accountInfo = await metaFetch(`/${actId}`, token, {
+        fields: "name,account_status,amount_spent,currency",
+      });
+      console.log(`[sync] Account verified: "${accountInfo.name}" | Status: ${accountInfo.account_status} | Total spent: ${accountInfo.amount_spent} ${accountInfo.currency}`);
+    } catch (e: any) {
+      result.errors.push(`Cannot access ad account ${actId}: ${e.message}. Make sure ads_read permission is granted.`);
+      return result;
+    }
 
-    console.log(`[sync] Found ${allAds.length} total ads`);
+    // ── Step 2: Fetch ALL ads (no status filter — get everything) ─
+    console.log("[sync] Step 2: Fetching all ads...");
+    let allAds: any[] = [];
 
+    // Try without effective_status filter first (gets everything)
+    try {
+      allAds = await paginateAll(`/${actId}/ads`, token, {
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+      });
+      console.log(`[sync] Found ${allAds.length} ads (no filter)`);
+    } catch (e: any) {
+      console.error(`[sync] Ads fetch failed: ${e.message}`);
+      // Fallback: try with explicit statuses
+      try {
+        console.log("[sync] Trying with explicit status filter...");
+        allAds = await paginateAll(`/${actId}/ads`, token, {
+          fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+          effective_status: JSON.stringify(["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]),
+        });
+        console.log(`[sync] Fallback found ${allAds.length} ads`);
+      } catch (e2: any) {
+        result.errors.push(`Failed to fetch ads: ${e2.message}`);
+        return result;
+      }
+    }
+
+    if (allAds.length === 0) {
+      // One more fallback: try fetching via campaigns
+      console.log("[sync] 0 ads found. Trying campaign-level fetch...");
+      try {
+        const campaigns = await paginateAll(`/${actId}/campaigns`, token, {
+          fields: "id,name,status,effective_status",
+        });
+        console.log(`[sync] Found ${campaigns.length} campaigns`);
+
+        if (campaigns.length === 0) {
+          result.errors.push(`No campaigns or ads found in account ${actId}. Account status: ${accountInfo?.account_status}. Make sure you have ads_read permission and at least one campaign.`);
+          return result;
+        }
+
+        // Fetch ads from each campaign
+        for (const campaign of campaigns.slice(0, 20)) {
+          await delay(500);
+          try {
+            const campaignAds = await paginateAll(`/${campaign.id}/ads`, token, {
+              fields: "id,name,status,effective_status,adset{id,name},created_time,creative{thumbnail_url}",
+            });
+            for (const ad of campaignAds) {
+              ad.campaign = { id: campaign.id, name: campaign.name };
+            }
+            allAds.push(...campaignAds);
+          } catch {
+            console.error(`[sync] Failed to fetch ads for campaign ${campaign.id}`);
+          }
+        }
+        console.log(`[sync] Campaign-level fetch got ${allAds.length} ads total`);
+      } catch (e: any) {
+        result.errors.push(`Campaign fetch also failed: ${e.message}`);
+      }
+    }
+
+    if (allAds.length === 0) {
+      result.errors.push("No ads found. This could mean: (1) Your ad account has no ads, (2) The ads_read permission isn't granted — check Meta Developer Console → App Review → Permissions, or (3) Your app is in Development mode and needs to be switched to Live.");
+      return result;
+    }
+
+    // Save ad records
+    console.log(`[sync] Saving ${allAds.length} ads to database...`);
     for (const ad of allAds) {
       result.adsFound++;
       const adStatus = ad.effective_status || ad.status || "UNKNOWN";
@@ -105,21 +196,26 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         .run();
     }
 
-    // Step 2: Get insights at account level with ad-level breakdown (ONE call)
-    console.log("[sync] Fetching insights...");
-    await delay(2000); // breathing room for rate limits
+    // ── Step 3: Fetch insights (metrics) ─────────────────────────
+    console.log("[sync] Step 3: Fetching insights...");
+    await delay(1000);
 
-    const insights = await paginateAll(`/${actId}/insights`, token, {
-      fields: [
-        "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
-        "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
-        "inline_post_engagement",
-      ].join(","),
-      time_range: JSON.stringify({ since, until }),
-      time_increment: "1",
-      level: "ad",
-      filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PENDING_REVIEW", "DISAPPROVED", "WITH_ISSUES"] }]),
-    });
+    let insights: any[] = [];
+    try {
+      insights = await paginateAll(`/${actId}/insights`, token, {
+        fields: [
+          "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
+          "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
+          "inline_post_engagement",
+        ].join(","),
+        time_range: JSON.stringify({ since, until }),
+        time_increment: "1",
+        level: "ad",
+      });
+    } catch (e: any) {
+      console.error(`[sync] Insights fetch failed: ${e.message}`);
+      result.errors.push(`Insights fetch failed: ${e.message}`);
+    }
 
     console.log(`[sync] Got ${insights.length} insight rows`);
 
@@ -160,11 +256,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       result.metricsUpserted++;
     }
 
-    // Step 3: Run fatigue scoring
-    console.log("[sync] Running fatigue scoring...");
-    const activeAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
+    // ── Step 4: Run fatigue scoring ──────────────────────────────
+    console.log("[sync] Step 4: Fatigue scoring...");
+    const allDbAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
 
-    for (const ad of activeAds) {
+    for (const ad of allDbAds) {
       const metrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, ad.id)).orderBy(dailyMetrics.date).all();
       const fatigueResult = calculateFatigueScore(metrics);
       if (fatigueResult.dataStatus !== "sufficient") continue;
@@ -184,10 +280,10 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       }
     }
 
-    console.log(`[sync] Done! ${result.adsFound} ads, ${result.metricsUpserted} metrics, ${result.alertsGenerated} alerts`);
+    console.log(`[sync] ✅ Done! ${result.adsFound} ads, ${result.metricsUpserted} metrics, ${result.alertsGenerated} alerts`);
   } catch (err: any) {
     result.errors.push(`Sync failed: ${err.message}`);
-    console.error("[sync] Error:", err.message);
+    console.error("[sync] ❌ Error:", err.message, err.stack);
   }
 
   return result;
