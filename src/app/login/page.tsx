@@ -20,16 +20,16 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#6B93D8] via-[#D06AB8] to-[#F04E80] flex items-center justify-center text-white font-bold text-2xl mx-auto mb-5 shadow-xl shadow-blue-200/50">
             AF
           </div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Ad Fatigue Monitor</h1>
-          <p className="text-[15px] text-muted-foreground mt-3 max-w-sm mx-auto leading-relaxed">
-            Know when your ads are getting tired,before your wallet notices.
+          <h1 className="text-3xl font-bold text-black tracking-tight">Ad Fatigue Monitor</h1>
+          <p className="text-[15px] text-gray-600 mt-3 max-w-sm mx-auto leading-relaxed">
+            Know when your ads are getting tired, before your wallet notices.
           </p>
         </div>
 
         {/* Connect */}
         <div className="lv-card p-7 mb-5">
-          <h2 className="text-[17px] font-semibold text-foreground mb-2">Connect your Meta account</h2>
-          <p className="text-[14px] text-muted-foreground mb-6 leading-relaxed">
+          <h2 className="text-[17px] font-semibold text-black mb-2">Connect your Meta account</h2>
+          <p className="text-[14px] text-gray-600 mb-6 leading-relaxed">
             We&apos;ll read your ad performance data to spot fatigue patterns. That&apos;s it,no changes to your ads, no posting, no spending.
           </p>
 
@@ -54,7 +54,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
 
         {/* Tagline */}
-        <p className="text-center text-[13px] text-muted-foreground mt-2">
+        <p className="text-center text-[13px] text-gray-500 mt-2">
           Trusted by marketers who hate wasting ad spend.
         </p>
       </div>
