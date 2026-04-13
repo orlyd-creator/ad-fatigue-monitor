@@ -51,7 +51,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     : DEFAULT_SETTINGS;
 
   // Get active ads for this user's account
-  const allAds = await db.select().from(ads).where(and(eq(ads.status, "ACTIVE"), eq(ads.accountId, accountId))).all();
+  const allAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
 
   const now = new Date();
   const rangeStart = isCustom ? params.from! : format(subDays(now, rangeDays), "yyyy-MM-dd");

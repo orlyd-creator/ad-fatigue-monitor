@@ -66,19 +66,17 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
   try {
     // Step 1: Get ALL ads at the account level in ONE call (instead of campaign→adset→ad)
     console.log("[sync] Fetching ads from account...");
+    // Fetch ALL ads regardless of status (active, paused, archived, etc.)
     const allAds = await paginateAll(`/${actId}/ads`, token, {
       fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
-      effective_status: JSON.stringify(["ACTIVE"]),
+      effective_status: JSON.stringify(["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES"]),
     });
 
-    console.log(`[sync] Found ${allAds.length} active ads`);
+    console.log(`[sync] Found ${allAds.length} total ads`);
 
-    // Save ad records — only truly active ads (effective_status = ACTIVE)
-    const trulyActive = allAds.filter(ad => ad.effective_status === "ACTIVE");
-    console.log(`[sync] ${trulyActive.length} truly active (filtered from ${allAds.length})`);
-
-    for (const ad of trulyActive) {
+    for (const ad of allAds) {
       result.adsFound++;
+      const adStatus = ad.effective_status || ad.status || "UNKNOWN";
       await db.insert(ads)
         .values({
           id: ad.id,
@@ -88,7 +86,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
           adsetId: ad.adset?.id || "",
           adsetName: ad.adset?.name || "Unknown",
           adName: ad.name,
-          status: "ACTIVE",
+          status: adStatus,
           createdAt: ad.created_time ? new Date(ad.created_time).getTime() : null,
           lastSyncedAt: Date.now(),
           thumbnailUrl: ad.creative?.thumbnail_url || null,
@@ -99,21 +97,12 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
             campaignName: ad.campaign?.name || "Unknown",
             adsetName: ad.adset?.name || "Unknown",
             adName: ad.name,
-            status: "ACTIVE",
+            status: adStatus,
             lastSyncedAt: Date.now(),
             thumbnailUrl: ad.creative?.thumbnail_url || null,
           },
         })
         .run();
-    }
-
-    // Mark any ads in DB that are no longer active
-    const activeIds = new Set(trulyActive.map(a => a.id));
-    const dbAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
-    for (const dbAd of dbAds) {
-      if (!activeIds.has(dbAd.id)) {
-        await db.update(ads).set({ status: "PAUSED" }).where(eq(ads.id, dbAd.id)).run();
-      }
     }
 
     // Step 2: Get insights at account level with ad-level breakdown (ONE call)
@@ -129,7 +118,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       time_range: JSON.stringify({ since, until }),
       time_increment: "1",
       level: "ad",
-      filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] }]),
+      filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PENDING_REVIEW", "DISAPPROVED", "WITH_ISSUES"] }]),
     });
 
     console.log(`[sync] Got ${insights.length} insight rows`);
@@ -173,7 +162,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     // Step 3: Run fatigue scoring
     console.log("[sync] Running fatigue scoring...");
-    const activeAds = await db.select().from(ads).where(eq(ads.status, "ACTIVE")).all();
+    const activeAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
 
     for (const ad of activeAds) {
       const metrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, ad.id)).orderBy(dailyMetrics.date).all();

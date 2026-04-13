@@ -30,7 +30,7 @@ export async function GET() {
     : DEFAULT_SETTINGS;
 
   // Get active ads for this user's account only
-  const allAds = await db.select().from(ads).where(and(eq(ads.status, "ACTIVE"), eq(ads.accountId, accountId))).all();
+  const allAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
 
   const results = await Promise.all(allAds.map(async (ad) => {
     const metrics = await db
