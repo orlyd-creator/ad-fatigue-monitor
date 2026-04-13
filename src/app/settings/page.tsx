@@ -29,7 +29,7 @@ export default async function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <NavBar />
       <SettingsClient initialSettings={data} />
     </div>

@@ -1,6 +1,14 @@
 import { signInWithFacebook } from "./actions";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  // If already logged in with a valid account, go straight to dashboard
+  const session = await auth();
+  if (session && (session as any).accountId) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-[#EBF4FF] via-[#E8E0F5] to-[#F5E8F0] px-4 py-12">
       <div className="max-w-md w-full">

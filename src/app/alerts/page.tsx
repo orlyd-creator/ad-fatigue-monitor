@@ -20,7 +20,7 @@ export default async function AlertsPage() {
 
   if (userAdIds.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         <NavBar />
         <main className="max-w-3xl mx-auto px-6 py-8">
           <div className="mb-8">
@@ -56,7 +56,7 @@ export default async function AlertsPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <NavBar />
       <main className="max-w-3xl mx-auto px-6 py-8">
         <div className="mb-8">

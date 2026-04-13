@@ -205,7 +205,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <NavBar />
       <DashboardClient ads={results} spendData={spendData} range={range} />
     </div>

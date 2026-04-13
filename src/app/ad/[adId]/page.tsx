@@ -38,7 +38,7 @@ export default function AdDetailPage() {
   }, [adId]);
 
   if (loading) return (
-    <div className="min-h-screen bg-background"><NavBar />
+    <div className="min-h-screen bg-transparent"><NavBar />
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="animate-pulse space-y-4"><div className="h-4 bg-surface rounded-lg w-48" /><div className="h-8 bg-surface rounded-lg w-72" /><div className="h-64 bg-surface rounded-2xl mt-6" /></div>
       </main>
@@ -46,7 +46,7 @@ export default function AdDetailPage() {
   );
 
   if (!data?.ad) return (
-    <div className="min-h-screen bg-background"><NavBar />
+    <div className="min-h-screen bg-transparent"><NavBar />
       <main className="max-w-5xl mx-auto px-6 py-8 text-center">
         <h1 className="text-lg font-semibold">Ad not found</h1>
         <Link href="/dashboard" className="text-[#6B93D8] text-sm mt-4 inline-block hover:underline">Back to Dashboard</Link>
@@ -60,7 +60,7 @@ export default function AdDetailPage() {
   const stageBg = STAGE_BG[fatigue.stage as FatigueStage];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-transparent">
       <NavBar />
       <main className="max-w-5xl mx-auto px-6 py-8">
         {/* Breadcrumb */}
