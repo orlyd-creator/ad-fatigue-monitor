@@ -82,10 +82,12 @@ async function paginateAll(
 }
 
 export async function getAdAccounts(accessToken: string) {
-  const data = await metaFetch("/me/adaccounts", accessToken, {
+  // Use pagination to get ALL ad accounts (some users have many)
+  const allAccounts = await paginateAll("/me/adaccounts", accessToken, {
     fields: "name,account_id,account_status",
   });
-  return data.data || [];
+  console.log(`[meta] getAdAccounts found ${allAccounts.length} accounts:`, allAccounts.map((a: any) => `${a.account_id || a.id} (${a.name})`));
+  return allAccounts;
 }
 
 export async function getCampaigns(accountId: string, accessToken: string) {

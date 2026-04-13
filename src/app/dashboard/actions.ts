@@ -19,18 +19,13 @@ export async function refreshData() {
     }
 
     // Get ALL accounts for this user (they may have multiple ad accounts)
-    const userId = (session as any).user?.id;
+    const allAccountIds: string[] = (session as any).allAccountIds || [providerAccountId];
     const allAccounts = await db.select().from(accounts).all();
-    // Filter to accounts belonging to this user (matching token)
-    const userAccounts = allAccounts.filter(a => {
-      // Check if this account's token matches any of the user's accounts
-      return a.userId === (session as any).providerAccountId || a.id === providerAccountId;
-    });
+    // Filter to accounts that belong to this user's session
+    const accountsToSync = allAccounts.filter(a => allAccountIds.includes(a.id));
 
-    // If no specific user accounts found, try all accounts with same userId
-    const accountsToSync = userAccounts.length > 0
-      ? userAccounts
-      : allAccounts.filter(a => a.id === providerAccountId);
+    console.log(`[refreshData] Session has ${allAccountIds.length} account IDs: ${allAccountIds.join(", ")}`);
+    console.log(`[refreshData] Found ${accountsToSync.length} accounts in DB to sync`);
 
     if (accountsToSync.length === 0) {
       return { error: "No account connected. Go to /login first." };

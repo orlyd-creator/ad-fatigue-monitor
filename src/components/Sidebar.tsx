@@ -81,14 +81,14 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="sidebar-container w-[240px] min-w-[240px] h-screen sticky top-0 flex flex-col border-r border-white/20 z-40">
+    <aside className="w-[240px] min-w-[240px] h-screen sticky top-0 flex flex-col border-r border-gray-200 z-40 bg-white/90 backdrop-blur-xl">
       {/* Logo */}
       <div className="px-5 pt-6 pb-4">
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6B93D8] via-[#D06AB8] to-[#F04E80] flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-200/50">
             AF
           </div>
-          <span className="font-semibold text-white tracking-tight text-[15px] drop-shadow-sm">
+          <span className="font-semibold text-black tracking-tight text-[15px]">
             Ad Fatigue
           </span>
         </Link>
@@ -106,8 +106,8 @@ export default function Sidebar() {
               className={clsx(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all",
                 isActive
-                  ? "bg-white/20 text-white shadow-sm"
-                  : "text-white/70 hover:text-white hover:bg-white/10"
+                  ? "bg-gray-100 text-black shadow-sm"
+                  : "text-gray-600 hover:text-black hover:bg-gray-50"
               )}
             >
               {link.icon}
@@ -120,10 +120,10 @@ export default function Sidebar() {
       {/* Refresh Data Button */}
       <div className="px-3 pb-3">
         {syncError && (
-          <div className="px-3 py-2 mb-2 rounded-xl bg-red-500/20 border border-red-400/30">
-            <span className="text-[11px] text-red-200 leading-tight block">
+          <div className="px-3 py-2 mb-2 rounded-xl bg-red-50 border border-red-200">
+            <span className="text-[11px] text-red-700 leading-tight block">
               {syncError.includes("expired") || syncError.includes("No account") ? (
-                <a href="/login" className="underline hover:text-white">
+                <a href="/login" className="underline hover:text-red-900">
                   Reconnect your account
                 </a>
               ) : (
@@ -138,12 +138,12 @@ export default function Sidebar() {
           className={clsx(
             "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium transition-all",
             syncDone
-              ? "bg-green-500/20 text-green-200 border border-green-400/30"
+              ? "bg-green-50 text-green-700 border border-green-200"
               : syncError
-              ? "bg-red-500/20 text-red-200 border border-red-400/30 hover:bg-red-500/30"
+              ? "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
               : isPending
-              ? "bg-white/10 text-white/70 border border-white/20"
-              : "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20 hover:text-white"
+              ? "bg-gray-50 text-gray-500 border border-gray-200"
+              : "bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 hover:text-black"
           )}
         >
           {isPending && !syncDone && (
@@ -183,11 +183,11 @@ export default function Sidebar() {
       </div>
 
       {/* Account / Logout */}
-      <div className="px-3 pb-5 pt-1 border-t border-white/10">
+      <div className="px-3 pb-5 pt-1 border-t border-gray-200">
         <form action={signOutUser}>
         <button
           type="submit"
-          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-white/60 hover:text-white hover:bg-white/10 transition-all"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-gray-500 hover:text-black hover:bg-gray-50 transition-all"
           title="Switch account or logout"
         >
           <svg

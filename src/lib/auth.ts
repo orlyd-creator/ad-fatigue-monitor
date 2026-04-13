@@ -38,9 +38,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.log(`[auth] Granted permissions: ${granted.join(", ")}`);
         } catch { /* ignore */ }
 
-        // Discover ALL ad accounts
+        // Discover ALL ad accounts (paginated — gets every account the user has access to)
         const adAccounts = await getAdAccounts(longLived.access_token);
-        console.log(`[auth] Found ${adAccounts.length} ad accounts`);
+        console.log(`[auth] Found ${adAccounts.length} ad accounts:`);
+        for (const acc of adAccounts) {
+          console.log(`[auth]   - ${acc.account_id || acc.id} "${acc.name}" status=${acc.account_status}`);
+        }
 
         if (adAccounts.length === 0) {
           console.error("[auth] No ad accounts found for this user");
