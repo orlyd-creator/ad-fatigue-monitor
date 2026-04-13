@@ -38,37 +38,45 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.log(`[auth] Granted permissions: ${granted.join(", ")}`);
         } catch { /* ignore */ }
 
-        // Discover ad accounts
+        // Discover ALL ad accounts
         const adAccounts = await getAdAccounts(longLived.access_token);
+        console.log(`[auth] Found ${adAccounts.length} ad accounts`);
+
         if (adAccounts.length === 0) {
           console.error("[auth] No ad accounts found for this user");
           return false;
         }
 
-        // Store the first ad account for this user
-        const adAccount = adAccounts[0];
-        const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
+        // Store ALL ad accounts — we'll figure out which has ads during sync
+        let bestAccountId = "";
+        for (const adAccount of adAccounts) {
+          const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
+          console.log(`[auth] Storing account ${accountId} (${adAccount.name}) status=${adAccount.account_status}`);
 
-        console.log(`[auth] Storing account ${accountId} (${adAccount.name}) for user ${account.providerAccountId}`);
-
-        await db.insert(accounts)
-          .values({
-            id: accountId,
-            name: adAccount.name || "My Ad Account",
-            accessToken: longLived.access_token,
-            tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
-            userId: account.providerAccountId || "default",
-          })
-          .onConflictDoUpdate({
-            target: accounts.id,
-            set: {
+          await db.insert(accounts)
+            .values({
+              id: accountId,
+              name: adAccount.name || "My Ad Account",
               accessToken: longLived.access_token,
               tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
               userId: account.providerAccountId || "default",
-              updatedAt: Date.now(),
-            },
-          })
-          .run();
+            })
+            .onConflictDoUpdate({
+              target: accounts.id,
+              set: {
+                accessToken: longLived.access_token,
+                tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
+                userId: account.providerAccountId || "default",
+                updatedAt: Date.now(),
+              },
+            })
+            .run();
+
+          // Prefer the first active account (status 1 = active)
+          if (!bestAccountId || adAccount.account_status === 1) {
+            bestAccountId = accountId;
+          }
+        }
 
         return true;
       } catch (err) {
@@ -84,18 +92,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      // Look up the account belonging to THIS user via their provider ID
+      // Look up ALL accounts belonging to this user
       const providerAccountId = token.providerAccountId as string | undefined;
       if (providerAccountId) {
-        const account = await db
+        const userAccounts = await db
           .select()
           .from(accounts)
           .where(eq(accounts.userId, providerAccountId))
-          .limit(1)
-          .get();
+          .all();
+
+        // Pick the first account (we'll sync all of them)
+        const account = userAccounts[0];
         if (account) {
           (session as any).accountId = account.id;
           (session as any).accountName = account.name;
+          (session as any).allAccountIds = userAccounts.map(a => a.id);
           (session as any).tokenExpiring =
             account.tokenExpiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000;
         }

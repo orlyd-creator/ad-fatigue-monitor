@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { ads, dailyMetrics, settings } from "@/lib/db/schema";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
@@ -23,6 +23,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   if (!session) redirect("/login");
   const accountId = (session as any).accountId as string;
   if (!accountId) redirect("/login");
+
+  // Get all account IDs for this user (they may have multiple ad accounts)
+  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
 
   const params = await searchParams;
 
@@ -49,8 +52,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       }
     : DEFAULT_SETTINGS;
 
-  // Get active ads for this user's account
-  const allAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
+  // Get ads from ALL of user's ad accounts
+  const allAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
 
   const now = new Date();
   const rangeStart = isCustom ? params.from! : format(subDays(now, rangeDays), "yyyy-MM-dd");

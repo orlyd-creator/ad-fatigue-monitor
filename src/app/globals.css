@@ -2,12 +2,12 @@
 
 :root {
   --background: transparent;
-  --foreground: #1a1a2e;
+  --foreground: #000000;
   --card: rgba(255, 255, 255, 0.55);
   --card-border: rgba(107, 147, 216, 0.06);
   --card-hover: rgba(255, 255, 255, 0.65);
-  --muted: #9ca3af;
-  --muted-foreground: #6b7280;
+  --muted: #6b7280;
+  --muted-foreground: #374151;
   --surface: rgba(237, 240, 248, 0.6);
   --healthy: #22c55e;
   --healthy-bg: #f0fdf4;
