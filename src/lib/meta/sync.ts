@@ -97,6 +97,24 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       return result;
     }
 
+    // Check token permissions
+    console.log("[sync] Checking token permissions...");
+    try {
+      const permsData = await metaFetch("/me/permissions", token, {});
+      const perms = permsData.data || [];
+      const grantedPerms = perms.filter((p: any) => p.status === "granted").map((p: any) => p.permission);
+      const declinedPerms = perms.filter((p: any) => p.status === "declined").map((p: any) => p.permission);
+      console.log(`[sync] Granted permissions: ${grantedPerms.join(", ")}`);
+      console.log(`[sync] Declined permissions: ${declinedPerms.join(", ")}`);
+
+      if (!grantedPerms.includes("ads_read")) {
+        result.errors.push("Missing 'ads_read' permission. Please go to your Meta Developer Console, add 'ads_read' under App Review > Permissions, then reconnect your account on the login page.");
+        return result;
+      }
+    } catch (e: any) {
+      console.error(`[sync] Permission check failed: ${e.message}`);
+    }
+
     // ── Step 2: Fetch ALL ads (no status filter — get everything) ─
     console.log("[sync] Step 2: Fetching all ads...");
     let allAds: any[] = [];

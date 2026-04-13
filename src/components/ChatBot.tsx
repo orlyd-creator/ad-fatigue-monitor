@@ -10,7 +10,7 @@ interface Message {
 export default function ChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hey! 🐸 I'm your ads strategist. Ask me which ads to pause, where you're wasting budget, or what creative to test next. I can see all your live data." },
+    { role: "assistant", content: "I'm your AI ads strategist. Ask me which ads to pause, where you're wasting budget, or what creative to test next. I can see all your live data." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,51 +54,33 @@ export default function ChatBot() {
       {/* Floating button */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#4ADE80] to-[#22C55E] text-white shadow-xl shadow-green-300/40 hover:shadow-2xl hover:shadow-green-300/50 transition-all duration-300 hover:scale-110 flex items-center justify-center ${!open ? 'animate-gentle-bounce' : ''}`}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-xl shadow-purple-300/40 hover:shadow-2xl hover:shadow-purple-300/50 transition-all duration-300 hover:scale-110 flex items-center justify-center ${!open ? 'animate-gentle-bounce' : ''}`}
       >
         {open ? (
           <svg className="w-6 h-6 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         ) : (
-          <svg className="w-8 h-8" viewBox="0 0 40 40" fill="none">
-            {/* Frog body */}
-            <ellipse cx="20" cy="24" rx="14" ry="11" fill="#86EFAC" />
-            {/* Frog head */}
-            <circle cx="20" cy="17" r="12" fill="#4ADE80" />
-            {/* Left eye bump */}
-            <circle cx="13" cy="10" r="5" fill="#4ADE80" />
-            <circle cx="27" cy="10" r="5" fill="#4ADE80" />
-            {/* Left eye white */}
-            <circle cx="13" cy="10" r="3.5" fill="white" />
-            <circle cx="27" cy="10" r="3.5" fill="white" />
-            {/* Left eye pupil */}
-            <circle cx="14" cy="10" r="2" fill="#1a1a2e" />
-            <circle cx="28" cy="10" r="2" fill="#1a1a2e" />
-            {/* Eye shine */}
-            <circle cx="14.8" cy="9.2" r="0.7" fill="white" />
-            <circle cx="28.8" cy="9.2" r="0.7" fill="white" />
-            {/* Smile */}
-            <path d="M14 20 Q20 25 26 20" stroke="#15803d" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-            {/* Cheek blush */}
-            <ellipse cx="12" cy="19" rx="2.5" ry="1.5" fill="#FCA5A5" opacity="0.5" />
-            <ellipse cx="28" cy="19" rx="2.5" ry="1.5" fill="#FCA5A5" opacity="0.5" />
+          <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
           </svg>
         )}
       </button>
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[520px] rounded-3xl bg-white/70 backdrop-blur-2xl shadow-2xl shadow-green-200/30 border border-white/40 flex flex-col overflow-hidden animate-slide-up">
+        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[520px] rounded-3xl bg-white shadow-2xl shadow-purple-200/30 border border-gray-200 flex flex-col overflow-hidden animate-slide-up">
           {/* Header */}
           <div className="px-5 py-4 bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
-                🐸
+              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
               </div>
               <div>
-                <div className="text-[14px] font-semibold">Froggy</div>
-                <div className="text-[11px] text-white/70">Your ads strategist</div>
+                <div className="text-[14px] font-semibold">AI Strategist</div>
+                <div className="text-[11px] text-white/70">Powered by your live ad data</div>
               </div>
             </div>
           </div>
@@ -111,7 +93,7 @@ export default function ChatBot() {
                   className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
                     msg.role === "user"
                       ? "bg-gradient-to-r from-[#D06AB8] to-[#9B7ED0] text-white rounded-br-md"
-                      : "bg-white/50 backdrop-blur-sm text-foreground rounded-bl-md"
+                      : "bg-gray-50 text-foreground rounded-bl-md border border-gray-100"
                   }`}
                 >
                   {msg.role === "assistant" ? (
@@ -128,7 +110,7 @@ export default function ChatBot() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="px-4 py-3 rounded-2xl bg-white/50 backdrop-blur-sm rounded-bl-md">
+                <div className="px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100 rounded-bl-md">
                   <div className="flex gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-[#6B93D8] animate-bounce" style={{ animationDelay: "0ms" }} />
                     <div className="w-2 h-2 rounded-full bg-[#9B7ED0] animate-bounce" style={{ animationDelay: "150ms" }} />

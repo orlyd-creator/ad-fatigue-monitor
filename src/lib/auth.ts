@@ -13,7 +13,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.META_APP_SECRET!,
       authorization: {
         params: {
-          scope: "ads_read,ads_management",
+          scope: "ads_read,ads_management,read_insights,business_management",
         },
       },
     }),
@@ -29,6 +29,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           process.env.META_APP_ID!,
           process.env.META_APP_SECRET!
         );
+
+        // Log granted permissions for debugging
+        try {
+          const permsRes = await fetch(`https://graph.facebook.com/v21.0/me/permissions?access_token=${longLived.access_token}`);
+          const permsData = await permsRes.json();
+          const granted = (permsData.data || []).filter((p: any) => p.status === "granted").map((p: any) => p.permission);
+          console.log(`[auth] Granted permissions: ${granted.join(", ")}`);
+        } catch { /* ignore */ }
 
         // Discover ad accounts
         const adAccounts = await getAdAccounts(longLived.access_token);
