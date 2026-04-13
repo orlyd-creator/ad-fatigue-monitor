@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { useState, useTransition } from "react";
 import { refreshData } from "@/app/dashboard/actions";
+import { signOutUser } from "@/app/login/actions";
 
 const links = [
   {
@@ -183,9 +184,10 @@ export default function Sidebar() {
 
       {/* Account / Logout */}
       <div className="px-3 pb-5 pt-1 border-t border-white/10">
-        <a
-          href="/login"
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-white/60 hover:text-white hover:bg-white/10 transition-all"
+        <form action={signOutUser}>
+        <button
+          type="submit"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-white/60 hover:text-white hover:bg-white/10 transition-all"
           title="Switch account or logout"
         >
           <svg
@@ -202,7 +204,8 @@ export default function Sidebar() {
             />
           </svg>
           Switch Account
-        </a>
+        </button>
+        </form>
       </div>
     </aside>
   );

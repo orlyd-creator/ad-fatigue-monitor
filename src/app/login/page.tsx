@@ -2,11 +2,14 @@ import { signInWithFacebook } from "./actions";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export default async function LoginPage() {
-  // If already logged in with a valid account, go straight to dashboard
-  const session = await auth();
-  if (session && (session as any).accountId) {
-    redirect("/dashboard");
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ fresh?: string }> }) {
+  const params = await searchParams;
+  // If already logged in and not explicitly switching accounts, go to dashboard
+  if (!params.fresh) {
+    const session = await auth();
+    if (session && (session as any).accountId) {
+      redirect("/dashboard");
+    }
   }
 
   return (
