@@ -129,13 +129,26 @@ function formatAdContext(
   const active = adSummaries.filter((a) => a.status === "ACTIVE");
   const paused = adSummaries.filter((a) => a.status !== "ACTIVE");
 
-  const totalSpend = adSummaries.reduce((s, a) => s + a.totalSpend, 0);
-  const totalImpressions = adSummaries.reduce((s, a) => s + a.totalImpressions, 0);
-  const totalClicks = adSummaries.reduce((s, a) => s + a.totalClicks, 0);
-  const totalActions = adSummaries.reduce((s, a) => s + a.totalActions, 0);
+  const totalSpend = active.reduce((s, a) => s + a.totalSpend, 0);
+  const totalImpressions = active.reduce((s, a) => s + a.totalImpressions, 0);
+  const totalClicks = active.reduce((s, a) => s + a.totalClicks, 0);
+  const totalActions = active.reduce((s, a) => s + a.totalActions, 0);
+  const overallCTR = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
 
-  let context = `Active Ads (${active.length} total, ${paused.length} paused):\n`;
+  // Calculate account health
+  const activeScores = active.map(a => a.fatigueScore);
+  const avgFatigue = activeScores.length > 0 ? activeScores.reduce((s, v) => s + v, 0) / activeScores.length : 0;
+  const accountHealth = Math.round(100 - avgFatigue);
+  const fatiguedCount = active.filter(a => a.fatigueScore >= 50).length;
+  const wastedSpend = active.filter(a => a.fatigueScore >= 50).reduce((s, a) => s + (a.totalDays > 0 ? a.totalSpend / a.totalDays : 0), 0);
 
+  let context = `ACCOUNT OVERVIEW:\n`;
+  context += `- ${active.length} active ads, ${paused.length} paused/inactive\n`;
+  context += `- Account Health: ${accountHealth}/100 | Avg Fatigue: ${avgFatigue.toFixed(0)}/100\n`;
+  context += `- ${fatiguedCount} ads fatiguing or worse (score 50+), burning ~$${wastedSpend.toFixed(0)}/day\n`;
+  context += `- Overall CTR: ${overallCTR.toFixed(2)}% | Total spend (period): $${totalSpend.toFixed(0)} | ${totalActions} conversions\n\n`;
+
+  context += `ACTIVE ADS (sorted worst fatigue first):\n`;
   const sorted = [...active].sort((a, b) => b.fatigueScore - a.fatigueScore);
 
   sorted.forEach((ad, i) => {
@@ -145,53 +158,63 @@ function formatAdContext(
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map((s) => s.detail)
-      .join(", ");
+      .join("; ");
 
-    context += `${i + 1}. "${ad.adName}" (${ad.campaignName} / ${ad.adsetName}) | Fatigue: ${ad.fatigueScore} (${ad.fatigueStage}) | CTR: ${ad.recentAvgCTR}% | CPC: $${ad.recentAvgCPC} | CPM: $${ad.recentAvgCPM} | Freq: ${ad.recentAvgFrequency}x | Spend: ~$${dailySpend.toFixed(2)}/day ($${ad.totalSpend} total over ${ad.totalDays} days) | ${ad.totalClicks} clicks, ${ad.totalActions} conversions | Key signals: ${keySignals || "none significant"}\n`;
+    context += `${i + 1}. "${ad.adName}" [${ad.campaignName} / ${ad.adsetName}]\n`;
+    context += `   Fatigue: ${ad.fatigueScore}/100 (${ad.fatigueStage}) | CTR: ${ad.recentAvgCTR}% | CPC: $${ad.recentAvgCPC} | CPM: $${ad.recentAvgCPM} | Freq: ${ad.recentAvgFrequency}x\n`;
+    context += `   Spend: ~$${dailySpend.toFixed(2)}/day ($${ad.totalSpend} total, ${ad.totalDays} days) | ${ad.totalClicks} clicks, ${ad.totalActions} conversions\n`;
+    if (keySignals) context += `   Signals: ${keySignals}\n`;
+    context += `\n`;
   });
 
   if (paused.length > 0) {
-    context += `\nPaused Ads:\n`;
-    paused.forEach((ad) => {
-      context += `- "${ad.adName}" (${ad.campaignName}) | Fatigue: ${ad.fatigueScore} (${ad.fatigueStage}) | Last CTR: ${ad.recentAvgCTR}% | Total spend: $${ad.totalSpend}\n`;
+    context += `PAUSED/INACTIVE ADS (${paused.length} total):\n`;
+    paused.slice(0, 10).forEach((ad) => {
+      context += `- "${ad.adName}" (${ad.campaignName}) | Fatigue: ${ad.fatigueScore} | CTR: ${ad.recentAvgCTR}% | Spend: $${ad.totalSpend}\n`;
     });
+    if (paused.length > 10) context += `... and ${paused.length - 10} more paused ads\n`;
+    context += `\n`;
   }
-
-  // Map ad IDs to names for alerts
-  const adNameMap = new Map(adSummaries.map(a => [a.adName, a]));
-  const adIdToName = new Map(adSummaries.map(a => [a.adName, a.adName])); // placeholder
 
   if (recentAlerts.length > 0) {
-    context += `\nRecent Alerts:\n`;
+    context += `RECENT ALERTS:\n`;
     recentAlerts.slice(0, 10).forEach((alert) => {
-      const ad = adSummaries.find(a => a.adName); // find matching ad
-      const adName = adSummaries.find(a => true)?.adName || alert.adId;
       const timeAgo = Math.round((Date.now() - alert.createdAt) / (1000 * 60 * 60));
-      context += `- "${alert.adId}" crossed into ${alert.stage} stage (score: ${alert.fatigueScore}) - ${timeAgo}h ago\n`;
+      context += `- Ad ${alert.adId} crossed into ${alert.stage} (score: ${alert.fatigueScore}) — ${timeAgo}h ago\n`;
     });
   }
-
-  context += `\nAccount Totals: $${totalSpend.toFixed(2)} total spend, ${totalImpressions.toLocaleString()} impressions, ${totalClicks.toLocaleString()} clicks, ${totalActions.toLocaleString()} conversions`;
 
   return context;
 }
 
 const SYSTEM_PROMPT = `You are a senior paid media strategist embedded in an ad fatigue monitoring tool. You have access to the user's real-time ad account data, which is provided below each message.
 
-Your job is to give direct, actionable advice based on the actual numbers. You are NOT a generic chatbot. You are a sharp, experienced colleague who manages millions in ad spend.
+Your job is to give direct, actionable advice based on the actual numbers. You are NOT a generic chatbot. You are a sharp, battle-tested performance marketer who has managed millions in ad spend and can smell fatigue before the numbers fully show it.
 
-Rules:
-- Be direct and actionable. Never give vague advice like "consider optimizing your ads." Say exactly what to do, to which ad, and why.
-- Always reference specific ad names and numbers from the data. Say "Pause 'Summer Sale Video' — its fatigue score is 82 and CTR dropped to 0.45%" not "you might want to pause some underperforming ads."
-- Give dollar amounts when talking about waste or savings. "You're burning roughly $45/day on fatigued ads" is better than "you're wasting money."
-- Prioritize recommendations. If someone asks what to do, number your steps: what to do first, second, third.
-- Be conversational but professional. Like a smart colleague on Slack, not a corporate report. No bullet-point dumps unless the user asks for a list.
-- Keep responses focused. 3-8 sentences for simple questions. Longer (with structure) for action plans or deep dives. Never ramble.
-- Use ONLY the data provided. Never make up numbers, CTRs, spend amounts, or ad names. If you don't have enough data to answer, say so.
-- Fatigue score ranges: 0-25 = healthy, 25-50 = early warning, 50-75 = actively fatiguing, 75+ = burned out and wasting budget.
-- Frequency above 3x usually means the audience is saturated. CTR below 0.5% on B2B is critically low.
-- When recommending budget reallocation, suggest specific percentages and warn about Meta's learning phase (don't increase more than 20-30% at a time).
-- If there are no ads in the account, help the user understand they need to connect their Meta Ads account and sync data first.`;
+Core Rules:
+- Be direct and specific. Never say "consider optimizing." Say exactly what to do, to which ad, and why. Name names.
+- Always reference specific ad names, numbers, and fatigue scores from the data. "Pause 'Summer Sale Video' — fatigue score 82, CTR tanked to 0.45%, you're burning ~$45/day on it."
+- Give dollar amounts for waste and savings. "That's roughly $X/day you could reallocate to your winners."
+- Prioritize with numbered steps. Most impactful action first.
+- Be conversational but sharp. Like a smart colleague on Slack who doesn't waste words.
+- Keep it focused: 3-8 sentences for simple questions, structured for action plans. Never ramble.
+- Use ONLY the provided data. Never invent numbers. If data is insufficient, say so.
+
+Fatigue Detection (be a hawk):
+- Score 0-24 = healthy. 25-49 = early warning (start prepping replacements NOW). 50-74 = actively fatiguing (swap creative this week). 75+ = burned out (pause immediately, every hour is wasted money).
+- Frequency above 2.5x = audience getting tired. Above 4x = severely saturated, creative swap is urgent.
+- CTR dropping more than 15% from baseline = early fatigue signal even if score is still low.
+- Rising CPM + declining CTR at the same time = classic fatigue pattern. Flag it aggressively.
+- If frequency is climbing AND conversions are dropping, that ad is done. Don't sugarcoat it.
+- CTR below 0.8% on most campaigns is underperforming. Below 0.5% is dead.
+
+Strategic Advice:
+- When recommending budget moves, give specific percentages. Warn about Meta's learning phase (max 20-30% increase at a time, avoid changes during low-data hours).
+- Always suggest what creative angle to try next based on what's fatiguing (if video is dying, suggest static or carousel; if one hook failed, suggest a different opening).
+- If multiple ads in the same campaign are fatiguing, the issue might be audience saturation, not just creative. Say so.
+- Connect the dots between signals: "Your frequency hit 4.2x AND CTR dropped 30% — that's textbook fatigue. The audience has seen this too many times."
+
+Tone: Direct, confident, no hedging. You're the expert they hired. If an ad needs to be killed, say it plainly.`;
 
 export async function POST(request: Request) {
   try {
@@ -200,6 +223,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const accountId = (session as any).accountId as string;
+    const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
     if (!accountId) {
       return NextResponse.json({ error: "No account connected" }, { status: 400 });
     }
@@ -217,7 +241,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { adSummaries, recentAlerts } = await loadAdData(accountId);
+    // Load data from ALL accounts
+    let allAdSummaries: AdSummary[] = [];
+    let allRecentAlerts: any[] = [];
+    for (const accId of allAccountIds) {
+      const { adSummaries, recentAlerts } = await loadAdData(accId);
+      allAdSummaries.push(...adSummaries);
+      allRecentAlerts.push(...recentAlerts);
+    }
+    const adSummaries = allAdSummaries;
+    const recentAlerts = allRecentAlerts;
     const context = formatAdContext(adSummaries, recentAlerts);
 
     // Build message history (last 10 messages for context)

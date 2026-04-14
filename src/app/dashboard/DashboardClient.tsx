@@ -132,7 +132,7 @@ function CampaignSection({ group, filter }: { group: CampaignGroup; filter: Fati
     <div className="mb-6">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-colors lv-card"
+        className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 active:scale-[0.98] transition-all lv-card"
       >
         <ChevronIcon expanded={expanded} />
         <div className="flex-1 text-left min-w-0">
@@ -331,6 +331,22 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
     return items.slice(0, 5);
   }, [ads, spendData]);
 
+  // Account Health Score: 100 - weighted average fatigue score of active ads
+  const healthScore = useMemo(() => {
+    const activeAds = ads.filter((a) => a.status === "ACTIVE");
+    if (activeAds.length === 0) return null;
+    const avgFatigue = activeAds.reduce((sum, a) => sum + a.fatigue.fatigueScore, 0) / activeAds.length;
+    return Math.max(0, Math.min(100, Math.round(100 - avgFatigue)));
+  }, [ads]);
+
+  const healthMeta = useMemo(() => {
+    if (healthScore === null) return null;
+    if (healthScore >= 80) return { label: "Excellent", color: "#22c55e", bg: "#f0fdf4", track: "#dcfce7" };
+    if (healthScore >= 60) return { label: "Good", color: "#eab308", bg: "#fefce8", track: "#fef9c3" };
+    if (healthScore >= 40) return { label: "Needs Work", color: "#f97316", bg: "#fff7ed", track: "#fed7aa" };
+    return { label: "Critical", color: "#ea384c", bg: "#fef2f2", track: "#fecaca" };
+  }, [healthScore]);
+
   const searchParamsObj = useSearchParams();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<{ from?: Date; to?: Date }>(() => {
@@ -377,12 +393,17 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
   };
 
   const handleCalendarSelect = (selected: { from: Date | undefined; to?: Date | undefined } | undefined) => {
-    if (!selected) return;
-    setSelectedRange({ from: selected.from, to: selected.to });
-    if (selected.from && selected.to) {
-      const from = format(selected.from, "yyyy-MM-dd");
-      const to = format(selected.to, "yyyy-MM-dd");
-      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
+    if (!selected) {
+      setSelectedRange({});
+      return;
+    }
+    const { from, to } = selected;
+    setSelectedRange({ from, to });
+    // Only navigate when both ends of the range are picked
+    if (from && to) {
+      const fromStr = format(from, "yyyy-MM-dd");
+      const toStr = format(to, "yyyy-MM-dd");
+      router.push(`/dashboard?range=custom&from=${fromStr}&to=${toStr}`);
       setCalendarOpen(false);
     }
   };
@@ -413,7 +434,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {/* Date Range Selector */}
-            <div className="flex items-center glass rounded-xl p-1 shadow-sm flex-wrap">
+            <div className="relative flex items-center glass rounded-xl p-1 shadow-sm flex-wrap">
               {RANGE_OPTIONS.map((opt) => {
                 const isThisOrLastMonth = opt.value === "this_month" || opt.value === "last_month";
                 const isActive = isThisOrLastMonth
@@ -423,7 +444,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
                   <button
                     key={opt.value}
                     onClick={() => handleRangeChange(opt.value)}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap active:scale-95 ${
                       isActive
                         ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
@@ -438,7 +459,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               <div className="relative" ref={calendarRef}>
                 <button
                   onClick={() => setCalendarOpen(!calendarOpen)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                  className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap active:scale-95 ${
                     isCustomRange
                       ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
@@ -453,7 +474,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
 
                 {/* Calendar dropdown */}
                 {calendarOpen && (
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-xl border border-gray-200 p-3" style={{ minWidth: 300 }}>
+                  <div className="absolute right-0 top-full mt-2 z-50 pointer-events-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-3" style={{ minWidth: 300, isolation: "isolate" }}>
                     <style>{`
                       .fatigue-calendar .rdp-root {
                         --rdp-accent-color: #6B93D8;
@@ -519,7 +540,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             {/* Active / All toggle */}
             <button
               onClick={() => setShowActiveOnly(!showActiveOnly)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-all ${
+              className={`cursor-pointer text-[11px] font-medium px-2.5 py-1 rounded-full transition-all active:scale-95 ${
                 showActiveOnly
                   ? "bg-green-50 text-green-700 border border-green-200"
                   : "bg-gray-50 text-gray-600 border border-gray-200"
@@ -540,7 +561,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
                 className="text-[12px] pl-8 pr-3 py-1.5 rounded-full bg-white/60 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-48"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSearchQuery("")} className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 active:scale-90 transition-transform">
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -551,6 +572,40 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
         )}
       </div>
 
+      {/* Account Health Score */}
+      {healthScore !== null && healthMeta && (
+        <div className="rounded-2xl lv-card p-5 mb-6 animate-fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: healthMeta.bg }}>
+                <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke={healthMeta.color} strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-foreground">Account Health</h2>
+                <p className="text-[11px] text-muted-foreground">Based on active ad fatigue levels</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl font-bold tabular-nums" style={{ color: healthMeta.color }}>{healthScore}</span>
+              <div className="text-right">
+                <span className="text-[11px] text-muted-foreground">/100</span>
+                <div className="text-[12px] font-semibold px-2 py-0.5 rounded-full mt-0.5" style={{ backgroundColor: healthMeta.bg, color: healthMeta.color }}>
+                  {healthMeta.label}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: healthMeta.track }}>
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${healthScore}%`, background: `linear-gradient(90deg, ${healthMeta.color}cc, ${healthMeta.color})` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Status Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {(["healthy", "early_warning", "fatiguing", "fatigued"] as const).map((stage) => {
@@ -559,7 +614,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           const isActive = filter === stage;
           return (
             <button key={stage} onClick={() => setFilter(filter === stage ? "all" : stage)}
-              className={`rounded-2xl p-5 text-left transition-all status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
+              className={`cursor-pointer rounded-2xl p-5 text-left transition-all active:scale-[0.97] status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
                 isActive ? "ring-2 ring-[#6B93D8] shadow-lg shadow-blue-100" : "lv-card"
               }`}
               style={{ backgroundColor: isActive ? meta.bg : "rgba(255,255,255,0.55)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" }}>
@@ -705,7 +760,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             <>
               <span className="text-[13px] text-muted">Showing:</span>
               <button onClick={() => setFilter("all")}
-                className="text-[12px] px-3 py-1.5 rounded-full bg-gradient-to-r from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 text-[#6B78C8] hover:from-[#6B93D8]/25 hover:via-[#9B7ED0]/25 hover:to-[#D06AB8]/25 transition-colors flex items-center gap-1.5 font-medium backdrop-blur-sm">
+                className="cursor-pointer text-[12px] px-3 py-1.5 rounded-full bg-gradient-to-r from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 text-[#6B78C8] hover:from-[#6B93D8]/25 hover:via-[#9B7ED0]/25 hover:to-[#D06AB8]/25 transition-all active:scale-95 flex items-center gap-1.5 font-medium backdrop-blur-sm">
                 {STAGE_META[filter]?.label}
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -719,10 +774,10 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           <div className="flex items-center glass rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("grid")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all active:scale-95 ${
                 viewMode === "grid"
                   ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40"
               }`}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -732,10 +787,10 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             </button>
             <button
               onClick={() => setViewMode("campaign")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all active:scale-95 ${
                 viewMode === "campaign"
                   ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/40"
               }`}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

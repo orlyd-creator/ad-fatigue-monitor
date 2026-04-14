@@ -131,7 +131,7 @@ export default function ChatBot() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ask about your ads..."
-                className="flex-1 px-4 py-2.5 rounded-xl bg-white/40 backdrop-blur-sm border border-white/40 text-[13px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-[#9B7ED0]/30 focus:border-[#9B7ED0]/40 transition-all"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-[13px] text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#9B7ED0]/30 focus:border-[#9B7ED0]/40 transition-all"
               />
               <button
                 onClick={() => sendMessage()}
@@ -142,7 +142,7 @@ export default function ChatBot() {
               </button>
             </div>
             <div className="mt-2 flex gap-1.5 flex-wrap">
-              {["Which ads should I pause?", "What's my best performer?", "Give me an action plan", "Where am I wasting spend?"].map((q) => (
+              {["Which ads should I kill right now?", "What's fatiguing fastest?", "Give me a priority action plan", "Where am I bleeding budget?", "What creative should I test next?"].map((q) => (
                 <button
                   key={q}
                   onClick={() => { sendMessage(q); }}

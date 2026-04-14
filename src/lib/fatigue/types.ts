@@ -8,6 +8,8 @@ export interface SignalResult {
   detail: string; // Human-readable explanation
 }
 
+export type TrendDirection = "improving" | "stable" | "declining" | "accelerating";
+
 export interface FatigueResult {
   fatigueScore: number; // 0-100
   stage: FatigueStage;
@@ -15,6 +17,9 @@ export interface FatigueResult {
   baselineWindow: { start: string; end: string } | null;
   recentWindow: { start: string; end: string } | null;
   dataStatus: "sufficient" | "collecting" | "no_data";
+  predictedDaysToFatigue: number | null; // estimated days before reaching fatigued stage (75+)
+  fatigueVelocity: number; // rate of score change per day (positive = getting worse)
+  trendDirection: TrendDirection; // trend classification
 }
 
 export interface ScoringSettings {

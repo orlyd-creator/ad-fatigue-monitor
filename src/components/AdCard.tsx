@@ -9,6 +9,9 @@ interface RecentMetric { ctr: number; cpm: number; frequency: number; }
 interface FatigueData {
   fatigueScore: number; stage: FatigueStage; dataStatus: string;
   signals?: any[]; baselineWindow?: { start: string; end: string } | null; recentWindow?: { start: string; end: string } | null;
+  predictedDaysToFatigue?: number | null;
+  fatigueVelocity?: number;
+  trendDirection?: string;
 }
 interface Props {
   id: string; adName: string; campaignName: string; status: string;
@@ -75,7 +78,33 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
             <span className="text-[9px] text-muted uppercase tracking-wider font-medium">Collecting</span>
           </div>
         ) : (
-          <FatigueScoreBadge score={fatigue.fatigueScore} stage={fatigue.stage} size="md" />
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+            <div className="relative">
+              <FatigueScoreBadge score={fatigue.fatigueScore} stage={fatigue.stage} size="md" />
+              {fatigue.trendDirection && fatigue.trendDirection !== "stable" && (
+                <span className="absolute -right-4 top-1/2 -translate-y-1/2 text-[12px] font-bold">
+                  {fatigue.trendDirection === "improving" && <span className="text-green-500">↓</span>}
+                  {fatigue.trendDirection === "declining" && <span className="text-orange-500">↑</span>}
+                  {fatigue.trendDirection === "accelerating" && <span className="text-red-500">⇈</span>}
+                </span>
+              )}
+            </div>
+            {fatigue.predictedDaysToFatigue != null && fatigue.predictedDaysToFatigue > 0 && fatigue.predictedDaysToFatigue < 14 && (
+              <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                fatigue.predictedDaysToFatigue <= 3
+                  ? "bg-red-50 text-red-600"
+                  : fatigue.predictedDaysToFatigue <= 7
+                    ? "bg-orange-50 text-orange-600"
+                    : "bg-yellow-50 text-yellow-600"
+              }`}>
+                {fatigue.predictedDaysToFatigue <= 3
+                  ? `Fatigues in ~${fatigue.predictedDaysToFatigue}d`
+                  : fatigue.predictedDaysToFatigue <= 7
+                    ? `~${fatigue.predictedDaysToFatigue}d to fatigue`
+                    : `~${fatigue.predictedDaysToFatigue}d left`}
+              </span>
+            )}
+          </div>
         )}
       </div>
 

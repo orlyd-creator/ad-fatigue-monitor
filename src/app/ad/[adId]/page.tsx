@@ -88,6 +88,14 @@ export default function AdDetailPage() {
           <p className="text-[13px] font-semibold mt-3" style={{ color: stageColor }}>{rec.action}</p>
         </div>
 
+        {/* Fatigue Forecast */}
+        <FatigueForecastCard
+          fatigueScore={fatigue.fatigueScore}
+          predictedDaysToFatigue={fatigue.predictedDaysToFatigue}
+          fatigueVelocity={fatigue.fatigueVelocity}
+          trendDirection={fatigue.trendDirection}
+        />
+
         {/* Signals */}
         <div className="mb-8"><SignalBreakdown signals={fatigue.signals} /></div>
 
@@ -115,6 +123,89 @@ export default function AdDetailPage() {
         <h3 className="text-[16px] font-semibold text-foreground mb-4">Alert History</h3>
         <AlertFeed alerts={alerts.map((a: any) => ({ ...a, adName: ad.adName }))} />
       </main>
+    </div>
+  );
+}
+
+function FatigueForecastCard({
+  fatigueScore,
+  predictedDaysToFatigue,
+  fatigueVelocity,
+  trendDirection,
+}: {
+  fatigueScore: number;
+  predictedDaysToFatigue: number | null;
+  fatigueVelocity: number;
+  trendDirection: string;
+}) {
+  const threshold = 75;
+  const progressPct = Math.min((fatigueScore / threshold) * 100, 100);
+
+  const trendInfo = (() => {
+    if (trendDirection === "improving") return { text: "Improving ↓", color: "text-green-600", bg: "bg-green-50" };
+    if (trendDirection === "declining") return { text: "Declining ↑", color: "text-orange-600", bg: "bg-orange-50" };
+    if (trendDirection === "accelerating") return { text: "Accelerating ⇈", color: "text-red-600", bg: "bg-red-50" };
+    return { text: "Stable", color: "text-muted-foreground", bg: "bg-gray-50" };
+  })();
+
+  return (
+    <div className="lv-card p-6 mb-6">
+      <h3 className="text-[15px] font-semibold text-foreground mb-4">Fatigue Forecast</h3>
+      <div className="grid grid-cols-3 gap-6 mb-5">
+        <div>
+          <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Days to Fatigue</span>
+          <p className="text-[20px] font-bold text-foreground mt-1">
+            {predictedDaysToFatigue != null && predictedDaysToFatigue > 0
+              ? `~${predictedDaysToFatigue}d`
+              : fatigueScore >= threshold
+                ? "Fatigued"
+                : "N/A"}
+          </p>
+        </div>
+        <div>
+          <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Velocity</span>
+          <p className="text-[20px] font-bold text-foreground mt-1">
+            {fatigueVelocity !== 0 ? `${fatigueVelocity > 0 ? "+" : ""}${fatigueVelocity.toFixed(1)}/day` : "0/day"}
+          </p>
+        </div>
+        <div>
+          <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Trend</span>
+          <p className={`text-[14px] font-semibold mt-1.5 ${trendInfo.color}`}>
+            <span className={`inline-block px-2 py-0.5 rounded-full text-[12px] ${trendInfo.bg}`}>{trendInfo.text}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Progress bar: current score toward fatigue threshold */}
+      <div>
+        <div className="flex items-center justify-between text-[11px] text-muted mb-1.5">
+          <span>Current: {Math.round(fatigueScore)}</span>
+          <span>Fatigue threshold: {threshold}</span>
+        </div>
+        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden relative">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${progressPct}%`,
+              background: fatigueScore >= threshold
+                ? "#ea384c"
+                : fatigueScore >= 50
+                  ? "linear-gradient(90deg, #f59e0b, #ea384c)"
+                  : fatigueScore >= 25
+                    ? "linear-gradient(90deg, #22c55e, #f59e0b)"
+                    : "#22c55e",
+            }}
+          />
+          {predictedDaysToFatigue != null && predictedDaysToFatigue > 0 && fatigueScore < threshold && (
+            <span
+              className="absolute top-1/2 -translate-y-1/2 text-[8px] font-bold text-muted-foreground"
+              style={{ left: `${Math.min(progressPct + 2, 90)}%` }}
+            >
+              ~{predictedDaysToFatigue}d →
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
