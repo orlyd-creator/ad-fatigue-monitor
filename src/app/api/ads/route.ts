@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ads, dailyMetrics, settings } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
@@ -11,6 +11,7 @@ export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const accountId = (session as any).accountId as string;
+  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
   if (!accountId) return NextResponse.json({ error: "No account connected" }, { status: 400 });
 
   // Get settings
@@ -29,8 +30,8 @@ export async function GET() {
       }
     : DEFAULT_SETTINGS;
 
-  // Get active ads for this user's account only
-  const allAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
+  // Get ads from ALL of user's accounts
+  const allAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
 
   const results = await Promise.all(allAds.map(async (ad) => {
     const metrics = await db

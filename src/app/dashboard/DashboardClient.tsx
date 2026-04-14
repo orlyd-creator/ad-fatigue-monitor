@@ -206,29 +206,43 @@ function MetricCard({ label, value, change, invertColor }: { label: string; valu
   );
 }
 
-export default function DashboardClient({ ads, spendData, range }: { ads: AdData[]; spendData: SpendData; range: string }) {
+export default function DashboardClient({ ads, spendData, range, lastSyncedAt }: { ads: AdData[]; spendData: SpendData; range: string; lastSyncedAt?: number }) {
   const router = useRouter();
   const [filter, setFilter] = useState<FatigueStage | "all">("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const filtered = filter === "all" ? ads : ads.filter((a) => a.fatigue.stage === filter);
+  // Filter by status first (active only by default), then by fatigue stage, then by search
+  const statusFiltered = showActiveOnly ? ads.filter((a) => a.status === "ACTIVE") : ads;
+  const searchFiltered = searchQuery.trim()
+    ? statusFiltered.filter((a) =>
+        a.adName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.adsetName || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : statusFiltered;
+  const filtered = filter === "all" ? searchFiltered : searchFiltered.filter((a) => a.fatigue.stage === filter);
+
   const counts = {
-    healthy: ads.filter((a) => a.fatigue.stage === "healthy").length,
-    early_warning: ads.filter((a) => a.fatigue.stage === "early_warning").length,
-    fatiguing: ads.filter((a) => a.fatigue.stage === "fatiguing").length,
-    fatigued: ads.filter((a) => a.fatigue.stage === "fatigued").length,
+    healthy: searchFiltered.filter((a) => a.fatigue.stage === "healthy").length,
+    early_warning: searchFiltered.filter((a) => a.fatigue.stage === "early_warning").length,
+    fatiguing: searchFiltered.filter((a) => a.fatigue.stage === "fatiguing").length,
+    fatigued: searchFiltered.filter((a) => a.fatigue.stage === "fatigued").length,
   };
   const urgentCount = counts.fatiguing + counts.fatigued;
+  const activeCount = ads.filter((a) => a.status === "ACTIVE").length;
+  const totalCount = ads.length;
 
-  const campaignGroups = useMemo(() => buildCampaignGroups(ads), [ads]);
+  const campaignGroups = useMemo(() => buildCampaignGroups(searchFiltered), [searchFiltered]);
 
   const lastSynced = useMemo(() => {
-    const now = new Date();
-    return now.toLocaleDateString("en-US", {
+    if (!lastSyncedAt || lastSyncedAt === 0) return null;
+    return new Date(lastSyncedAt).toLocaleDateString("en-US", {
       month: "short", day: "numeric", year: "numeric",
       hour: "numeric", minute: "2-digit", hour12: true,
     });
-  }, []);
+  }, [lastSyncedAt]);
 
   const insights = useMemo(() => {
     if (ads.length === 0) return [];
@@ -392,8 +406,8 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
             <p className="text-[14px] text-muted-foreground mt-1">
               {ads.length > 0
                 ? urgentCount > 0
-                  ? `${urgentCount} ad${urgentCount > 1 ? "s" : ""} need${urgentCount === 1 ? "s" : ""} your attention right now`
-                  : "Everything is looking healthy right now"
+                  ? `${urgentCount} active ad${urgentCount > 1 ? "s" : ""} need${urgentCount === 1 ? "s" : ""} your attention right now`
+                  : `${activeCount} active ads — everything is looking healthy`
                 : "Hit 'Refresh Data' to pull your ads in"}
             </p>
           </div>
@@ -493,11 +507,46 @@ export default function DashboardClient({ ads, spendData, range }: { ads: AdData
           </div>
         </div>
         {ads.length > 0 && (
-          <div className="flex items-center gap-1.5 text-muted-foreground mt-2">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
-            </svg>
-            <span className="text-[11px]">Last synced {lastSynced}</span>
+          <div className="flex items-center gap-4 mt-3">
+            {lastSynced && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                </svg>
+                <span className="text-[11px]">Last synced {lastSynced}</span>
+              </div>
+            )}
+            {/* Active / All toggle */}
+            <button
+              onClick={() => setShowActiveOnly(!showActiveOnly)}
+              className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-all ${
+                showActiveOnly
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-gray-50 text-gray-600 border border-gray-200"
+              }`}
+            >
+              {showActiveOnly ? `Active only (${activeCount})` : `All ads (${totalCount})`}
+            </button>
+            {/* Search */}
+            <div className="relative">
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search ads..."
+                className="text-[12px] pl-8 pr-3 py-1.5 rounded-full bg-white/60 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-48"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

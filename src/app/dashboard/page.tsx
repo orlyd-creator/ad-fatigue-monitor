@@ -59,6 +59,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const rangeStart = isCustom ? params.from! : format(subDays(now, rangeDays), "yyyy-MM-dd");
   const rangeEnd = isCustom ? params.to! : format(now, "yyyy-MM-dd");
 
+  // Get last synced time from ads
+  const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
+
   const results = await Promise.all(allAds.map(async (ad) => {
     const allMetrics = await db
       .select()
@@ -208,7 +211,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="min-h-screen">
-      <DashboardClient ads={results} spendData={spendData} range={range} />
+      <DashboardClient ads={results} spendData={spendData} range={range} lastSyncedAt={lastSyncedAt} />
     </div>
   );
 }

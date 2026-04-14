@@ -16,7 +16,7 @@ interface Props {
   thumbnailUrl?: string | null;
 }
 
-export default function AdCard({ id, adName, campaignName, fatigue, recentMetrics, thumbnailUrl }: Props) {
+export default function AdCard({ id, adName, campaignName, status, fatigue, recentMetrics, thumbnailUrl }: Props) {
   const isCollecting = fatigue.dataStatus !== "sufficient";
   const glowClass = !isCollecting ? STAGE_GLOW[fatigue.stage] : "";
 
@@ -56,6 +56,9 @@ export default function AdCard({ id, adName, campaignName, fatigue, recentMetric
             {adName}
           </h3>
           <div className="flex items-center gap-2 mt-1">
+            <span className={`flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+              status === "ACTIVE" ? "bg-green-50 text-green-600" : status === "PAUSED" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"
+            }`}>{status}</span>
             <p className="text-[12px] text-muted-foreground truncate">{campaignName}</p>
             {trendInsight && (
               <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ color: trendInsight.color, backgroundColor: trendInsight.bg }}>

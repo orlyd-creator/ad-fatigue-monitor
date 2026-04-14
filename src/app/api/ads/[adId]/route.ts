@@ -14,6 +14,7 @@ export async function GET(
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const accountId = (session as any).accountId as string;
+  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
   if (!accountId) return NextResponse.json({ error: "No account connected" }, { status: 400 });
 
   const { adId } = await params;
@@ -23,8 +24,8 @@ export async function GET(
     return NextResponse.json({ error: "Ad not found" }, { status: 404 });
   }
 
-  // Verify this ad belongs to the user's account
-  if (ad.accountId !== accountId) {
+  // Verify this ad belongs to one of the user's accounts
+  if (!allAccountIds.includes(ad.accountId)) {
     return NextResponse.json({ error: "Ad not found" }, { status: 404 });
   }
 

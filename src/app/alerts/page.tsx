@@ -12,9 +12,10 @@ export default async function AlertsPage() {
   if (!session) redirect("/login");
   const accountId = (session as any).accountId as string;
   if (!accountId) redirect("/login");
+  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
 
-  // Get ad IDs belonging to this user's account
-  const userAds = await db.select({ id: ads.id }).from(ads).where(eq(ads.accountId, accountId)).all();
+  // Get ad IDs belonging to ALL of user's accounts
+  const userAds = await db.select({ id: ads.id }).from(ads).where(inArray(ads.accountId, allAccountIds)).all();
   const userAdIds = userAds.map(a => a.id);
 
   if (userAdIds.length === 0) {
