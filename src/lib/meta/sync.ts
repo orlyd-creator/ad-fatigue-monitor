@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { ads, dailyMetrics, alerts, accounts } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import { format, subDays } from "date-fns";
 
@@ -42,7 +42,7 @@ async function paginateAll(url: string, token: string, params: Record<string, st
   let next = first.paging?.next;
   let page = 1;
   while (next && page < 20) {
-    await delay(500);
+    await delay(300);
     page++;
     console.log(`[meta] Paginating page ${page}...`);
     const res = await fetch(next);
@@ -91,58 +91,43 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       accountInfo = await metaFetch(`/${actId}`, token, {
         fields: "name,account_status,amount_spent,currency",
       });
-      console.log(`[sync] Account verified: "${accountInfo.name}" | Status: ${accountInfo.account_status} | Total spent: ${accountInfo.amount_spent} ${accountInfo.currency}`);
+      console.log(`[sync] Account verified: "${accountInfo.name}" | Status: ${accountInfo.account_status}`);
     } catch (e: any) {
-      result.errors.push(`Cannot access ad account ${actId}: ${e.message}. Make sure ads_read permission is granted.`);
+      result.errors.push(`Cannot access ad account ${actId}: ${e.message}`);
       return result;
     }
 
-    // Check token permissions
-    console.log("[sync] Checking token permissions...");
+    // ── Step 2: Fetch ACTIVE ads only (fast — typically 5-50 ads) ─
+    console.log("[sync] Step 2: Fetching active ads...");
+    let activeAds: any[] = [];
+
     try {
-      const permsData = await metaFetch("/me/permissions", token, {});
-      const perms = permsData.data || [];
-      const grantedPerms = perms.filter((p: any) => p.status === "granted").map((p: any) => p.permission);
-      const declinedPerms = perms.filter((p: any) => p.status === "declined").map((p: any) => p.permission);
-      console.log(`[sync] Granted permissions: ${grantedPerms.join(", ")}`);
-      console.log(`[sync] Declined permissions: ${declinedPerms.join(", ")}`);
-
-      if (!grantedPerms.includes("ads_read")) {
-        result.errors.push("Missing 'ads_read' permission. Please go to your Meta Developer Console, add 'ads_read' under App Review > Permissions, then reconnect your account on the login page.");
-        return result;
-      }
-    } catch (e: any) {
-      console.error(`[sync] Permission check failed: ${e.message}`);
-    }
-
-    // ── Step 2: Fetch ALL ads (no status filter — get everything) ─
-    console.log("[sync] Step 2: Fetching all ads...");
-    let allAds: any[] = [];
-
-    // Try without effective_status filter first (gets everything)
-    try {
-      allAds = await paginateAll(`/${actId}/ads`, token, {
+      // Only get ads that are actually running (ACTIVE effective_status)
+      activeAds = await paginateAll(`/${actId}/ads`, token, {
         fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+        effective_status: JSON.stringify(["ACTIVE"]),
       });
-      console.log(`[sync] Found ${allAds.length} ads (no filter)`);
+      console.log(`[sync] Found ${activeAds.length} ACTIVE ads`);
     } catch (e: any) {
-      console.error(`[sync] Ads fetch failed: ${e.message}`);
-      // Fallback: try with explicit statuses
-      try {
-        console.log("[sync] Trying with explicit status filter...");
-        allAds = await paginateAll(`/${actId}/ads`, token, {
-          fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
-          effective_status: JSON.stringify(["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]),
-        });
-        console.log(`[sync] Fallback found ${allAds.length} ads`);
-      } catch (e2: any) {
-        result.errors.push(`Failed to fetch ads: ${e2.message}`);
-        return result;
-      }
+      console.error(`[sync] Active ads fetch failed: ${e.message}`);
     }
+
+    // Also grab recently paused ads (they might have just been paused and still need scoring)
+    let recentPausedAds: any[] = [];
+    try {
+      recentPausedAds = await paginateAll(`/${actId}/ads`, token, {
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+        effective_status: JSON.stringify(["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]),
+      });
+      console.log(`[sync] Found ${recentPausedAds.length} paused ads`);
+    } catch (e: any) {
+      console.error(`[sync] Paused ads fetch failed: ${e.message}`);
+    }
+
+    const allAds = [...activeAds, ...recentPausedAds];
 
     if (allAds.length === 0) {
-      // One more fallback: try fetching via campaigns
+      // Fallback: try campaign-level fetch
       console.log("[sync] 0 ads found. Trying campaign-level fetch...");
       try {
         const campaigns = await paginateAll(`/${actId}/campaigns`, token, {
@@ -151,13 +136,12 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         console.log(`[sync] Found ${campaigns.length} campaigns`);
 
         if (campaigns.length === 0) {
-          result.errors.push(`No campaigns or ads found in account ${actId}. Account status: ${accountInfo?.account_status}. Make sure you have ads_read permission and at least one campaign.`);
+          result.errors.push(`No campaigns or ads found in account ${actId}. Make sure you have active campaigns.`);
           return result;
         }
 
-        // Fetch ads from each campaign
-        for (const campaign of campaigns.slice(0, 20)) {
-          await delay(500);
+        for (const campaign of campaigns.slice(0, 10)) {
+          await delay(300);
           try {
             const campaignAds = await paginateAll(`/${campaign.id}/ads`, token, {
               fields: "id,name,status,effective_status,adset{id,name},created_time,creative{thumbnail_url}",
@@ -172,16 +156,16 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         }
         console.log(`[sync] Campaign-level fetch got ${allAds.length} ads total`);
       } catch (e: any) {
-        result.errors.push(`Campaign fetch also failed: ${e.message}`);
+        result.errors.push(`Campaign fetch failed: ${e.message}`);
       }
     }
 
     if (allAds.length === 0) {
-      result.errors.push("No ads found. This could mean: (1) Your ad account has no ads, (2) The ads_read permission isn't granted — check Meta Developer Console → App Review → Permissions, or (3) Your app is in Development mode and needs to be switched to Live.");
+      result.errors.push("No ads found. Check that ads_read permission is granted and you have at least one campaign.");
       return result;
     }
 
-    // Save ad records
+    // Save ad records (batch-friendly)
     console.log(`[sync] Saving ${allAds.length} ads to database...`);
     for (const ad of allAds) {
       result.adsFound++;
@@ -214,29 +198,55 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         .run();
     }
 
-    // ── Step 3: Fetch insights (metrics) ─────────────────────────
-    console.log("[sync] Step 3: Fetching insights...");
-    await delay(1000);
+    // ── Step 3: Fetch insights for ACTIVE ads only ───────────────
+    console.log("[sync] Step 3: Fetching insights for active ads...");
+    await delay(500);
 
+    // Use filtering to only get insights for active ads (much faster than all 1100+)
+    const activeAdIds = activeAds.map((a: any) => a.id);
     let insights: any[] = [];
-    try {
-      insights = await paginateAll(`/${actId}/insights`, token, {
-        fields: [
-          "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
-          "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
-          "inline_post_engagement",
-        ].join(","),
-        time_range: JSON.stringify({ since, until }),
-        time_increment: "1",
-        level: "ad",
-      });
-    } catch (e: any) {
-      console.error(`[sync] Insights fetch failed: ${e.message}`);
-      result.errors.push(`Insights fetch failed: ${e.message}`);
+
+    if (activeAdIds.length > 0) {
+      try {
+        // Fetch account-level insights broken down by ad — Meta filters to active ads
+        insights = await paginateAll(`/${actId}/insights`, token, {
+          fields: [
+            "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
+            "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
+            "inline_post_engagement",
+          ].join(","),
+          time_range: JSON.stringify({ since, until }),
+          time_increment: "1",
+          level: "ad",
+          filtering: JSON.stringify([{
+            field: "ad.effective_status",
+            operator: "IN",
+            value: ["ACTIVE"],
+          }]),
+        });
+      } catch (e: any) {
+        console.error(`[sync] Filtered insights failed, trying unfiltered: ${e.message}`);
+        // Fallback: fetch without filter but this may be slow
+        try {
+          insights = await paginateAll(`/${actId}/insights`, token, {
+            fields: [
+              "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
+              "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
+              "inline_post_engagement",
+            ].join(","),
+            time_range: JSON.stringify({ since, until }),
+            time_increment: "1",
+            level: "ad",
+          });
+        } catch (e2: any) {
+          result.errors.push(`Insights fetch failed: ${e2.message}`);
+        }
+      }
     }
 
     console.log(`[sync] Got ${insights.length} insight rows`);
 
+    // Batch process insights
     for (const insight of insights) {
       const adId = insight.ad_id;
       if (!adId) continue;
@@ -274,22 +284,23 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       result.metricsUpserted++;
     }
 
-    // ── Step 4: Run fatigue scoring ──────────────────────────────
+    // ── Step 4: Run fatigue scoring (only active + recently paused ads) ──
     console.log("[sync] Step 4: Fatigue scoring...");
-    const allDbAds = await db.select().from(ads).where(eq(ads.accountId, accountId)).all();
+    const syncedAdIds = allAds.map((a: any) => a.id);
 
-    for (const ad of allDbAds) {
-      const metrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, ad.id)).orderBy(dailyMetrics.date).all();
+    // Only score the ads we just synced, not all 1100+ in the DB
+    for (const adId of syncedAdIds) {
+      const metrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.adId, adId)).orderBy(dailyMetrics.date).all();
       const fatigueResult = calculateFatigueScore(metrics);
       if (fatigueResult.dataStatus !== "sufficient") continue;
 
-      const lastAlert = await db.select().from(alerts).where(eq(alerts.adId, ad.id)).orderBy(desc(alerts.createdAt)).limit(1).get();
+      const lastAlert = await db.select().from(alerts).where(eq(alerts.adId, adId)).orderBy(desc(alerts.createdAt)).limit(1).get();
       const stageOrder = { healthy: 0, early_warning: 1, fatiguing: 2, fatigued: 3 } as const;
       const previousStage = (lastAlert?.stage as keyof typeof stageOrder) ?? "healthy";
 
       if (stageOrder[fatigueResult.stage] > stageOrder[previousStage]) {
         await db.insert(alerts).values({
-          adId: ad.id,
+          adId,
           fatigueScore: fatigueResult.fatigueScore,
           stage: fatigueResult.stage,
           signals: JSON.stringify(fatigueResult.signals),
@@ -298,10 +309,10 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       }
     }
 
-    console.log(`[sync] ✅ Done! ${result.adsFound} ads, ${result.metricsUpserted} metrics, ${result.alertsGenerated} alerts`);
+    console.log(`[sync] Done! ${result.adsFound} ads, ${result.metricsUpserted} metrics, ${result.alertsGenerated} alerts`);
   } catch (err: any) {
     result.errors.push(`Sync failed: ${err.message}`);
-    console.error("[sync] ❌ Error:", err.message, err.stack);
+    console.error("[sync] Error:", err.message, err.stack);
   }
 
   return result;

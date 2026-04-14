@@ -392,19 +392,21 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
     }
   };
 
-  const handleCalendarSelect = (selected: { from: Date | undefined; to?: Date | undefined } | undefined) => {
+  const handleCalendarSelect = (selected: any) => {
     if (!selected) {
       setSelectedRange({});
       return;
     }
-    const { from, to } = selected;
+    // react-day-picker v9 range mode passes { from?: Date, to?: Date }
+    const from = selected.from as Date | undefined;
+    const to = selected.to as Date | undefined;
     setSelectedRange({ from, to });
-    // Only navigate when both ends of the range are picked
+    // Navigate when both dates are picked
     if (from && to) {
       const fromStr = format(from, "yyyy-MM-dd");
       const toStr = format(to, "yyyy-MM-dd");
       router.push(`/dashboard?range=custom&from=${fromStr}&to=${toStr}`);
-      setCalendarOpen(false);
+      setTimeout(() => setCalendarOpen(false), 100);
     }
   };
 
@@ -474,7 +476,12 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
 
                 {/* Calendar dropdown */}
                 {calendarOpen && (
-                  <div className="absolute right-0 top-full mt-2 z-50 pointer-events-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-3" style={{ minWidth: 300, isolation: "isolate" }}>
+                  <div
+                    className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4"
+                    style={{ minWidth: 320, zIndex: 9999 }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
                     <style>{`
                       .fatigue-calendar .rdp-root {
                         --rdp-accent-color: #6B93D8;

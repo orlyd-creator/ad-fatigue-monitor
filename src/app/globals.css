@@ -221,6 +221,12 @@ input[type="range"]::-webkit-slider-thumb {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.4);
+  position: relative;
+}
+
+/* Ensure pseudo-elements on interactive containers don't block clicks */
+.glass::after, .status-card-hover::after, .lv-card::after {
+  pointer-events: none !important;
 }
 
 /* Calendar dropdown needs high z-index */
