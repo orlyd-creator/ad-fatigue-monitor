@@ -1,4 +1,6 @@
-const HUBSPOT_API_KEY = process.env.HUBSPOT_API_KEY;
+import { db } from "@/lib/db";
+import { sql } from "drizzle-orm";
+
 const BASE_URL = "https://api.hubapi.com";
 
 interface HubSpotContact {
@@ -12,14 +14,26 @@ interface SearchResponse {
   paging?: { next?: { after: string } };
 }
 
+/** Get the API key: env var first, then DB fallback */
+async function getApiKey(): Promise<string> {
+  if (process.env.HUBSPOT_API_KEY) return process.env.HUBSPOT_API_KEY;
+  try {
+    const row = await db.get<{ api_key: string }>(sql`SELECT api_key FROM hubspot_config WHERE id = 1`);
+    if (row?.api_key) return row.api_key;
+  } catch {
+    // table may not exist yet
+  }
+  throw new Error("HUBSPOT_API_KEY not configured");
+}
+
 async function hubspotFetch(path: string, options?: RequestInit): Promise<any> {
-  if (!HUBSPOT_API_KEY) throw new Error("HUBSPOT_API_KEY not configured");
+  const apiKey = await getApiKey();
 
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${HUBSPOT_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       ...options?.headers,
     },
   });
@@ -193,9 +207,8 @@ async function paginateHubSpotSearch(searchBody: {
  * Check if HubSpot is configured and accessible
  */
 export async function checkHubSpotConnection(): Promise<{ connected: boolean; error?: string }> {
-  if (!HUBSPOT_API_KEY) return { connected: false, error: "No API key configured" };
-
   try {
+    await getApiKey(); // throws if not configured
     await hubspotFetch("/crm/v3/objects/contacts?limit=1");
     return { connected: true };
   } catch (err: any) {

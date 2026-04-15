@@ -81,9 +81,19 @@ export const settings = sqliteTable("settings", {
   minDataDays: integer("min_data_days").notNull().default(5),
 });
 
+export const hubspotConfig = sqliteTable("hubspot_config", {
+  id: integer("id").primaryKey().default(1),
+  apiKey: text("api_key").notNull().default(""),
+  atmProperty: text("atm_property").notNull().default("agreed_to_meet_date___test_"),
+  sqlClassification: text("sql_classification").notNull().default("hs_lead_status_sql"), // comma-separated
+  mqlDefinition: text("mql_definition").notNull().default("form_fill"),
+  updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
+});
+
 // Type exports
 export type Account = typeof accounts.$inferSelect;
 export type Ad = typeof ads.$inferSelect;
 export type DailyMetric = typeof dailyMetrics.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
+export type HubSpotConfig = typeof hubspotConfig.$inferSelect;
