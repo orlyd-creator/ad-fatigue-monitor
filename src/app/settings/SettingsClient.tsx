@@ -47,9 +47,9 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
         <div className="grid grid-cols-3 gap-3">
           {(["low", "medium", "high"] as const).map((preset) => (
             <button key={preset} onClick={() => handlePresetChange(preset)}
-              className={`rounded-2xl p-4 text-left transition-all border ${
+              className={`rounded-2xl p-4 text-left transition-colors border ${
                 settings.sensitivityPreset === preset
-                  ? "border-[#9b87f5] bg-[#9B7ED0]/10 backdrop-blur-sm shadow-md shadow-purple-100"
+                  ? "border-[#9b87f5] bg-[#9B7ED0]/10 shadow-md shadow-purple-100"
                   : "border-transparent glass hover:bg-white/40"}`}>
               <div className="text-[14px] font-semibold text-foreground capitalize mb-1">{preset}</div>
               <div className="text-[11px] text-muted-foreground leading-relaxed">{PRESETS[preset].desc}</div>
@@ -93,12 +93,12 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
 
       <div className="flex items-center gap-3">
         <button onClick={handleSave} disabled={saving}
-          className={`px-6 py-2.5 rounded-full text-[14px] font-medium transition-all ${saved
+          className={`px-6 py-2.5 rounded-full text-[14px] font-medium transition-colors ${saved
             ? "bg-green-50 text-green-600" : "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-lg shadow-purple-200 hover:shadow-xl"}`}>
           {saving ? "Saving..." : saved ? "Saved!" : "Save Changes"}
         </button>
         <button onClick={() => handlePresetChange("medium")}
-          className="px-6 py-2.5 rounded-full text-[14px] font-medium glass hover:bg-white/40 text-muted-foreground transition-all">
+          className="px-6 py-2.5 rounded-full text-[14px] font-medium glass hover:bg-white/40 text-muted-foreground transition-colors">
           Reset to Default
         </button>
       </div>

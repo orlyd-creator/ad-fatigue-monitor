@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import FatigueScoreBadge from "@/components/FatigueScoreBadge";
 import MetricTrendChart from "@/components/MetricTrendChart";
 import SignalBreakdown from "@/components/SignalBreakdown";
@@ -15,7 +14,8 @@ interface Metric {
   impressions: number; spend: number; clicks: number; actions: number;
 }
 interface AdDetail {
-  ad: { id: string; adName: string; campaignName: string; adsetName: string; status: string };
+  ad: { id: string; adName: string; campaignName: string; adsetName: string; status: string;
+    imageUrl?: string | null; thumbnailUrl?: string | null; adBody?: string | null; adHeadline?: string | null; adLinkUrl?: string | null; };
   fatigue: FatigueResult; metrics: Metric[]; alerts: any[];
 }
 
@@ -28,6 +28,7 @@ const REC: Record<string, { title: string; body: string; action: string }> = {
 
 export default function AdDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const adId = params.adId as string;
   const [data, setData] = useState<AdDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,7 @@ export default function AdDetailPage() {
     <div className="min-h-screen bg-transparent">
       <main className="max-w-5xl mx-auto px-6 py-8 text-center">
         <h1 className="text-lg font-semibold">Ad not found</h1>
-        <Link href="/dashboard" className="text-[#6B93D8] text-sm mt-4 inline-block hover:underline">Back to Dashboard</Link>
+        <button onClick={() => router.push("/dashboard")} className="cursor-pointer text-[#6B93D8] text-sm mt-4 inline-block hover:underline">Back to Dashboard</button>
       </main>
     </div>
   );
@@ -63,7 +64,7 @@ export default function AdDetailPage() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 text-[13px] text-muted mb-6">
-          <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
+          <button onClick={() => router.push("/dashboard")} className="cursor-pointer hover:text-foreground py-1 px-1 -ml-1 rounded-md hover:bg-gray-100">Dashboard</button>
           <span className="text-muted">/</span>
           <span className="text-foreground font-medium">{ad.adName}</span>
         </div>
@@ -80,6 +81,33 @@ export default function AdDetailPage() {
           </div>
           <FatigueScoreBadge score={fatigue.fatigueScore} stage={fatigue.stage} size="lg" />
         </div>
+
+        {/* Ad Creative */}
+        {(ad.imageUrl || ad.thumbnailUrl || ad.adBody || ad.adHeadline) && (
+          <div className="lv-card p-6 mb-6">
+            <h3 className="text-[15px] font-semibold text-foreground mb-4">Ad Creative</h3>
+            <div className="flex gap-6">
+              {(ad.imageUrl || ad.thumbnailUrl) && (
+                <img
+                  src={ad.imageUrl || ad.thumbnailUrl || ""}
+                  alt={`${ad.adName} creative`}
+                  className="w-64 h-auto max-h-64 object-cover rounded-xl bg-gray-100 flex-shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                {ad.adHeadline && (
+                  <p className="text-[15px] font-semibold text-foreground mb-2">{ad.adHeadline}</p>
+                )}
+                {ad.adBody && (
+                  <p className="text-[13px] text-muted-foreground leading-relaxed">{ad.adBody}</p>
+                )}
+                {ad.adLinkUrl && (
+                  <p className="text-[12px] text-[#6B93D8] mt-3 truncate">{ad.adLinkUrl}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recommendation */}
         <div className="lv-card p-6 mb-6" style={{ backgroundColor: stageBg, border: `1px solid ${stageColor}20` }}>
@@ -114,7 +142,7 @@ export default function AdDetailPage() {
               warningThreshold={2.5} dangerThreshold={4.0} invertThreshold={true} />
             <MetricTrendChart label="Daily Spend" data={metrics.map((m) => ({ date: m.date, value: m.spend }))} color="#7B8AD8" prefix="$"
               invertThreshold={true} />
-            <MetricTrendChart label="Conversions" data={metrics.map((m) => ({ date: m.date, value: m.actions ?? 0 }))} color="#22c55e"
+            <MetricTrendChart label="Engagements" data={metrics.map((m) => ({ date: m.date, value: m.actions ?? 0 }))} color="#22c55e"
               invertThreshold={false} />
           </div>
         </div>
@@ -184,7 +212,7 @@ function FatigueForecastCard({
         </div>
         <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden relative">
           <div
-            className="h-full rounded-full transition-all duration-700"
+            className="h-full rounded-full transition-[width] duration-700"
             style={{
               width: `${progressPct}%`,
               background: fatigueScore >= threshold

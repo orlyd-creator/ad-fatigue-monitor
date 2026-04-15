@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { STAGE_COLORS, STAGE_LABELS, STAGE_BG, type FatigueStage } from "@/lib/fatigue/types";
 import { format } from "date-fns";
 
@@ -10,6 +10,8 @@ interface AlertItem {
 }
 
 export default function AlertFeed({ alerts }: { alerts: AlertItem[] }) {
+  const router = useRouter();
+
   if (alerts.length === 0) return (
     <div className="text-center py-16">
       <div className="w-14 h-14 rounded-2xl bg-surface flex items-center justify-center mx-auto mb-4">
@@ -33,13 +35,13 @@ export default function AlertFeed({ alerts }: { alerts: AlertItem[] }) {
         try { parsedSignals = JSON.parse(alert.signals); } catch {}
 
         return (
-          <Link key={alert.id} href={`/ad/${alert.adId}`} className="flex items-center gap-4 lv-card p-5 group">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bg }}>
+          <div key={alert.id} onClick={() => router.push(`/ad/${alert.adId}`)} className="flex items-center gap-4 lv-card p-5 group cursor-pointer">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 pointer-events-none" style={{ backgroundColor: bg }}>
               <span className="text-[14px] font-bold tabular-nums" style={{ color }}>{alert.fatigueScore}</span>
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 pointer-events-none">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[14px] font-medium text-foreground group-hover:text-[#7E69AB] transition-colors truncate">
+                <span className="text-[14px] font-medium text-foreground group-hover:text-[#7E69AB] truncate">
                   {alert.adName || `Ad ${alert.adId}`}
                 </span>
                 <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full uppercase tracking-wider" style={{ color, backgroundColor: bg }}>
@@ -56,10 +58,10 @@ export default function AlertFeed({ alerts }: { alerts: AlertItem[] }) {
                 </div>
               )}
             </div>
-            <span className="text-[11px] text-muted flex-shrink-0 tabular-nums">
+            <span className="text-[11px] text-muted flex-shrink-0 tabular-nums pointer-events-none">
               {format(new Date(alert.createdAt), "MMM d, h:mm a")}
             </span>
-          </Link>
+          </div>
         );
       })}
     </div>

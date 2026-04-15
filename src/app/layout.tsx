@@ -11,8 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Ad Fatigue Monitor",
-  description: "Detect ad fatigue early, before performance tanks",
+  title: "OD",
+  description: "Your source of truth for ad performance, fatigue detection, and lead analytics",
 };
 
 export default function RootLayout({

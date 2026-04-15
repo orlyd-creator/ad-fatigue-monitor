@@ -74,9 +74,9 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     return result;
   }
 
-  // Determine lookback window
-  const existingMetrics = await db.select({ id: dailyMetrics.id }).from(dailyMetrics).limit(1).all();
-  const isFirstSync = existingMetrics.length === 0;
+  // Determine lookback window — check per-account (not global) so new accounts get 30d
+  const existingAds = await db.select({ id: ads.id }).from(ads).where(eq(ads.accountId, accountId)).limit(1).all();
+  const isFirstSync = existingAds.length === 0;
   const lookbackDays = isFirstSync ? 30 : 3;
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
   const until = format(now, "yyyy-MM-dd");
@@ -103,8 +103,9 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     try {
       // Only get ads that are actually running (ACTIVE effective_status)
+      // Pull creative details: full image, body text, headline
       activeAds = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url,image_url,body,title,link_url,object_story_spec}",
         effective_status: JSON.stringify(["ACTIVE"]),
       });
       console.log(`[sync] Found ${activeAds.length} ACTIVE ads`);
@@ -116,7 +117,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     let recentPausedAds: any[] = [];
     try {
       recentPausedAds = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url}",
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url,image_url,body,title,link_url,object_story_spec}",
         effective_status: JSON.stringify(["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]),
       });
       console.log(`[sync] Found ${recentPausedAds.length} paused ads`);
@@ -165,11 +166,18 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       return result;
     }
 
-    // Save ad records (batch-friendly)
+    // Save ad records
     console.log(`[sync] Saving ${allAds.length} ads to database...`);
     for (const ad of allAds) {
       result.adsFound++;
       const adStatus = ad.effective_status || ad.status || "UNKNOWN";
+      const creative = ad.creative || {};
+      // Extract body text from creative or object_story_spec
+      const adBody = creative.body || creative.object_story_spec?.link_data?.message || creative.object_story_spec?.video_data?.message || null;
+      const adHeadline = creative.title || creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null;
+      const imageUrl = creative.image_url || null;
+      const adLinkUrl = creative.link_url || creative.object_story_spec?.link_data?.link || null;
+
       await db.insert(ads)
         .values({
           id: ad.id,
@@ -182,7 +190,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
           status: adStatus,
           createdAt: ad.created_time ? new Date(ad.created_time).getTime() : null,
           lastSyncedAt: Date.now(),
-          thumbnailUrl: ad.creative?.thumbnail_url || null,
+          thumbnailUrl: creative.thumbnail_url || null,
+          imageUrl,
+          adBody,
+          adHeadline,
+          adLinkUrl,
         })
         .onConflictDoUpdate({
           target: ads.id,
@@ -192,7 +204,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
             adName: ad.name,
             status: adStatus,
             lastSyncedAt: Date.now(),
-            thumbnailUrl: ad.creative?.thumbnail_url || null,
+            thumbnailUrl: creative.thumbnail_url || null,
+            imageUrl,
+            adBody,
+            adHeadline,
+            adLinkUrl,
           },
         })
         .run();
@@ -286,7 +302,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     // ── Step 4: Run fatigue scoring (only active + recently paused ads) ──
     console.log("[sync] Step 4: Fatigue scoring...");
-    const syncedAdIds = allAds.map((a: any) => a.id);
+    const syncedAdIds = allAds.filter((a: any) => a.effective_status === "ACTIVE" || a.status === "ACTIVE").map((a: any) => a.id);
 
     // Only score the ads we just synced, not all 1100+ in the DB
     for (const adId of syncedAdIds) {

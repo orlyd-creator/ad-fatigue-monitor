@@ -36,7 +36,7 @@ export default function FatigueScoreBadge({ score, stage, size = "md", showLabel
           <circle cx={s.ring / 2} cy={s.ring / 2} r={radius} fill="none" stroke="#FCE7F3" strokeWidth={s.stroke} />
           <circle cx={s.ring / 2} cy={s.ring / 2} r={radius} fill="none" stroke={color} strokeWidth={s.stroke}
             strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round"
-            className="transition-all duration-1000 ease-out" />
+            className="transition-[stroke-dashoffset] duration-1000 ease-out" />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className={s.font} style={{ color }}>{score}</span>

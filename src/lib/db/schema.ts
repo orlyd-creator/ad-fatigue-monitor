@@ -23,6 +23,10 @@ export const ads = sqliteTable("ads", {
   firstSeenAt: integer("first_seen_at").notNull().$defaultFn(() => Date.now()),
   lastSyncedAt: integer("last_synced_at"),
   thumbnailUrl: text("thumbnail_url"),
+  imageUrl: text("image_url"), // higher-res image
+  adBody: text("ad_body"), // ad primary text / caption
+  adHeadline: text("ad_headline"), // headline
+  adLinkUrl: text("ad_link_url"), // destination URL
 });
 
 export const dailyMetrics = sqliteTable(

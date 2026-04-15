@@ -1,0 +1,324 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { ads, dailyMetrics, settings } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { calculateFatigueScore } from "@/lib/fatigue/scoring";
+import type { ScoringSettings } from "@/lib/fatigue/types";
+import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
+import { auth } from "@/lib/auth";
+
+interface Insight {
+  id: string;
+  type: "critical" | "warning" | "opportunity" | "info";
+  title: string;
+  body: string;
+  action: string;
+  adName?: string;
+  campaignName?: string;
+  impact?: string;
+}
+
+interface AdData {
+  adName: string;
+  campaignName: string;
+  adsetName: string;
+  status: string;
+  fatigueScore: number;
+  fatigueStage: string;
+  signals: Array<{ name: string; label: string; score: number; detail: string }>;
+  totalDays: number;
+  totalSpend: number;
+  totalImpressions: number;
+  totalClicks: number;
+  totalActions: number;
+  recentAvgCTR: number;
+  recentAvgCPM: number;
+  recentAvgFrequency: number;
+  recentAvgCPC: number;
+  dailySpend: number;
+  baselineCPM: number;
+  recentCTRs: number[];
+}
+
+async function loadAdDataForInsights(accountIds: string[]): Promise<AdData[]> {
+  const userSettings = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.id, 1))
+    .get();
+
+  const scoringSettings: ScoringSettings = userSettings
+    ? {
+        ctrWeight: userSettings.ctrWeight,
+        cpmWeight: userSettings.cpmWeight,
+        frequencyWeight: userSettings.frequencyWeight,
+        conversionWeight: userSettings.conversionWeight,
+        costPerResultWeight: userSettings.costPerResultWeight,
+        engagementWeight: userSettings.engagementWeight,
+        baselineWindowDays: userSettings.baselineWindowDays,
+        recentWindowDays: userSettings.recentWindowDays,
+        minDataDays: userSettings.minDataDays,
+      }
+    : DEFAULT_SETTINGS;
+
+  const allAds = await db
+    .select()
+    .from(ads)
+    .where(inArray(ads.accountId, accountIds))
+    .all();
+
+  const activeAds = allAds.filter((a) => a.status === "ACTIVE");
+
+  const adDataList: AdData[] = await Promise.all(
+    activeAds.map(async (ad) => {
+      const metrics = await db
+        .select()
+        .from(dailyMetrics)
+        .where(eq(dailyMetrics.adId, ad.id))
+        .orderBy(dailyMetrics.date)
+        .all();
+
+      const fatigue = calculateFatigueScore(metrics, scoringSettings);
+
+      const recent = metrics.slice(-7);
+      const baseline = metrics.slice(0, Math.max(7, Math.floor(metrics.length / 2)));
+      const totalSpend = metrics.reduce((sum, m) => sum + m.spend, 0);
+      const totalImpressions = metrics.reduce((sum, m) => sum + m.impressions, 0);
+      const totalClicks = metrics.reduce((sum, m) => sum + m.clicks, 0);
+      const totalActions = metrics.reduce((sum, m) => sum + m.actions, 0);
+      const avgCTR =
+        recent.length > 0
+          ? recent.reduce((sum, m) => sum + m.ctr, 0) / recent.length
+          : 0;
+      const avgCPM =
+        recent.length > 0
+          ? recent.reduce((sum, m) => sum + m.cpm, 0) / recent.length
+          : 0;
+      const avgFrequency =
+        recent.length > 0
+          ? recent.reduce((sum, m) => sum + m.frequency, 0) / recent.length
+          : 0;
+      const avgCPC =
+        recent.length > 0
+          ? recent.reduce((sum, m) => sum + m.cpc, 0) / recent.length
+          : 0;
+      const baselineCPM =
+        baseline.length > 0
+          ? baseline.reduce((sum, m) => sum + m.cpm, 0) / baseline.length
+          : 0;
+      const dailySpend =
+        metrics.length > 0 ? totalSpend / metrics.length : 0;
+
+      // Get last 5 days of CTR for decay detection
+      const recentCTRs = metrics.slice(-5).map((m) => m.ctr);
+
+      return {
+        adName: ad.adName,
+        campaignName: ad.campaignName,
+        adsetName: ad.adsetName,
+        status: ad.status,
+        fatigueScore: fatigue.fatigueScore,
+        fatigueStage: fatigue.stage,
+        signals: fatigue.signals,
+        totalDays: metrics.length,
+        totalSpend: Math.round(totalSpend * 100) / 100,
+        totalImpressions,
+        totalClicks,
+        totalActions,
+        recentAvgCTR: Math.round(avgCTR * 100) / 100,
+        recentAvgCPM: Math.round(avgCPM * 100) / 100,
+        recentAvgFrequency: Math.round(avgFrequency * 100) / 100,
+        recentAvgCPC: Math.round(avgCPC * 100) / 100,
+        dailySpend: Math.round(dailySpend * 100) / 100,
+        baselineCPM: Math.round(baselineCPM * 100) / 100,
+        recentCTRs,
+      };
+    })
+  );
+
+  return adDataList;
+}
+
+function generateInsights(adData: AdData[]): Insight[] {
+  const insights: Insight[] = [];
+  let idCounter = 0;
+  const nextId = () => `insight-${++idCounter}`;
+
+  const fatigued = adData.filter((a) => a.fatigueScore >= 50);
+  const healthy = adData
+    .filter((a) => a.fatigueScore < 25)
+    .sort((a, b) => b.recentAvgCTR - a.recentAvgCTR);
+
+  // 1. Budget Waste Alert — if spending on fatigued ads
+  if (fatigued.length > 0) {
+    const wastedDaily = fatigued.reduce((s, a) => s + a.dailySpend, 0);
+    if (wastedDaily > 0) {
+      insights.push({
+        id: nextId(),
+        type: "critical",
+        title: "Budget Waste Alert",
+        body: `You're spending ~$${wastedDaily.toFixed(0)}/day on ${fatigued.length} fatigued ad${fatigued.length > 1 ? "s" : ""}. Reallocate to your winners.`,
+        action: `Pause ${fatigued
+          .slice(0, 3)
+          .map((a) => `"${a.adName}"`)
+          .join(", ")} and move budget to healthy performers.`,
+        impact: `Save ~$${wastedDaily.toFixed(0)}/day`,
+      });
+    }
+  }
+
+  // 2. Creative Refresh Needed — ads running 30+ days with high frequency
+  for (const ad of adData) {
+    if (ad.totalDays >= 30 && ad.recentAvgFrequency > 3) {
+      insights.push({
+        id: nextId(),
+        type: "warning",
+        title: "Creative Refresh Needed",
+        body: `Ad "${ad.adName}" has been running for ${ad.totalDays} days with frequency above ${ad.recentAvgFrequency.toFixed(1)}x. Time for new creative.`,
+        action: `Create a fresh variant of "${ad.adName}" with a new hook, visual, or format (if video, try static or carousel).`,
+        adName: ad.adName,
+        campaignName: ad.campaignName,
+      });
+    }
+  }
+
+  // 3. Winning Ad Scale Opportunity — healthy ads with strong CTR
+  for (const ad of healthy) {
+    if (ad.recentAvgCTR >= 1.2 && ad.fatigueScore < 20) {
+      insights.push({
+        id: nextId(),
+        type: "opportunity",
+        title: "Winning Ad — Scale Opportunity",
+        body: `Ad "${ad.adName}" has ${ad.recentAvgCTR}% CTR and low fatigue (score ${ad.fatigueScore}) — increase budget 15-20%.`,
+        action: `Increase daily budget on "${ad.adName}" by 15-20%. Avoid more than 30% to stay in Meta's learning phase.`,
+        adName: ad.adName,
+        campaignName: ad.campaignName,
+        impact: `Grow conversions at $${ad.recentAvgCPC.toFixed(2)} CPC`,
+      });
+    }
+  }
+
+  // 4. Audience Saturation Warning — campaign with multiple high-frequency ads
+  const campaignGroups: Record<string, AdData[]> = {};
+  for (const ad of adData) {
+    if (!campaignGroups[ad.campaignName]) campaignGroups[ad.campaignName] = [];
+    campaignGroups[ad.campaignName].push(ad);
+  }
+  for (const [campaignName, campaignAds] of Object.entries(campaignGroups)) {
+    const highFreqAds = campaignAds.filter((a) => a.recentAvgFrequency > 3);
+    if (highFreqAds.length >= 3) {
+      insights.push({
+        id: nextId(),
+        type: "warning",
+        title: "Audience Saturation Warning",
+        body: `Campaign "${campaignName}" has ${highFreqAds.length} ads all with frequency above 3x — your audience is saturated. Expand targeting.`,
+        action: `Add new interest-based or lookalike audiences to "${campaignName}". Consider broadening age/geo targeting.`,
+        campaignName,
+      });
+    }
+  }
+
+  // 5. CPM Spike Alert — CPM jumped 40%+ vs baseline
+  for (const ad of adData) {
+    if (ad.baselineCPM > 0 && ad.recentAvgCPM > 0) {
+      const cpmChange =
+        ((ad.recentAvgCPM - ad.baselineCPM) / ad.baselineCPM) * 100;
+      if (cpmChange >= 40) {
+        insights.push({
+          id: nextId(),
+          type: "warning",
+          title: "CPM Spike Alert",
+          body: `CPM on "${ad.adName}" jumped ${Math.round(cpmChange)}% vs baseline ($${ad.baselineCPM} -> $${ad.recentAvgCPM}). Meta is charging more to reach your audience.`,
+          action: `Review audience overlap in "${ad.campaignName}" and consider refreshing creative or expanding targeting.`,
+          adName: ad.adName,
+          campaignName: ad.campaignName,
+          impact: `CPM up ${Math.round(cpmChange)}%`,
+        });
+      }
+    }
+  }
+
+  // 6. CTR Decay Pattern — CTR dropping 3+ days in a row
+  for (const ad of adData) {
+    if (ad.recentCTRs.length >= 3) {
+      const last3 = ad.recentCTRs.slice(-3);
+      const isDecaying =
+        last3[0] > last3[1] && last3[1] > last3[2] && last3[0] > 0;
+      if (isDecaying) {
+        const dropPct =
+          last3[0] > 0
+            ? Math.round(((last3[0] - last3[2]) / last3[0]) * 100)
+            : 0;
+        if (dropPct >= 10) {
+          insights.push({
+            id: nextId(),
+            type: "info",
+            title: "CTR Decay Pattern",
+            body: `CTR on "${ad.adName}" has dropped ${dropPct}% over 3 days in a row (${last3[0].toFixed(2)}% -> ${last3[2].toFixed(2)}%). Classic fatigue pattern starting.`,
+            action: `Start prepping a replacement creative for "${ad.adName}" now. You have a few days before it fully fatigues.`,
+            adName: ad.adName,
+            campaignName: ad.campaignName,
+          });
+        }
+      }
+    }
+  }
+
+  // 7. Quick Win — pair a bad ad with a good ad for budget reallocation
+  if (fatigued.length > 0 && healthy.length > 0) {
+    const worst = fatigued.sort((a, b) => b.fatigueScore - a.fatigueScore)[0];
+    const best = healthy[0];
+    if (worst && best && worst.dailySpend > 0) {
+      insights.push({
+        id: nextId(),
+        type: "opportunity",
+        title: "Quick Win",
+        body: `Pause "${worst.adName}" (score ${worst.fatigueScore}) and move its ~$${worst.dailySpend.toFixed(0)}/day budget to "${best.adName}" (score ${best.fatigueScore}, ${best.recentAvgCTR}% CTR).`,
+        action: `Pause "${worst.adName}" in Ads Manager and increase "${best.adName}" budget by $${worst.dailySpend.toFixed(0)}/day.`,
+        impact: `Save ~$${worst.dailySpend.toFixed(0)}/day`,
+      });
+    }
+  }
+
+  // Sort by priority: critical > warning > opportunity > info
+  const priorityOrder: Record<string, number> = {
+    critical: 0,
+    warning: 1,
+    opportunity: 2,
+    info: 3,
+  };
+  insights.sort(
+    (a, b) => (priorityOrder[a.type] ?? 4) - (priorityOrder[b.type] ?? 4)
+  );
+
+  return insights;
+}
+
+export async function GET() {
+  try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const accountId = (session as any).accountId as string;
+    const allAccountIds: string[] =
+      (session as any).allAccountIds || [accountId];
+    if (!accountId) {
+      return NextResponse.json(
+        { error: "No account connected" },
+        { status: 400 }
+      );
+    }
+
+    const adData = await loadAdDataForInsights(allAccountIds);
+    const insights = generateInsights(adData);
+
+    return NextResponse.json({ insights });
+  } catch (error: unknown) {
+    console.error("Insights API error:", error);
+    return NextResponse.json(
+      { error: "Failed to generate insights" },
+      { status: 500 }
+    );
+  }
+}

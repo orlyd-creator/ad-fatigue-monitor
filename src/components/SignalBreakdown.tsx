@@ -39,7 +39,7 @@ export default function SignalBreakdown({ signals }: { signals: SignalResult[] }
                 <span className="text-[14px] font-bold tabular-nums" style={{ color }}>{signal.score}/100</span>
               </div>
               <div className="relative h-2 bg-surface rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-700" style={{ width: `${signal.score}%`, backgroundColor: color }} />
+                <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700" style={{ width: `${signal.score}%`, backgroundColor: color }} />
               </div>
               <p className="text-[12px] text-muted-foreground mt-1.5">{SIGNAL_EXPLANATIONS[signal.name] || signal.detail}</p>
             </div>

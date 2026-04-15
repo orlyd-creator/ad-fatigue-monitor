@@ -54,7 +54,7 @@ export default function ChatBot() {
       {/* Floating button */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-xl shadow-purple-300/40 hover:shadow-2xl hover:shadow-purple-300/50 transition-all duration-300 hover:scale-110 flex items-center justify-center ${!open ? 'animate-gentle-bounce' : ''}`}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-xl shadow-purple-300/40 hover:shadow-2xl hover:shadow-purple-300/50 transition-shadow duration-200 flex items-center justify-center ${!open ? 'animate-gentle-bounce' : ''}`}
       >
         {open ? (
           <svg className="w-6 h-6 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -131,12 +131,12 @@ export default function ChatBot() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ask about your ads..."
-                className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-[13px] text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#9B7ED0]/30 focus:border-[#9B7ED0]/40 transition-all"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-[13px] text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#9B7ED0]/30 focus:border-[#9B7ED0]/40 transition-colors"
               />
               <button
                 onClick={() => sendMessage()}
                 disabled={loading || !input.trim()}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[13px] font-medium disabled:opacity-40 hover:shadow-md transition-all btn-hover-scale"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[13px] font-medium disabled:opacity-40 hover:shadow-md transition-colors"
               >
                 Send
               </button>

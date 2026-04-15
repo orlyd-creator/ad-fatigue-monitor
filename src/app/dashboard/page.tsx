@@ -93,6 +93,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       recentMetrics,
       totalDays: allMetrics.length,
       thumbnailUrl: ad.thumbnailUrl ?? null,
+      imageUrl: ad.imageUrl ?? null,
+      adBody: ad.adBody ?? null,
+      adHeadline: ad.adHeadline ?? null,
       rangeSpend: Math.round(totalSpend * 100) / 100,
       rangeImpressions: totalImpressions,
       rangeClicks: totalClicks,
@@ -159,8 +162,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const clickChange = prevClicks > 0 ? ((totalClicksRange - prevClicks) / prevClicks) * 100 : 0;
   const ctrChange = prevCTR > 0 ? ((overallCTR - prevCTR) / prevCTR) * 100 : 0;
 
-  // --- Wasted spend estimate ---
-  const fatiguedAds = results.filter(r => r.fatigue.fatigueScore >= 50);
+  // --- Wasted spend estimate (ACTIVE ads only — don't count old/paused ads) ---
+  const fatiguedAds = results.filter(r => r.status === "ACTIVE" && r.fatigue.fatigueScore >= 50);
   const fatiguedAdIds = new Set(
     fatiguedAds.map(r => r.id)
   );
@@ -169,12 +172,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .reduce((sum, m) => sum + (m.spend ?? 0), 0);
   const wastedPct = totalSpendRange > 0 ? (wastedSpend / totalSpendRange) * 100 : 0;
 
-  // --- Top/bottom performers by CTR ---
-  const adCTRs = results.map(r => {
-    const adMetrics = allMetricsRange.filter(m => m.adId === r.id);
-    const avgCTR = adMetrics.length > 0 ? adMetrics.reduce((s, m) => s + m.ctr, 0) / adMetrics.length : 0;
-    return { ...r, rangeAvgCTR: avgCTR };
-  }).filter(r => r.rangeAvgCTR > 0);
+  // --- Top/bottom performers by CTR (ACTIVE ads only) ---
+  const adCTRs = results
+    .filter(r => r.status === "ACTIVE")
+    .map(r => {
+      const adMetrics = allMetricsRange.filter(m => m.adId === r.id);
+      const avgCTR = adMetrics.length > 0 ? adMetrics.reduce((s, m) => s + m.ctr, 0) / adMetrics.length : 0;
+      return { ...r, rangeAvgCTR: avgCTR };
+    }).filter(r => r.rangeAvgCTR > 0);
 
   adCTRs.sort((a, b) => b.rangeAvgCTR - a.rangeAvgCTR);
   const topAd = adCTRs[0] ?? null;
@@ -203,8 +208,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     wastedPct: Math.round(wastedPct * 100) / 100,
     fatigueAdCount: fatiguedAds.length,
     // Top/bottom
+    topAdId: topAd?.id || null,
     topAdName: topAd?.adName || null,
     topAdCTR: topAd ? Math.round(topAdAvgCTR * 100) / 100 : 0,
+    bottomAdId: bottomAd?.id || null,
     bottomAdName: bottomAd?.adName || null,
     bottomAdCTR: bottomAd ? Math.round(bottomAdAvgCTR * 100) / 100 : 0,
   };

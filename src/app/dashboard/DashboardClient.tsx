@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DayPicker } from "react-day-picker";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import "react-day-picker/style.css";
+import { format, startOfMonth } from "date-fns";
 import AdCard from "@/components/AdCard";
 import SparklineChart from "@/components/SparklineChart";
 import type { FatigueStage } from "@/lib/fatigue/types";
@@ -30,8 +28,10 @@ interface SpendData {
   wastedPct: number;
   fatigueAdCount: number;
   // Top/bottom
+  topAdId: string | null;
   topAdName: string | null;
   topAdCTR: number;
+  bottomAdId: string | null;
   bottomAdName: string | null;
   bottomAdCTR: number;
 }
@@ -39,9 +39,13 @@ interface SpendData {
 interface AdData {
   id: string; adName: string; campaignName: string; adsetName?: string; status: string;
   fatigue: { fatigueScore: number; stage: FatigueStage; signals: any[]; dataStatus: string;
-    baselineWindow?: { start: string; end: string } | null; recentWindow?: { start: string; end: string } | null; };
+    baselineWindow?: { start: string; end: string } | null; recentWindow?: { start: string; end: string } | null;
+    predictedDaysToFatigue?: number | null; fatigueVelocity?: number; trendDirection?: string; };
   recentMetrics: Array<{ ctr: number; cpm: number; frequency: number }>; totalDays: number;
   thumbnailUrl?: string | null;
+  imageUrl?: string | null;
+  adBody?: string | null;
+  adHeadline?: string | null;
   rangeSpend?: number;
   rangeImpressions?: number;
   rangeClicks?: number;
@@ -55,14 +59,6 @@ const STAGE_META: Record<string, { color: string; bg: string; label: string; des
   fatigued:      { color: "#ea384c", bg: "#fef2f2", label: "Swap It Out",       desc: "Replace ASAP" },
 };
 
-const RANGE_OPTIONS = [
-  { value: "7d", label: "7d" },
-  { value: "14d", label: "14d" },
-  { value: "30d", label: "30d" },
-  { value: "90d", label: "90d" },
-  { value: "this_month", label: "This Month" },
-  { value: "last_month", label: "Last Month" },
-];
 
 type ViewMode = "grid" | "campaign";
 
@@ -132,7 +128,7 @@ function CampaignSection({ group, filter }: { group: CampaignGroup; filter: Fati
     <div className="mb-6">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 active:scale-[0.98] transition-all lv-card"
+        className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-colors lv-card"
       >
         <ChevronIcon expanded={expanded} />
         <div className="flex-1 text-left min-w-0">
@@ -168,7 +164,7 @@ function CampaignSection({ group, filter }: { group: CampaignGroup; filter: Fati
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredAds.map((ad) => (
                     <AdCard key={ad.id} id={ad.id} adName={ad.adName} campaignName={ad.campaignName}
-                      status={ad.status} fatigue={ad.fatigue} recentMetrics={ad.recentMetrics} thumbnailUrl={ad.thumbnailUrl} />
+                      status={ad.status} fatigue={ad.fatigue} recentMetrics={ad.recentMetrics} thumbnailUrl={ad.thumbnailUrl} imageUrl={ad.imageUrl} adBody={ad.adBody} />
                   ))}
                 </div>
               </div>
@@ -209,11 +205,12 @@ function MetricCard({ label, value, change, invertColor }: { label: string; valu
 export default function DashboardClient({ ads, spendData, range, lastSyncedAt }: { ads: AdData[]; spendData: SpendData; range: string; lastSyncedAt?: number }) {
   const router = useRouter();
   const [filter, setFilter] = useState<FatigueStage | "all">("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("campaign");
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Filter by status first (active only by default), then by fatigue stage, then by search
+  // statusFiltered = base dataset for all stats (active only by default)
+  // searchFiltered = further narrowed for the ad grid only — does NOT affect stats/counts/insights
   const statusFiltered = showActiveOnly ? ads.filter((a) => a.status === "ACTIVE") : ads;
   const searchFiltered = searchQuery.trim()
     ? statusFiltered.filter((a) =>
@@ -222,13 +219,15 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
         (a.adsetName || "").toLowerCase().includes(searchQuery.toLowerCase())
       )
     : statusFiltered;
+  // Stage filter + search for the grid display
   const filtered = filter === "all" ? searchFiltered : searchFiltered.filter((a) => a.fatigue.stage === filter);
 
+  // Counts and stats always use statusFiltered (unaffected by search)
   const counts = {
-    healthy: searchFiltered.filter((a) => a.fatigue.stage === "healthy").length,
-    early_warning: searchFiltered.filter((a) => a.fatigue.stage === "early_warning").length,
-    fatiguing: searchFiltered.filter((a) => a.fatigue.stage === "fatiguing").length,
-    fatigued: searchFiltered.filter((a) => a.fatigue.stage === "fatigued").length,
+    healthy: statusFiltered.filter((a) => a.fatigue.stage === "healthy").length,
+    early_warning: statusFiltered.filter((a) => a.fatigue.stage === "early_warning").length,
+    fatiguing: statusFiltered.filter((a) => a.fatigue.stage === "fatiguing").length,
+    fatigued: statusFiltered.filter((a) => a.fatigue.stage === "fatigued").length,
   };
   const urgentCount = counts.fatiguing + counts.fatigued;
   const activeCount = ads.filter((a) => a.status === "ACTIVE").length;
@@ -245,20 +244,22 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
   }, [lastSyncedAt]);
 
   const insights = useMemo(() => {
-    if (ads.length === 0) return [];
-    const items: Array<{ icon: string; color: string; text: string }> = [];
+    if (statusFiltered.length === 0) return [];
+    const items: Array<{ color: string; text: string; adId?: string; adIds?: string[] }> = [];
 
-    // 1. Wasted spend is the #1 thing marketers care about
-    if (spendData.wastedSpend > 0) {
+    // 1. Wasted spend — link to fatigued ads
+    const fatiguedAdsFiltered = statusFiltered.filter(a => a.fatigue.fatigueScore >= 50);
+    if (spendData.wastedSpend > 0 && fatiguedAdsFiltered.length > 0) {
+      const worstFatigued = fatiguedAdsFiltered.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore)[0];
       items.push({
-        icon: "",
         color: "#ea384c",
-        text: `You're burning $${spendData.wastedSpend.toLocaleString("en-US", {maximumFractionDigits: 0})} on ${spendData.fatigueAdCount} fatigued ad${spendData.fatigueAdCount > 1 ? "s" : ""} (${spendData.wastedPct.toFixed(0)}% of total spend). Pause them and move that budget to your winners.`,
+        text: `You're burning $${spendData.wastedSpend.toLocaleString("en-US", {maximumFractionDigits: 0})} on ${spendData.fatigueAdCount} fatigued ads (${spendData.wastedPct.toFixed(0)}% of spend). Worst offender: "${worstFatigued.adName}" at score ${worstFatigued.fatigue.fatigueScore}.`,
+        adId: worstFatigued.id,
       });
     }
 
-    // 2. Biggest drop, what's getting worse
-    const decliningAds = ads.filter(a => {
+    // 2. Fastest declining ad — the one losing CTR the quickest
+    const decliningAds = statusFiltered.filter(a => {
       if (a.recentMetrics.length < 4) return false;
       const recent = a.recentMetrics.slice(-2);
       const older = a.recentMetrics.slice(0, 2);
@@ -269,67 +270,91 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
     if (decliningAds.length > 0) {
       const worst = decliningAds.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore)[0];
       items.push({
-        icon: "",
         color: "#f97316",
-        text: `"${worst.adName}" CTR is dropping fast. Prep a replacement creative with a new hook or angle before it tanks your CPA`,
+        text: `"${worst.adName}" CTR is dropping fast (score: ${worst.fatigue.fatigueScore}). Prep a replacement creative with a new hook before it tanks your CPA.`,
+        adId: worst.id,
       });
     }
 
-    // 3. Budget reallocation opportunity
-    if (spendData.topAdName && spendData.bottomAdName && spendData.topAdCTR > spendData.bottomAdCTR * 1.5) {
+    // 3. Predicted fatigue — ads about to fatigue soon
+    const aboutToFatigue = statusFiltered.filter(a =>
+      a.fatigue.predictedDaysToFatigue != null && a.fatigue.predictedDaysToFatigue > 0 && a.fatigue.predictedDaysToFatigue <= 5 && a.fatigue.fatigueScore < 75
+    ).sort((a, b) => (a.fatigue.predictedDaysToFatigue ?? 99) - (b.fatigue.predictedDaysToFatigue ?? 99));
+    if (aboutToFatigue.length > 0) {
+      const first = aboutToFatigue[0];
       items.push({
-        icon: "",
-        color: "#22c55e",
-        text: `Move budget from "${spendData.bottomAdName}" (${spendData.bottomAdCTR.toFixed(2)}% CTR) to "${spendData.topAdName}" (${spendData.topAdCTR.toFixed(2)}% CTR), which is ${((spendData.topAdCTR / Math.max(spendData.bottomAdCTR, 0.01)) * 100 - 100).toFixed(0)}% more efficient.`,
+        color: "#f97316",
+        text: `"${first.adName}" is predicted to fatigue in ~${first.fatigue.predictedDaysToFatigue}d based on current velocity. Start preparing a replacement now.`,
+        adId: first.id,
       });
     }
 
-    // 4. High frequency = audience saturation
-    const highFreqAds = ads.filter(a => {
+    // 4. Budget reallocation — link to both ads
+    const topAd = statusFiltered.find(a => a.adName === spendData.topAdName);
+    const bottomAd = statusFiltered.find(a => a.adName === spendData.bottomAdName);
+    if (topAd && bottomAd && spendData.topAdCTR > spendData.bottomAdCTR * 1.5) {
+      items.push({
+        color: "#22c55e",
+        text: `Move budget from "${bottomAd.adName}" (${spendData.bottomAdCTR.toFixed(2)}% CTR) to "${topAd.adName}" (${spendData.topAdCTR.toFixed(2)}% CTR) — ${((spendData.topAdCTR / Math.max(spendData.bottomAdCTR, 0.01)) * 100 - 100).toFixed(0)}% more efficient.`,
+        adId: topAd.id,
+      });
+    }
+
+    // 5. High frequency = audience burnout
+    const highFreqAds = statusFiltered.filter(a => {
       const lastFreq = a.recentMetrics.length > 0 ? a.recentMetrics[a.recentMetrics.length - 1].frequency : 0;
       return lastFreq > 3;
+    }).sort((a, b) => {
+      const aF = a.recentMetrics[a.recentMetrics.length - 1]?.frequency ?? 0;
+      const bF = b.recentMetrics[b.recentMetrics.length - 1]?.frequency ?? 0;
+      return bF - aF;
     });
     if (highFreqAds.length > 0) {
-      const worstFreq = highFreqAds.sort((a, b) => {
-        const aF = a.recentMetrics[a.recentMetrics.length - 1]?.frequency ?? 0;
-        const bF = b.recentMetrics[b.recentMetrics.length - 1]?.frequency ?? 0;
-        return bF - aF;
-      })[0];
+      const worstFreq = highFreqAds[0];
       const freq = worstFreq.recentMetrics[worstFreq.recentMetrics.length - 1]?.frequency ?? 0;
       items.push({
-        icon: "",
         color: "#f59e0b",
-        text: `"${worstFreq.adName}" has hit ${freq.toFixed(1)}x frequency, meaning people are seeing it too many times. Expand your audience or swap the creative.`,
+        text: `"${worstFreq.adName}" hit ${freq.toFixed(1)}x frequency — your audience is seeing it too many times. Expand targeting or swap the creative.`,
+        adId: worstFreq.id,
       });
     }
 
-    // 5. CTR trend across account
+    // 6. Accelerating fatigue — ads getting worse fast
+    const accelerating = statusFiltered.filter(a => a.fatigue.trendDirection === "accelerating" && a.fatigue.fatigueScore > 30)
+      .sort((a, b) => (b.fatigue.fatigueVelocity ?? 0) - (a.fatigue.fatigueVelocity ?? 0));
+    if (accelerating.length > 0 && items.length < 6) {
+      const worst = accelerating[0];
+      items.push({
+        color: "#ea384c",
+        text: `"${worst.adName}" fatigue is accelerating at +${worst.fatigue.fatigueVelocity?.toFixed(1)}/day. This ad is declining fast — act before it wastes more budget.`,
+        adId: worst.id,
+      });
+    }
+
+    // 7. Account-level CTR trend
     if (spendData.ctrChange < -10) {
       items.push({
-        icon: "",
         color: "#ea384c",
-        text: `Account CTR dropped ${Math.abs(spendData.ctrChange).toFixed(0)}% vs last period, and your ads are losing relevance. Time for fresh creative across the board.`,
+        text: `Account CTR dropped ${Math.abs(spendData.ctrChange).toFixed(0)}% vs last period. Your ads are losing relevance — time for fresh creative across the board.`,
       });
-    } else if (spendData.ctrChange > 10) {
+    } else if (spendData.ctrChange > 10 && items.length < 6) {
       items.push({
-        icon: "",
         color: "#22c55e",
-        text: `Account CTR is up ${spendData.ctrChange.toFixed(0)}% vs last period, and your creative is resonating. Consider scaling spend while momentum is strong.`,
+        text: `Account CTR is up ${spendData.ctrChange.toFixed(0)}% vs last period. Creative is resonating — consider scaling spend while momentum is strong.`,
       });
     }
 
-    // 6. If everything is healthy, say so with context
+    // 8. If everything is healthy
     if (items.length === 0) {
-      const healthyPct = Math.round((ads.filter(a => a.fatigue.stage === "healthy").length / ads.length) * 100);
+      const healthyPct = Math.round((statusFiltered.filter(a => a.fatigue.stage === "healthy").length / Math.max(statusFiltered.length, 1)) * 100);
       items.push({
-        icon: "",
         color: "#22c55e",
         text: `${healthyPct}% of ads are healthy with no urgent issues. Focus on testing new angles and scaling your top performers.`,
       });
     }
 
-    return items.slice(0, 5);
-  }, [ads, spendData]);
+    return items.slice(0, 6);
+  }, [statusFiltered, spendData]);
 
   // Account Health Score: 100 - weighted average fatigue score of active ads
   const healthScore = useMemo(() => {
@@ -348,76 +373,16 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
   }, [healthScore]);
 
   const searchParamsObj = useSearchParams();
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [selectedRange, setSelectedRange] = useState<{ from?: Date; to?: Date }>(() => {
-    if (range === "custom") {
-      const fromParam = searchParamsObj.get("from");
-      const toParam = searchParamsObj.get("to");
-      return {
-        from: fromParam ? new Date(fromParam + "T00:00:00") : undefined,
-        to: toParam ? new Date(toParam + "T00:00:00") : undefined,
-      };
-    }
-    return {};
-  });
-  const calendarRef = useRef<HTMLDivElement>(null);
+  const [customFrom, setCustomFrom] = useState(() => searchParamsObj.get("from") || format(startOfMonth(new Date()), "yyyy-MM-dd"));
+  const [customTo, setCustomTo] = useState(() => searchParamsObj.get("to") || format(new Date(), "yyyy-MM-dd"));
 
-  // Close calendar on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
-        setCalendarOpen(false);
-      }
-    }
-    if (calendarOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [calendarOpen]);
 
-  const handleRangeChange = (newRange: string) => {
-    setCalendarOpen(false);
-    if (newRange === "this_month") {
-      const now = new Date();
-      const from = format(startOfMonth(now), "yyyy-MM-dd");
-      const to = format(now, "yyyy-MM-dd");
-      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
-    } else if (newRange === "last_month") {
-      const lastMonth = subMonths(new Date(), 1);
-      const from = format(startOfMonth(lastMonth), "yyyy-MM-dd");
-      const to = format(endOfMonth(lastMonth), "yyyy-MM-dd");
-      router.push(`/dashboard?range=custom&from=${from}&to=${to}`);
-    } else {
-      router.push(`/dashboard?range=${newRange}`);
+  const handleCustomDateApply = () => {
+    if (customFrom && customTo) {
+      router.push(`/dashboard?range=custom&from=${customFrom}&to=${customTo}`);
     }
   };
 
-  const handleCalendarSelect = (selected: any) => {
-    if (!selected) {
-      setSelectedRange({});
-      return;
-    }
-    // react-day-picker v9 range mode passes { from?: Date, to?: Date }
-    const from = selected.from as Date | undefined;
-    const to = selected.to as Date | undefined;
-    setSelectedRange({ from, to });
-    // Navigate when both dates are picked
-    if (from && to) {
-      const fromStr = format(from, "yyyy-MM-dd");
-      const toStr = format(to, "yyyy-MM-dd");
-      router.push(`/dashboard?range=custom&from=${fromStr}&to=${toStr}`);
-      setTimeout(() => setCalendarOpen(false), 100);
-    }
-  };
-
-  const isCustomRange = range === "custom";
-  const customLabel = isCustomRange
-    ? `${searchParamsObj.get("from") ? format(new Date(searchParamsObj.get("from")! + "T00:00:00"), "MMM d") : ""} - ${searchParamsObj.get("to") ? format(new Date(searchParamsObj.get("to")! + "T00:00:00"), "MMM d, yyyy") : ""}`
-    : null;
-
-  const rangeLabel = isCustomRange
-    ? customLabel || "Custom"
-    : RANGE_OPTIONS.find(r => r.value === range)?.label || "30d";
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-8">
@@ -434,104 +399,34 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
                 : "Hit 'Refresh Data' to pull your ads in"}
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Date Range Selector */}
-            <div className="relative flex items-center glass rounded-xl p-1 shadow-sm flex-wrap">
-              {RANGE_OPTIONS.map((opt) => {
-                const isThisOrLastMonth = opt.value === "this_month" || opt.value === "last_month";
-                const isActive = isThisOrLastMonth
-                  ? false // These redirect to custom, so we highlight via custom logic below
-                  : range === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleRangeChange(opt.value)}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap active:scale-95 ${
-                      isActive
-                        ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
-                        : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-
-              {/* Calendar icon / custom date trigger */}
-              <div className="relative" ref={calendarRef}>
-                <button
-                  onClick={() => setCalendarOpen(!calendarOpen)}
-                  className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap active:scale-95 ${
-                    isCustomRange
-                      ? "bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-blue-50"
-                  }`}
-                  title="Pick custom date range"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                  </svg>
-                  {isCustomRange ? customLabel : "Custom"}
-                </button>
-
-                {/* Calendar dropdown */}
-                {calendarOpen && (
-                  <div
-                    className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4"
-                    style={{ minWidth: 320, zIndex: 9999 }}
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <style>{`
-                      .fatigue-calendar .rdp-root {
-                        --rdp-accent-color: #6B93D8;
-                        --rdp-accent-background-color: #EEF0FA;
-                        --rdp-range_middle-background-color: #EEF0FA;
-                        --rdp-range_start-color: #fff;
-                        --rdp-range_start-background: linear-gradient(135deg, #6B93D8, #D06AB8);
-                        --rdp-range_end-color: #fff;
-                        --rdp-range_end-background: linear-gradient(135deg, #6B93D8, #D06AB8);
-                        font-family: var(--font-inter), Inter, system-ui, sans-serif;
-                        font-size: 13px;
-                      }
-                      .fatigue-calendar .rdp-day {
-                        border-radius: 8px;
-                      }
-                      .fatigue-calendar .rdp-range_start .rdp-day_button,
-                      .fatigue-calendar .rdp-range_end .rdp-day_button {
-                        background: linear-gradient(135deg, #6B93D8, #D06AB8);
-                        color: white;
-                        border-radius: 8px;
-                      }
-                      .fatigue-calendar .rdp-range_middle .rdp-day_button {
-                        background-color: #EEF0FA;
-                        color: #6B78C8;
-                      }
-                      .fatigue-calendar .rdp-today:not(.rdp-range_start):not(.rdp-range_end) .rdp-day_button {
-                        border: 2px solid #6B93D8;
-                        font-weight: 700;
-                      }
-                      .fatigue-calendar .rdp-day_button:hover {
-                        background-color: #E0E4F5;
-                      }
-                      .fatigue-calendar .rdp-chevron {
-                        fill: #6B93D8;
-                      }
-                    `}</style>
-                    <div className="fatigue-calendar">
-                      <DayPicker
-                        mode="range"
-                        selected={selectedRange.from ? { from: selectedRange.from, to: selectedRange.to } : undefined}
-                        onSelect={handleCalendarSelect}
-                        numberOfMonths={1}
-                        disabled={{ after: new Date() }}
-                        defaultMonth={selectedRange.from || new Date()}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Date Range — inline custom picker */}
+          <div className="flex items-center gap-2 flex-shrink-0 glass rounded-xl px-3 py-2 shadow-sm">
+            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            </svg>
+            <input
+              type="date"
+              value={customFrom}
+              max={format(new Date(), "yyyy-MM-dd")}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[130px]"
+            />
+            <span className="text-[12px] text-gray-400">to</span>
+            <input
+              type="date"
+              value={customTo}
+              max={format(new Date(), "yyyy-MM-dd")}
+              min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[130px]"
+            />
+            <button
+              onClick={handleCustomDateApply}
+              disabled={!customFrom || !customTo}
+              className="cursor-pointer px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[12px] font-medium disabled:opacity-40 whitespace-nowrap"
+            >
+              Apply
+            </button>
           </div>
         </div>
         {ads.length > 0 && (
@@ -547,7 +442,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             {/* Active / All toggle */}
             <button
               onClick={() => setShowActiveOnly(!showActiveOnly)}
-              className={`cursor-pointer text-[11px] font-medium px-2.5 py-1 rounded-full transition-all active:scale-95 ${
+              className={`cursor-pointer text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${
                 showActiveOnly
                   ? "bg-green-50 text-green-700 border border-green-200"
                   : "bg-gray-50 text-gray-600 border border-gray-200"
@@ -568,7 +463,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
                 className="text-[12px] pl-8 pr-3 py-1.5 rounded-full bg-white/60 border border-gray-200 text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-48"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 active:scale-90 transition-transform">
+                <button onClick={() => setSearchQuery("")} className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-transform">
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -606,7 +501,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           </div>
           <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: healthMeta.track }}>
             <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
+              className="h-full rounded-full transition-colors duration-700 ease-out"
               style={{ width: `${healthScore}%`, background: `linear-gradient(90deg, ${healthMeta.color}cc, ${healthMeta.color})` }}
             />
           </div>
@@ -621,7 +516,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           const isActive = filter === stage;
           return (
             <button key={stage} onClick={() => setFilter(filter === stage ? "all" : stage)}
-              className={`cursor-pointer rounded-2xl p-5 text-left transition-all active:scale-[0.97] status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
+              className={`cursor-pointer rounded-2xl p-5 text-left transition-colors status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
                 isActive ? "ring-2 ring-[#6B93D8] shadow-lg shadow-blue-100" : "lv-card"
               }`}
               style={{ backgroundColor: isActive ? meta.bg : "rgba(255,255,255,0.55)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" }}>
@@ -646,7 +541,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               </svg>
               <h2 className="text-[15px] font-semibold text-foreground">Performance</h2>
             </div>
-            <span className="text-[11px] text-muted-foreground bg-white/30 backdrop-blur-sm px-2.5 py-1 rounded-full">vs previous {rangeLabel}</span>
+            <span className="text-[11px] text-muted-foreground bg-white/30 px-2.5 py-1 rounded-full">vs previous period</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             <MetricCard label="Spend" value={`$${spendData.totalSpendRange.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} change={spendData.spendChange} invertColor />
@@ -655,7 +550,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             <MetricCard label="Avg CTR" value={`${spendData.overallCTR.toFixed(2)}%`} change={spendData.ctrChange} />
           </div>
           <div>
-            <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Daily spend ({rangeLabel})</div>
+            <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Daily spend</div>
             <SparklineChart data={spendData.dailySpend.map((d) => d.spend)} color="#6B93D8" height={48} />
           </div>
         </div>
@@ -665,7 +560,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
       {ads.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Wasted Spend */}
-          <div className="rounded-2xl lv-card p-5">
+          <div onClick={() => { if (spendData.fatigueAdCount > 0) setFilter("fatigued"); }} className="rounded-2xl lv-card p-5 cursor-pointer">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -693,7 +588,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           </div>
 
           {/* Top Performer */}
-          <div className="rounded-2xl lv-card p-5">
+          <div onClick={() => { if (spendData.topAdId) router.push(`/ad/${spendData.topAdId}`); }} className="rounded-2xl lv-card p-5 cursor-pointer">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -715,7 +610,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           </div>
 
           {/* Weakest Ad */}
-          <div className="rounded-2xl lv-card p-5">
+          <div onClick={() => { if (spendData.bottomAdId) router.push(`/ad/${spendData.bottomAdId}`); }} className="rounded-2xl lv-card p-5 cursor-pointer">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center">
                 <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -750,12 +645,27 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             <h2 className="text-[15px] font-semibold text-foreground">What You Should Do</h2>
           </div>
           <div className="space-y-2.5">
-            {insights.map((insight, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/30 hover:bg-white/40 transition-colors">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: insight.color }} />
-                <p className="text-[13px] text-foreground leading-relaxed">{insight.text}</p>
-              </div>
-            ))}
+            {insights.map((insight, i) => {
+              const isClickable = !!insight.adId;
+              const Wrapper = isClickable ? "a" : "div";
+              return (
+                <Wrapper
+                  key={i}
+                  {...(isClickable ? { href: `/ad/${insight.adId}` } : {})}
+                  className={`flex items-start gap-3 px-4 py-3 rounded-xl bg-white/30 transition-colors ${
+                    isClickable ? "hover:bg-white/50 hover:shadow-sm cursor-pointer group" : "hover:bg-white/40"
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: insight.color }} />
+                  <p className="text-[13px] text-foreground leading-relaxed flex-1">{insight.text}</p>
+                  {isClickable && (
+                    <svg className="w-4 h-4 text-gray-400 group-hover:text-foreground flex-shrink-0 mt-1 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                  )}
+                </Wrapper>
+              );
+            })}
           </div>
         </div>
       )}
@@ -767,7 +677,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             <>
               <span className="text-[13px] text-muted">Showing:</span>
               <button onClick={() => setFilter("all")}
-                className="cursor-pointer text-[12px] px-3 py-1.5 rounded-full bg-gradient-to-r from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 text-[#6B78C8] hover:from-[#6B93D8]/25 hover:via-[#9B7ED0]/25 hover:to-[#D06AB8]/25 transition-all active:scale-95 flex items-center gap-1.5 font-medium backdrop-blur-sm">
+                className="cursor-pointer text-[12px] px-3 py-1.5 rounded-full bg-gradient-to-r from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 text-[#6B78C8] hover:from-[#6B93D8]/25 hover:via-[#9B7ED0]/25 hover:to-[#D06AB8]/25 transition-colors flex items-center gap-1.5 font-medium">
                 {STAGE_META[filter]?.label}
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -781,7 +691,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           <div className="flex items-center glass rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("grid")}
-              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all active:scale-95 ${
+              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
                 viewMode === "grid"
                   ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-white/40"
@@ -794,7 +704,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
             </button>
             <button
               onClick={() => setViewMode("campaign")}
-              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all active:scale-95 ${
+              className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
                 viewMode === "campaign"
                   ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-white/40"
@@ -832,7 +742,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           {filtered.map((ad, i) => (
             <div key={ad.id} className={`animate-fade-in animate-delay-${Math.min(i % 6 + 1, 6)}`}>
               <AdCard id={ad.id} adName={ad.adName} campaignName={ad.campaignName}
-                status={ad.status} fatigue={ad.fatigue} recentMetrics={ad.recentMetrics} thumbnailUrl={ad.thumbnailUrl} />
+                status={ad.status} fatigue={ad.fatigue} recentMetrics={ad.recentMetrics} thumbnailUrl={ad.thumbnailUrl} imageUrl={ad.imageUrl} adBody={ad.adBody} />
             </div>
           ))}
         </div>

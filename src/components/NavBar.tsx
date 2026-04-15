@@ -67,7 +67,7 @@ export default function NavBar() {
                     key={link.href}
                     href={link.href}
                     className={clsx(
-                      "px-4 py-2 rounded-full text-[13px] font-medium transition-all nav-link-animated",
+                      "px-4 py-2 rounded-full text-[13px] font-medium transition-colors nav-link-animated",
                       isActive
                         ? "bg-accent-light text-[#6B78C8]"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
@@ -91,7 +91,7 @@ export default function NavBar() {
               onClick={handleSync}
               disabled={isPending}
               className={clsx(
-                "px-4 py-2 rounded-full text-[13px] font-medium transition-all btn-hover-scale",
+                "px-4 py-2 rounded-full text-[13px] font-medium transition-colors btn-hover-scale",
                 syncDone
                   ? "bg-green-50 text-green-600"
                   : syncError
@@ -109,7 +109,7 @@ export default function NavBar() {
               )}
               {syncDone ? "Synced!" : isPending ? "Pulling data..." : syncError ? "Try Again" : "Refresh Data"}
             </button>
-            <a href="/login" className="px-3 py-2 rounded-full text-[12px] text-muted-foreground hover:text-foreground hover:bg-surface transition-all" title="Switch account or logout">
+            <a href="/login" className="px-3 py-2 rounded-full text-[12px] text-muted-foreground hover:text-foreground hover:bg-surface transition-colors" title="Switch account or logout">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
               </svg>

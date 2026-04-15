@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { alerts, ads } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import AlertFeed from "@/components/AlertFeed";
+import InsightsPanel from "@/components/InsightsPanel";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -14,18 +15,20 @@ export default async function AlertsPage() {
   if (!accountId) redirect("/login");
   const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
 
-  // Get ad IDs belonging to ALL of user's accounts
-  const userAds = await db.select({ id: ads.id }).from(ads).where(inArray(ads.accountId, allAccountIds)).all();
-  const userAdIds = userAds.map(a => a.id);
+  // Get ACTIVE ad IDs belonging to ALL of user's accounts — never show alerts for paused/archived ads
+  const userAds = await db.select({ id: ads.id, status: ads.status }).from(ads).where(inArray(ads.accountId, allAccountIds)).all();
+  const activeAdIds = userAds.filter(a => a.status === "ACTIVE").map(a => a.id);
+  const userAdIds = activeAdIds;
 
   if (userAdIds.length === 0) {
     return (
       <div className="min-h-screen">
         <main className="max-w-3xl mx-auto px-6 py-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts</h1>
-            <p className="text-[14px] text-muted-foreground mt-1">No ads found for your account.</p>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts & Insights</h1>
+            <p className="text-[14px] text-muted-foreground mt-1">AI-powered recommendations and fatigue alerts</p>
           </div>
+          <InsightsPanel />
           <AlertFeed alerts={[]} />
         </main>
       </div>
@@ -58,11 +61,13 @@ export default async function AlertsPage() {
     <div className="min-h-screen">
       <main className="max-w-3xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts & Insights</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            When an ad crosses into a worse stage, it shows up here. Click any to see the full breakdown.
+            AI-powered recommendations and fatigue alerts
           </p>
         </div>
+        <InsightsPanel />
+        <h2 className="text-lg font-semibold text-foreground mb-4">Fatigue Alerts</h2>
         <AlertFeed alerts={alertsWithNames} />
       </main>
     </div>

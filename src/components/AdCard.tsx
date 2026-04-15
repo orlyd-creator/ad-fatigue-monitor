@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import FatigueScoreBadge from "./FatigueScoreBadge";
 import SparklineChart from "./SparklineChart";
 import { STAGE_GLOW, type FatigueStage } from "@/lib/fatigue/types";
@@ -17,13 +17,15 @@ interface Props {
   id: string; adName: string; campaignName: string; status: string;
   fatigue: FatigueData; recentMetrics: RecentMetric[];
   thumbnailUrl?: string | null;
+  imageUrl?: string | null;
+  adBody?: string | null;
 }
 
-export default function AdCard({ id, adName, campaignName, status, fatigue, recentMetrics, thumbnailUrl }: Props) {
+export default function AdCard({ id, adName, campaignName, status, fatigue, recentMetrics, thumbnailUrl, imageUrl, adBody }: Props) {
+  const router = useRouter();
   const isCollecting = fatigue.dataStatus !== "sufficient";
   const glowClass = !isCollecting ? STAGE_GLOW[fatigue.stage] : "";
 
-  // Compute trend insight
   const trendInsight = !isCollecting && recentMetrics.length >= 3 ? (() => {
     const recent = recentMetrics.slice(-3);
     const older = recentMetrics.slice(0, Math.max(1, recentMetrics.length - 3));
@@ -40,22 +42,21 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
   })() : null;
 
   return (
-    <Link href={`/ad/${id}`} className={`group block lv-card p-6 ${glowClass}`}>
-      {thumbnailUrl && (
-        <div className="mb-4 -mx-6 -mt-6 relative overflow-hidden">
+    <div onClick={() => router.push(`/ad/${id}`)} className={`group cursor-pointer lv-card p-6 ${glowClass}`}>
+      {(imageUrl || thumbnailUrl) && (
+        <div className="mb-4 -mx-6 -mt-6 relative overflow-hidden pointer-events-none">
           <img
-            src={thumbnailUrl}
+            src={imageUrl || thumbnailUrl || ""}
             alt={`${adName} creative`}
             loading="lazy"
-            className="w-full h-36 object-cover rounded-t-2xl group-hover:scale-105 transition-transform duration-500 bg-gray-100"
-            style={{ imageRendering: "auto" }}
+            className="w-full h-36 object-cover rounded-t-2xl bg-gray-100"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent rounded-t-2xl" />
         </div>
       )}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 pointer-events-none">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-[15px] text-foreground truncate group-hover:text-[#6B93D8] transition-colors">
+          <h3 className="font-semibold text-[15px] text-foreground truncate group-hover:text-[#6B93D8]">
             {adName}
           </h3>
           <div className="flex items-center gap-2 mt-1">
@@ -69,6 +70,9 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
               </span>
             )}
           </div>
+          {adBody && (
+            <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{adBody}</p>
+          )}
         </div>
         {isCollecting ? (
           <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
@@ -109,7 +113,7 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
       </div>
 
       {!isCollecting && recentMetrics.length > 0 && (
-        <div className="mt-5 pt-4 border-t border-blue-100 grid grid-cols-3 gap-4">
+        <div className="mt-5 pt-4 border-t border-blue-100 grid grid-cols-3 gap-4 pointer-events-none">
           <MiniMetric label="CTR" value={`${recentMetrics[recentMetrics.length - 1]?.ctr?.toFixed(2) ?? 0}%`}
             data={recentMetrics.map((m) => m.ctr)} color="#6B93D8" />
           <MiniMetric label="Frequency" value={recentMetrics[recentMetrics.length - 1]?.frequency?.toFixed(1) ?? "0"}
@@ -119,7 +123,7 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
             data={recentMetrics.map((m) => m.cpm)} color="#f59e0b" />
         </div>
       )}
-    </Link>
+    </div>
   );
 }
 

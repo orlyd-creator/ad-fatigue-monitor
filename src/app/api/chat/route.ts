@@ -253,77 +253,184 @@ export async function POST(request: Request) {
     const recentAlerts = allRecentAlerts;
     const context = formatAdContext(adSummaries, recentAlerts);
 
-    // Build message history (last 10 messages for context)
-    const conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+    // Try Anthropic API first, fall back to smart built-in responses
+    let responseText: string;
 
-    if (history && Array.isArray(history)) {
-      const recentHistory = history.slice(-10);
-      for (const msg of recentHistory) {
-        if (msg.role === "user" || msg.role === "assistant") {
-          conversationMessages.push({
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
-          });
+    try {
+      // Build message history (last 10 messages for context)
+      const conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+      if (history && Array.isArray(history)) {
+        for (const msg of history.slice(-10)) {
+          if (msg.role === "user" || msg.role === "assistant") {
+            conversationMessages.push({ role: msg.role as "user" | "assistant", content: msg.content });
+          }
         }
       }
-    }
+      conversationMessages.push({ role: "user", content: `[AD ACCOUNT DATA]\n${context}\n\n[USER QUESTION]\n${message}` });
+      if (conversationMessages[0]?.role === "assistant") conversationMessages.shift();
 
-    // Add the current message with ad data context
-    conversationMessages.push({
-      role: "user",
-      content: `[AD ACCOUNT DATA]\n${context}\n\n[USER QUESTION]\n${message}`,
-    });
-
-    // Ensure messages alternate properly (Anthropic API requirement)
-    // If first message is assistant, drop it
-    if (conversationMessages.length > 0 && conversationMessages[0].role === "assistant") {
-      conversationMessages.shift();
-    }
-
-    // Merge consecutive same-role messages
-    const mergedMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
-    for (const msg of conversationMessages) {
-      if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === msg.role) {
-        mergedMessages[mergedMessages.length - 1].content += "\n\n" + msg.content;
-      } else {
-        mergedMessages.push({ ...msg });
+      // Merge consecutive same-role messages
+      const mergedMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const msg of conversationMessages) {
+        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === msg.role) {
+          mergedMessages[mergedMessages.length - 1].content += "\n\n" + msg.content;
+        } else {
+          mergedMessages.push({ ...msg });
+        }
       }
+
+      const response = await anthropic.messages.create({
+        model: "claude-3-5-haiku-20241022",
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages: mergedMessages,
+      });
+
+      const textBlock = response.content.find((block) => block.type === "text");
+      responseText = textBlock && textBlock.type === "text" ? textBlock.text : generateSmartResponse(message, adSummaries);
+    } catch {
+      // Anthropic API failed — use smart built-in response engine
+      responseText = generateSmartResponse(message, adSummaries);
     }
-
-    const response = await anthropic.messages.create({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: mergedMessages,
-    });
-
-    // Extract text from the response
-    const textBlock = response.content.find((block) => block.type === "text");
-    const responseText = textBlock && textBlock.type === "text" ? textBlock.text : "I wasn't able to generate a response. Please try again.";
 
     return NextResponse.json({ response: responseText });
   } catch (error: unknown) {
     console.error("Chat API error:", error);
-
-    // Provide a helpful fallback if the Anthropic API fails
-    if (error instanceof Error) {
-      if (error.message.includes("401") || error.message.includes("authentication")) {
-        return NextResponse.json(
-          { response: "The AI service isn't configured yet. Please set your ANTHROPIC_API_KEY environment variable and restart the app." },
-          { status: 200 }
-        );
-      }
-      if (error.message.includes("429") || error.message.includes("rate")) {
-        return NextResponse.json(
-          { response: "I'm getting too many requests right now. Give me a moment and try again." },
-          { status: 200 }
-        );
-      }
-    }
-
     return NextResponse.json(
-      { response: "Something went wrong on my end. Try again in a moment, and if it keeps happening, check that your API key is set correctly." },
+      { response: "Something went wrong loading your ad data. Try refreshing the page." },
       { status: 200 }
     );
   }
+}
+
+// ── Smart Built-in Response Engine ──────────────────────────────
+// Generates intelligent responses from actual ad data without needing any external API
+function generateSmartResponse(message: string, ads: AdSummary[]): string {
+  const msg = message.toLowerCase();
+  const active = ads.filter(a => a.status === "ACTIVE");
+  const fatigued = active.filter(a => a.fatigueScore >= 50).sort((a, b) => b.fatigueScore - a.fatigueScore);
+  const warning = active.filter(a => a.fatigueScore >= 25 && a.fatigueScore < 50).sort((a, b) => b.fatigueScore - a.fatigueScore);
+  const healthy = active.filter(a => a.fatigueScore < 25).sort((a, b) => b.recentAvgCTR - a.recentAvgCTR);
+  const totalSpend = active.reduce((s, a) => s + a.totalSpend, 0);
+  const fatigueSpend = fatigued.reduce((s, a) => s + a.totalSpend, 0);
+  const avgFatigue = active.length > 0 ? active.reduce((s, a) => s + a.fatigueScore, 0) / active.length : 0;
+  const healthScore = Math.round(100 - avgFatigue);
+
+  // Kill / pause questions
+  if (msg.includes("kill") || msg.includes("pause") || msg.includes("turn off") || msg.includes("stop")) {
+    if (fatigued.length === 0) {
+      return `Good news — none of your ${active.length} active ads are in critical fatigue territory right now. ${warning.length > 0 ? `Keep an eye on "${warning[0].adName}" though — it's at score ${warning[0].fatigueScore} and trending up.` : "Everything looks healthy."}`;
+    }
+    let resp = `You should pause these ads immediately:\n\n`;
+    fatigued.slice(0, 5).forEach((ad, i) => {
+      const dailySpend = ad.totalDays > 0 ? (ad.totalSpend / ad.totalDays) : 0;
+      resp += `${i + 1}. "${ad.adName}" — fatigue score ${ad.fatigueScore}, CTR ${ad.recentAvgCTR}%, frequency ${ad.recentAvgFrequency}x. Burning ~$${dailySpend.toFixed(0)}/day.\n`;
+    });
+    resp += `\nThat's ${fatigued.length} ads wasting budget. Pause them and reallocate to your winners.`;
+    return resp;
+  }
+
+  // Fatigue / declining questions
+  if (msg.includes("fatigu") || msg.includes("declin") || msg.includes("worst") || msg.includes("dying")) {
+    const allBad = [...fatigued, ...warning].sort((a, b) => b.fatigueScore - a.fatigueScore);
+    if (allBad.length === 0) return `All ${active.length} active ads are healthy with fatigue scores under 25. No declining ads detected.`;
+    let resp = `Here's what's fatiguing, worst first:\n\n`;
+    allBad.slice(0, 6).forEach((ad, i) => {
+      const stage = ad.fatigueScore >= 70 ? "CRITICAL" : ad.fatigueScore >= 50 ? "FATIGUED" : "WARNING";
+      resp += `${i + 1}. "${ad.adName}" — ${stage} (score ${ad.fatigueScore}), CTR: ${ad.recentAvgCTR}%, Freq: ${ad.recentAvgFrequency}x\n`;
+    });
+    return resp;
+  }
+
+  // Budget / spend / waste / bleeding questions
+  if (msg.includes("budget") || msg.includes("spend") || msg.includes("waste") || msg.includes("bleed") || msg.includes("money")) {
+    if (fatigued.length === 0) return `You're spending efficiently. $${totalSpend.toLocaleString()} total across ${active.length} active ads with no significant waste on fatigued ads. Account health: ${healthScore}/100.`;
+    const wastedPct = totalSpend > 0 ? ((fatigueSpend / totalSpend) * 100).toFixed(0) : "0";
+    let resp = `You're wasting ~$${fatigueSpend.toLocaleString()} (${wastedPct}% of spend) on ${fatigued.length} fatigued ads.\n\nBiggest budget drains:\n`;
+    fatigued.slice(0, 4).forEach((ad, i) => {
+      resp += `${i + 1}. "${ad.adName}" — $${ad.totalSpend.toLocaleString()} spent, fatigue score ${ad.fatigueScore}\n`;
+    });
+    if (healthy.length > 0) {
+      resp += `\nMove that budget to "${healthy[0].adName}" (${healthy[0].recentAvgCTR}% CTR, score ${healthy[0].fatigueScore}) — it's your best performer right now.`;
+    }
+    return resp;
+  }
+
+  // Action plan / priority / what to do
+  if (msg.includes("plan") || msg.includes("priority") || msg.includes("action") || msg.includes("what should") || msg.includes("recommend")) {
+    let resp = `Here's your priority action plan:\n\n`;
+    let step = 1;
+    if (fatigued.length > 0) {
+      resp += `${step}. PAUSE NOW: ${fatigued.slice(0, 3).map(a => `"${a.adName}" (score ${a.fatigueScore})`).join(", ")}. These are actively wasting budget.\n\n`;
+      step++;
+    }
+    if (warning.length > 0) {
+      resp += `${step}. PREP REPLACEMENTS for: ${warning.slice(0, 3).map(a => `"${a.adName}" (score ${a.fatigueScore})`).join(", ")}. These will fatigue within days.\n\n`;
+      step++;
+    }
+    if (healthy.length > 0) {
+      resp += `${step}. SCALE WINNERS: Increase budget 15-20% on "${healthy[0].adName}" (${healthy[0].recentAvgCTR}% CTR). It has room to run.\n\n`;
+      step++;
+    }
+    const highFreq = active.filter(a => a.recentAvgFrequency > 3).sort((a, b) => b.recentAvgFrequency - a.recentAvgFrequency);
+    if (highFreq.length > 0) {
+      resp += `${step}. EXPAND TARGETING: "${highFreq[0].adName}" has ${highFreq[0].recentAvgFrequency.toFixed(1)}x frequency — your audience is saturated. Add new interests or lookalikes.\n`;
+    }
+    return resp;
+  }
+
+  // Creative / test / new / fresh
+  if (msg.includes("creative") || msg.includes("test") || msg.includes("fresh") || msg.includes("new")) {
+    let resp = "Creative recommendations:\n\n";
+    const highFreq = active.filter(a => a.recentAvgFrequency > 2.5).sort((a, b) => b.recentAvgFrequency - a.recentAvgFrequency);
+    if (highFreq.length > 0) {
+      resp += `1. "${highFreq[0].adName}" has ${highFreq[0].recentAvgFrequency.toFixed(1)}x frequency. Your audience has seen it too many times. Test a completely different visual style — if it's video, try static. If it's static, try carousel or UGC.\n\n`;
+    }
+    if (healthy.length > 0) {
+      resp += `2. Your best performing ad is "${healthy[0].adName}" at ${healthy[0].recentAvgCTR}% CTR. Duplicate it and test 3 variations: different hook, different CTA, different thumbnail.\n\n`;
+    }
+    if (fatigued.length > 0) {
+      resp += `3. "${fatigued[0].adName}" is fatigued (score ${fatigued[0].fatigueScore}). Don't iterate on it — start completely fresh. New angle, new copy, new visual.\n`;
+    }
+    return resp;
+  }
+
+  // Top / best / winner / scale
+  if (msg.includes("top") || msg.includes("best") || msg.includes("winner") || msg.includes("scale") || msg.includes("perform")) {
+    if (healthy.length === 0) return "No clear winners right now — most ads are showing fatigue signals. Focus on pausing the worst performers and launching fresh creative.";
+    let resp = `Your top performers to scale:\n\n`;
+    healthy.slice(0, 5).forEach((ad, i) => {
+      resp += `${i + 1}. "${ad.adName}" — CTR: ${ad.recentAvgCTR}%, CPC: $${ad.recentAvgCPC}, Freq: ${ad.recentAvgFrequency}x, Fatigue: ${ad.fatigueScore}\n`;
+    });
+    resp += `\nScale these by increasing budget 15-20% at a time. Don't go over 30% in one day or you'll reset Meta's learning phase.`;
+    return resp;
+  }
+
+  // General / greeting / conversational
+  if (msg.match(/^(hi|hey|hello|yo|sup|what's up|whats up|hola|howdy)\b/) || msg.length < 10) {
+    if (fatigued.length > 0) {
+      return `Hey! Quick heads up — you've got ${fatigued.length} ad${fatigued.length > 1 ? "s" : ""} that ${fatigued.length > 1 ? "are" : "is"} looking tired. Your best bet right now is "${healthy.length > 0 ? healthy[0].adName : "none yet"}" at ${healthy.length > 0 ? healthy[0].recentAvgCTR : 0}% CTR. Want me to break down what to do?`;
+    }
+    if (warning.length > 0) {
+      return `Hey! Things are looking decent — ${active.length} active ads, ${healthy.length} healthy. Keep an eye on "${warning[0].adName}" though, it's starting to show early fatigue signs. What do you want to dig into?`;
+    }
+    return `Hey! Your ads are looking solid — ${active.length} active, all healthy. Account health is ${healthScore}/100. Nothing to worry about right now. Want me to find your top performers or suggest what to test next?`;
+  }
+
+  // Catch-all for anything else
+  let resp = "";
+  if (fatigued.length > 0) {
+    resp = `Here's what I'm seeing: ${fatigued.length} of your ${active.length} active ads need attention (fatigue score 50+). Worst is "${fatigued[0].adName}" at ${fatigued[0].fatigueScore}. `;
+    if (healthy.length > 0) {
+      resp += `On the bright side, "${healthy[0].adName}" is crushing it at ${healthy[0].recentAvgCTR}% CTR. `;
+    }
+    resp += `\n\nTry asking me: "which ads should I kill?", "give me an action plan", or "where am I wasting budget?"`;
+  } else {
+    resp = `Your ${active.length} active ads are all looking healthy — account health at ${healthScore}/100. `;
+    if (healthy.length > 0) {
+      resp += `Top performer is "${healthy[0].adName}" with ${healthy[0].recentAvgCTR}% CTR. `;
+    }
+    resp += `\n\nI can help you find what to scale, what creative to test next, or break down your spend. Just ask!`;
+  }
+  return resp;
 }

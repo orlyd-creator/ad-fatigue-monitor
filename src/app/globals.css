@@ -3,9 +3,9 @@
 :root {
   --background: transparent;
   --foreground: #000000;
-  --card: rgba(255, 255, 255, 0.55);
-  --card-border: rgba(107, 147, 216, 0.06);
-  --card-hover: rgba(255, 255, 255, 0.65);
+  --card: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(107, 147, 216, 0.08);
+  --card-hover: rgba(255, 255, 255, 0.92);
   --muted: #6b7280;
   --muted-foreground: #374151;
   --surface: rgba(237, 240, 248, 0.6);
@@ -60,11 +60,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a, button { transition: all 0.2s ease; }
+/* === CLICK FIX: No global transitions on interactive elements === */
+/* Components handle their own transitions via Tailwind classes */
+button, a, [role="button"] {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* === Animations === */
-
-/* Fade-in-up for cards */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -77,7 +80,6 @@ a, button { transition: all 0.2s ease; }
 .animate-delay-5 { animation-delay: 0.5s; }
 .animate-delay-6 { animation-delay: 0.6s; }
 
-/* Pulse glow for warning/fatigued score rings */
 @keyframes pulseGlow {
   0%, 100% { filter: drop-shadow(0 0 3px var(--glow-color, #f59e0b)); }
   50% { filter: drop-shadow(0 0 10px var(--glow-color, #f59e0b)); }
@@ -86,92 +88,39 @@ a, button { transition: all 0.2s ease; }
 .ring-pulse-fatiguing { --glow-color: #f97316; animation: pulseGlow 1.8s ease-in-out infinite; }
 .ring-pulse-fatigued { --glow-color: #ea384c; animation: pulseGlow 1.5s ease-in-out infinite; }
 
-/* Chatbot bounce */
 @keyframes gentleBounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
 .animate-gentle-bounce { animation: gentleBounce 2s ease-in-out infinite; }
 
-/* Chat panel slide-up */
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 
-/* Button hover scale */
-.btn-hover-scale { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.btn-hover-scale:hover { transform: scale(1.02); }
+/* === Cards — solid whites, no backdrop-filter, no pseudo-element overlays === */
+.lv-card {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(107, 147, 216, 0.06), 0 4px 12px rgba(107, 147, 216, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.lv-card:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(107, 147, 216, 0.1), 0 8px 24px rgba(107, 147, 216, 0.06);
+}
 
-/* Status card shimmer on hover */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.glass {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
 }
-.status-card-hover {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.25s ease;
-}
-.status-card-hover::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
-  background-size: 200% 100%;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  border-radius: inherit;
-}
-.status-card-hover:hover::after {
-  opacity: 1;
-  animation: shimmer 1.5s ease-in-out;
-}
+
+/* Status cards — clean hover, no pseudo-elements */
 .status-card-hover:hover {
-  transform: perspective(600px) rotateX(1deg) rotateY(-1deg) translateY(-2px);
   box-shadow: 0 8px 24px rgba(107, 147, 216, 0.12);
-}
-
-/* Nav link underline animation */
-.nav-link-animated {
-  position: relative;
-}
-.nav-link-animated::after {
-  content: '';
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  width: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #6B93D8, #D06AB8, #F04E80);
-  border-radius: 99px;
-  transition: width 0.25s ease, left 0.25s ease;
-}
-.nav-link-animated:hover::after {
-  width: 60%;
-  left: 20%;
-}
-
-/* Refresh button gradient border while syncing */
-@keyframes borderSpin {
-  0% { --angle: 0deg; }
-  100% { --angle: 360deg; }
-}
-@property --angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-.sync-border-spin {
-  border: 2px solid transparent;
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.7), rgba(255,255,255,0.7)),
-    conic-gradient(from var(--angle), #6B93D8, #D06AB8, #F04E80, #6B93D8);
-  animation: borderSpin 1.5s linear infinite;
 }
 
 /* Scrollbar */
@@ -199,51 +148,7 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 2px 8px rgba(107, 147, 216, 0.3);
 }
 
-/* Loveable-style cards — glassmorphism over gradient */
-.lv-card {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(107, 147, 216, 0.06), 0 4px 12px rgba(107, 147, 216, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  transition: all 0.2s ease;
-}
-.lv-card:hover {
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 2px 8px rgba(107, 147, 216, 0.1), 0 8px 24px rgba(107, 147, 216, 0.06);
-  transform: translateY(-1px);
-}
-
-/* Glass utility class */
-.glass {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  position: relative;
-}
-
-/* Ensure pseudo-elements on interactive containers don't block clicks */
-.glass::after, .status-card-hover::after, .lv-card::after {
-  pointer-events: none !important;
-}
-
-/* Calendar dropdown needs high z-index */
-.fatigue-calendar-dropdown {
-  z-index: 100;
-}
-
-/* Ensure all buttons are clickable */
-button, a, [role="button"] {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* Stage borders on hover */
+/* Stage border glows */
 .glow-green:hover { border-color: rgba(34, 197, 94, 0.3) !important; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1) !important; }
 .glow-yellow:hover { border-color: rgba(245, 158, 11, 0.3) !important; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1) !important; }
 .glow-orange:hover { border-color: rgba(249, 115, 22, 0.3) !important; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.1) !important; }
@@ -255,11 +160,9 @@ button:active:not(:disabled) {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-
 .gradient-bg {
   background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
 }
-
 .gradient-bg-soft {
   background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE);
 }
