@@ -109,12 +109,12 @@ export default function LeadsClient({
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
           </svg>
           <input type="date" value={from} max={format(new Date(), "yyyy-MM-dd")} onChange={(e) => setFrom(e.target.value)}
-            className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 w-[130px]" />
+            className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 w-[140px]" />
           <span className="text-[12px] text-gray-400">to</span>
           <input type="date" value={to} max={format(new Date(), "yyyy-MM-dd")} min={from || undefined} onChange={(e) => setTo(e.target.value)}
-            className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 w-[130px]" />
+            className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 w-[140px]" />
           <button onClick={handleApply} disabled={!from || !to}
-            className="cursor-pointer px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[12px] font-medium disabled:opacity-40 whitespace-nowrap min-h-[36px]">
+            className="cursor-pointer px-4 py-2 min-h-[40px] rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[13px] font-medium disabled:opacity-40 whitespace-nowrap active:scale-[0.97] transition-all">
             Apply
           </button>
         </div>

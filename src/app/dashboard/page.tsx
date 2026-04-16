@@ -5,7 +5,7 @@ import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import DashboardClient from "./DashboardClient";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfMonth } from "date-fns";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -29,12 +29,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const params = await searchParams;
 
-  // Handle custom date range
-  const isCustom = params.range === "custom" && params.from && params.to;
-  const range = isCustom ? "custom" : (params.range && RANGE_DAYS[params.range] ? params.range : "30d");
-  const rangeDays = isCustom
-    ? Math.max(1, Math.ceil((new Date(params.to!).getTime() - new Date(params.from!).getTime()) / (1000 * 60 * 60 * 24)) + 1)
-    : RANGE_DAYS[range] ?? 30;
+  // Default = current month (MTD), not last 30 days
+  const now = new Date();
+  const defaultFrom = format(startOfMonth(now), "yyyy-MM-dd");
+  const defaultTo = format(now, "yyyy-MM-dd");
+  const hasCustom = params.range === "custom" && params.from && params.to;
+  const hasPreset = params.range && RANGE_DAYS[params.range];
+  const isCustom = hasCustom || (!hasPreset); // default is treated as custom (MTD)
+  const range = hasPreset ? params.range! : "custom";
+  const customFrom = hasCustom ? params.from! : defaultFrom;
+  const customTo = hasCustom ? params.to! : defaultTo;
+  const rangeDays = hasPreset
+    ? RANGE_DAYS[range]!
+    : Math.max(1, Math.ceil((new Date(customTo).getTime() - new Date(customFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
   // Get settings
   const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
@@ -55,9 +62,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Get ads from ALL of user's ad accounts
   const allAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
 
-  const now = new Date();
-  const rangeStart = isCustom ? params.from! : format(subDays(now, rangeDays), "yyyy-MM-dd");
-  const rangeEnd = isCustom ? params.to! : format(now, "yyyy-MM-dd");
+  const rangeStart = isCustom ? customFrom : format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const rangeEnd = isCustom ? customTo : format(now, "yyyy-MM-dd");
 
   // Get last synced time from ads
   const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
@@ -125,8 +131,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Daily spend for the range
   const dailySpendMap = new Map<string, number>();
   if (isCustom) {
-    const start = new Date(params.from!);
-    const end = new Date(params.to!);
+    const start = new Date(customFrom);
+    const end = new Date(customTo);
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       dailySpendMap.set(format(d, "yyyy-MM-dd"), 0);
     }
@@ -143,7 +149,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const dailySpend = Array.from(dailySpendMap.entries()).map(([date, spend]) => ({ date, spend }));
 
   // --- Period-over-period comparison ---
-  const prevRangeEnd = isCustom ? format(subDays(new Date(params.from!), 1), "yyyy-MM-dd") : format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const prevRangeEnd = isCustom ? format(subDays(new Date(customFrom), 1), "yyyy-MM-dd") : format(subDays(now, rangeDays), "yyyy-MM-dd");
   const prevRangeStart = format(subDays(new Date(prevRangeEnd), rangeDays - 1), "yyyy-MM-dd");
   const allMetricsPrev = (await db
     .select()

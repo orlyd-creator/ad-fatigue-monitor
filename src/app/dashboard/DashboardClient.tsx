@@ -409,7 +409,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               value={customFrom}
               max={format(new Date(), "yyyy-MM-dd")}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[130px]"
+              className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[140px]"
             />
             <span className="text-[12px] text-gray-400">to</span>
             <input
@@ -418,12 +418,12 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               max={format(new Date(), "yyyy-MM-dd")}
               min={customFrom || undefined}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-gray-200 text-[12px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[130px]"
+              className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[140px]"
             />
             <button
               onClick={handleCustomDateApply}
               disabled={!customFrom || !customTo}
-              className="cursor-pointer px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[12px] font-medium disabled:opacity-40 whitespace-nowrap"
+              className="cursor-pointer px-4 py-2 min-h-[40px] rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[13px] font-medium disabled:opacity-40 whitespace-nowrap active:scale-[0.97] transition-all"
             >
               Apply
             </button>
