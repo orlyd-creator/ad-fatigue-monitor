@@ -77,7 +77,8 @@ export default function LeadsClient({
 
   const handleRefreshHS = () => {
     setRefreshingHS(true);
-    router.push(`/leads?from=${from}&to=${to}&t=${Date.now()}`);
+    router.refresh();
+    setTimeout(() => setRefreshingHS(false), 3000);
   };
 
   const cplATM = totalATM && totalATM > 0 ? totalSpend / totalATM : null;

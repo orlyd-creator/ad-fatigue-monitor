@@ -60,6 +60,8 @@ export async function refreshData() {
 
     revalidatePath("/dashboard");
     revalidatePath("/alerts");
+    revalidatePath("/leads");
+    revalidatePath("/strategy");
 
     return {
       success: totalAds > 0 || allErrors.length === 0,
