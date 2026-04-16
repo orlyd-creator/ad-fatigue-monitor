@@ -131,6 +131,7 @@ export async function getLeadsFunnel(
     config.excludeSegmentProperty, config.mqlProperty,
     "hs_analytics_source", "hs_analytics_source_data_1",
     "hs_analytics_source_data_2", "inbound_outbound",
+    "qualified_lead",
   ];
 
   // Query 1: ATM leads — contacts with ATM date in range + lead source filter
@@ -148,11 +149,18 @@ export async function getLeadsFunnel(
     properties: [...new Set(atmProps)],
   });
 
-  // Apply segment exclusion (e.g. exclude micro SMB)
+  // Apply segment exclusion (e.g. exclude micro SMB) — but keep re-tiered contacts
+  // Contacts with excluded segment values are kept if they're qualified (re-tiered as SMB)
   const filteredATM = atmContacts.filter(c => {
     if (config.excludeSegmentValues.length === 0) return true;
     const segment = c.properties[config.excludeSegmentProperty] || "";
-    return !config.excludeSegmentValues.includes(segment);
+    if (!config.excludeSegmentValues.includes(segment)) return true;
+    // Micro SMB but re-tiered: keep if they've progressed to customer/opportunity or have SQL status
+    const stage = c.properties.lifecyclestage || "";
+    const leadStatus = c.properties.hs_lead_status || "";
+    if (config.sqlStages.includes(stage)) return true; // customer, opportunity
+    if (config.sqlStatuses.includes(leadStatus)) return true; // SQL, OPEN_DEAL
+    return false;
   });
 
   // Query 2: MQLs (optional — non-fatal)
@@ -170,7 +178,7 @@ export async function getLeadsFunnel(
         { filters: [...mqlFilters, { propertyName: "lifecyclestage", operator: "EQ", value: "lead" }] },
         { filters: [...mqlFilters, { propertyName: "lifecyclestage", operator: "EQ", value: "marketingqualifiedlead" }] },
       ],
-      properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", config.atmProperty, "company", config.excludeSegmentProperty, config.leadSourceProperty, "hs_analytics_source", "hs_analytics_source_data_1", "hs_analytics_source_data_2"],
+      properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", config.atmProperty, "company", config.excludeSegmentProperty, config.leadSourceProperty, "hs_analytics_source", "hs_analytics_source_data_1", "hs_analytics_source_data_2", "hs_lead_status"],
     });
   } catch (err) {
     console.error("MQL query failed (non-fatal):", err);
@@ -182,10 +190,14 @@ export async function getLeadsFunnel(
     if (atmContactIds.has(c.id)) return false;
     const atm = c.properties[config.atmProperty];
     if (atm && atm !== "" && atm !== "null") return false;
-    // Apply segment exclusion
+    // Apply segment exclusion — but keep re-tiered contacts
     if (config.excludeSegmentValues.length > 0) {
       const segment = c.properties[config.excludeSegmentProperty] || "";
-      if (config.excludeSegmentValues.includes(segment)) return false;
+      if (config.excludeSegmentValues.includes(segment)) {
+        const stage = c.properties.lifecyclestage || "";
+        const leadStatus = c.properties.hs_lead_status || "";
+        if (!config.sqlStages.includes(stage) && !config.sqlStatuses.includes(leadStatus)) return false;
+      }
     }
     return true;
   });
