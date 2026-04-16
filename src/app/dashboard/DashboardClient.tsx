@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, startOfMonth } from "date-fns";
 import AdCard from "@/components/AdCard";
@@ -375,7 +375,17 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
   const searchParamsObj = useSearchParams();
   const [customFrom, setCustomFrom] = useState(() => searchParamsObj.get("from") || format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [customTo, setCustomTo] = useState(() => searchParamsObj.get("to") || format(new Date(), "yyyy-MM-dd"));
+  const [dateChanged, setDateChanged] = useState(false);
 
+  // Auto-apply dates after a short debounce when either date changes
+  useEffect(() => {
+    if (!dateChanged) return;
+    if (!customFrom || !customTo) return;
+    const timer = setTimeout(() => {
+      router.push(`/dashboard?range=custom&from=${customFrom}&to=${customTo}`);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [customFrom, customTo, dateChanged, router]);
 
   const handleCustomDateApply = () => {
     if (customFrom && customTo) {
@@ -408,7 +418,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               type="date"
               value={customFrom}
               max={format(new Date(), "yyyy-MM-dd")}
-              onChange={(e) => setCustomFrom(e.target.value)}
+              onChange={(e) => { setCustomFrom(e.target.value); setDateChanged(true); }}
               className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[140px]"
             />
             <span className="text-[12px] text-gray-400">to</span>
@@ -417,7 +427,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               value={customTo}
               max={format(new Date(), "yyyy-MM-dd")}
               min={customFrom || undefined}
-              onChange={(e) => setCustomTo(e.target.value)}
+              onChange={(e) => { setCustomTo(e.target.value); setDateChanged(true); }}
               className="cursor-pointer px-3 py-2 min-h-[40px] rounded-lg border border-gray-200 text-[13px] text-black bg-white focus:outline-none focus:ring-2 focus:ring-[#6B93D8]/30 focus:border-[#6B93D8] w-[140px]"
             />
             <button
@@ -516,16 +526,16 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
           const isActive = filter === stage;
           return (
             <button key={stage} onClick={() => setFilter(filter === stage ? "all" : stage)}
-              className={`cursor-pointer rounded-2xl p-5 text-left transition-colors status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
+              className={`cursor-pointer rounded-2xl p-5 min-h-[120px] text-left transition-all duration-100 active:scale-[0.97] status-card-hover animate-fade-in animate-delay-${(["healthy", "early_warning", "fatiguing", "fatigued"] as const).indexOf(stage) + 1} ${
                 isActive ? "ring-2 ring-[#6B93D8] shadow-lg shadow-blue-100" : "lv-card"
               }`}
               style={{ backgroundColor: isActive ? meta.bg : "rgba(255,255,255,0.55)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" }}>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 pointer-events-none">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: meta.color }} />
                 <span className="text-[12px] font-medium text-muted-foreground">{meta.label}</span>
               </div>
-              <div className="text-3xl font-bold text-foreground tabular-nums">{count}</div>
-              <div className="text-[11px] text-muted mt-1">{meta.desc}</div>
+              <div className="text-3xl font-bold text-foreground tabular-nums pointer-events-none">{count}</div>
+              <div className="text-[11px] text-muted mt-1 pointer-events-none">{meta.desc}</div>
             </button>
           );
         })}
