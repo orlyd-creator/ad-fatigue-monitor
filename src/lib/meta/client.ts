@@ -170,3 +170,28 @@ export async function exchangeForLongLivedToken(
   }
   return res.json();
 }
+
+/**
+ * Refresh a long-lived token before it expires.
+ * Meta allows refreshing tokens that haven't expired yet by re-exchanging them.
+ * Returns null if refresh fails (token already expired or invalid).
+ */
+export async function refreshLongLivedToken(
+  currentToken: string,
+  appId: string,
+  appSecret: string
+): Promise<{ access_token: string; expires_in: number } | null> {
+  try {
+    const res = await fetch(
+      `${META_API_BASE}/oauth/access_token?` +
+        `grant_type=fb_exchange_token&` +
+        `client_id=${appId}&` +
+        `client_secret=${appSecret}&` +
+        `fb_exchange_token=${currentToken}`
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}

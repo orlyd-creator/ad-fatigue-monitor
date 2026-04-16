@@ -3,6 +3,7 @@ import { ads, dailyMetrics, alerts, accounts } from "@/lib/db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import { format, subDays } from "date-fns";
+import { refreshLongLivedToken } from "@/lib/meta/client";
 
 const META_API = "https://graph.facebook.com/v21.0";
 
@@ -64,14 +65,37 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     return result;
   }
 
-  const token = account.accessToken;
+  let token = account.accessToken;
   const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
   const now = new Date();
 
-  // Check token expiry
-  if (account.tokenExpiresAt < Date.now()) {
-    result.errors.push("Token expired. Please reconnect your Meta account.");
-    return result;
+  // Auto-refresh token if expiring within 7 days or already expired
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  if (account.tokenExpiresAt - Date.now() < sevenDays) {
+    console.log(`[sync] Token expiring soon or expired for ${actId}, attempting refresh...`);
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    if (appId && appSecret) {
+      const refreshed = await refreshLongLivedToken(token, appId, appSecret);
+      if (refreshed) {
+        token = refreshed.access_token;
+        await db.update(accounts).set({
+          accessToken: refreshed.access_token,
+          tokenExpiresAt: Date.now() + refreshed.expires_in * 1000,
+          updatedAt: Date.now(),
+        }).where(eq(accounts.id, accountId)).run();
+        console.log(`[sync] Token refreshed for ${actId}, new expiry: ${new Date(Date.now() + refreshed.expires_in * 1000).toISOString()}`);
+      } else {
+        console.error(`[sync] Token refresh failed for ${actId}`);
+        if (account.tokenExpiresAt < Date.now()) {
+          result.errors.push("Token expired and refresh failed. Please reconnect your Meta account at /login.");
+          return result;
+        }
+      }
+    } else if (account.tokenExpiresAt < Date.now()) {
+      result.errors.push("Token expired. Please reconnect your Meta account at /login.");
+      return result;
+    }
   }
 
   // Determine lookback window — always pull from start of current month minimum
