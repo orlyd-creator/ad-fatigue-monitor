@@ -79,16 +79,31 @@ export async function getLeadsFunnel(
   });
 
   // Query 2: MQLs — contacts created in date range that are leads/MQLs (no ATM date)
-  const mqlContacts = await paginateHubSpotSearch({
-    filterGroups: [{
-      filters: [
-        { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
-        { propertyName: "createdate", operator: "LTE", value: String(toTs) },
-        { propertyName: "lifecyclestage", operator: "IN", value: "lead;marketingqualifiedlead" },
+  // This is optional — if it fails, we still return ATM data
+  let mqlContacts: HubSpotContact[] = [];
+  try {
+    mqlContacts = await paginateHubSpotSearch({
+      filterGroups: [
+        {
+          filters: [
+            { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
+            { propertyName: "createdate", operator: "LTE", value: String(toTs) },
+            { propertyName: "lifecyclestage", operator: "EQ", value: "lead" },
+          ],
+        },
+        {
+          filters: [
+            { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
+            { propertyName: "createdate", operator: "LTE", value: String(toTs) },
+            { propertyName: "lifecyclestage", operator: "EQ", value: "marketingqualifiedlead" },
+          ],
+        },
       ],
-    }],
-    properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", "agreed_to_meet_date___test_", "company", "hs_predictivescoringtier"],
-  });
+      properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", "agreed_to_meet_date___test_", "company", "hs_predictivescoringtier"],
+    });
+  } catch (err) {
+    console.error("MQL query failed (non-fatal):", err);
+  }
 
   // Filter MQLs: exclude those who already have an ATM date (they graduated to ATM)
   const atmContactIds = new Set(atmContacts.map(c => c.id));
