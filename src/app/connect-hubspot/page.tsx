@@ -180,7 +180,10 @@ export default function ConnectHubSpotPage() {
             />
 
             <p className="text-xs text-[var(--muted)] mt-2">
-              <span className="underline decoration-dotted cursor-default">How to create a PAT &rarr;</span>
+              <a href="https://knowledge.hubspot.com/integrations/how-do-i-get-my-hubspot-api-key" target="_blank" rel="noopener noreferrer"
+                className="underline decoration-dotted hover:text-[var(--foreground)] transition-colors cursor-pointer">
+                How to create a PAT &rarr;
+              </a>
             </p>
 
             {testError && (
