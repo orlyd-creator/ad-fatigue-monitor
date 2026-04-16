@@ -74,10 +74,13 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     return result;
   }
 
-  // Determine lookback window — check per-account (not global) so new accounts get 30d
+  // Determine lookback window — always pull from start of current month minimum
+  // This ensures spend data is complete for the current period even if ads were paused mid-month
   const existingAds = await db.select({ id: ads.id }).from(ads).where(eq(ads.accountId, accountId)).limit(1).all();
   const isFirstSync = existingAds.length === 0;
-  const lookbackDays = isFirstSync ? 30 : 3;
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const daysSinceMonthStart = Math.ceil((now.getTime() - startOfMonth.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const lookbackDays = isFirstSync ? 60 : Math.max(daysSinceMonthStart, 7);
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
   const until = format(now, "yyyy-MM-dd");
 
@@ -214,49 +217,42 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         .run();
     }
 
-    // ── Step 3: Fetch insights for ACTIVE ads only ───────────────
-    console.log("[sync] Step 3: Fetching insights for active ads...");
+    // ── Step 3: Fetch insights for ALL synced ads (active + paused) ─
+    // Paused ads may have had spend earlier in the month — must include them
+    console.log("[sync] Step 3: Fetching insights for all synced ads...");
     await delay(500);
 
-    // Use filtering to only get insights for active ads (much faster than all 1100+)
-    const activeAdIds = activeAds.map((a: any) => a.id);
     let insights: any[] = [];
+    const insightFields = [
+      "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
+      "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
+      "inline_post_engagement",
+    ].join(",");
 
-    if (activeAdIds.length > 0) {
+    try {
+      // Fetch account-level insights for active + paused ads
+      insights = await paginateAll(`/${actId}/insights`, token, {
+        fields: insightFields,
+        time_range: JSON.stringify({ since, until }),
+        time_increment: "1",
+        level: "ad",
+        filtering: JSON.stringify([{
+          field: "ad.effective_status",
+          operator: "IN",
+          value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"],
+        }]),
+      });
+    } catch (e: any) {
+      console.error(`[sync] Filtered insights failed, trying unfiltered: ${e.message}`);
       try {
-        // Fetch account-level insights broken down by ad — Meta filters to active ads
         insights = await paginateAll(`/${actId}/insights`, token, {
-          fields: [
-            "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
-            "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
-            "inline_post_engagement",
-          ].join(","),
+          fields: insightFields,
           time_range: JSON.stringify({ since, until }),
           time_increment: "1",
           level: "ad",
-          filtering: JSON.stringify([{
-            field: "ad.effective_status",
-            operator: "IN",
-            value: ["ACTIVE"],
-          }]),
         });
-      } catch (e: any) {
-        console.error(`[sync] Filtered insights failed, trying unfiltered: ${e.message}`);
-        // Fallback: fetch without filter but this may be slow
-        try {
-          insights = await paginateAll(`/${actId}/insights`, token, {
-            fields: [
-              "ad_id", "ad_name", "impressions", "reach", "clicks", "spend",
-              "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
-              "inline_post_engagement",
-            ].join(","),
-            time_range: JSON.stringify({ since, until }),
-            time_increment: "1",
-            level: "ad",
-          });
-        } catch (e2: any) {
-          result.errors.push(`Insights fetch failed: ${e2.message}`);
-        }
+      } catch (e2: any) {
+        result.errors.push(`Insights fetch failed: ${e2.message}`);
       }
     }
 

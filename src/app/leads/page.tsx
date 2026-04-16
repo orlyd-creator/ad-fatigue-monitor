@@ -134,6 +134,19 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     for (const d of hubspotResult.dailyMQLs) allLeadContacts.push(...d.contacts);
   }
 
+  // Build daily CPL data — merge daily spend with daily ATM counts
+  const dailyCPL: { date: string; spend: number; atm: number; cpl: number | null }[] = [];
+  const atmByDate = new Map(hubspotATM.map(d => [d.date, d.atm]));
+  for (const day of dailyData) {
+    const atm = atmByDate.get(day.date) || 0;
+    dailyCPL.push({
+      date: day.date,
+      spend: day.spend,
+      atm,
+      cpl: atm > 0 ? Math.round((day.spend / atm) * 100) / 100 : null,
+    });
+  }
+
   return (
     <div className="min-h-screen">
       <LeadsClient
@@ -155,6 +168,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         campaignNames={campaignNames}
         dailyByCampaign={dailyByCampaign}
         leadContacts={allLeadContacts.length > 0 ? allLeadContacts : undefined}
+        dailyCPL={dailyCPL}
       />
     </div>
   );

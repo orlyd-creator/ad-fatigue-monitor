@@ -15,6 +15,8 @@ interface DailyData { date: string; spend: number; clicks: number; impressions: 
 interface CampaignData { campaignName: string; spend: number; clicks: number; impressions: number; reach: number; cpc: number }
 interface LeadContact { id: string; name: string; email: string; company: string; stage: string; date: string; type: string; source?: string; sourcePlatform?: string; campaign?: string }
 
+interface DailyCPL { date: string; spend: number; atm: number; cpl: number | null }
+
 interface Props {
   totalSpend: number;
   totalClicks: number;
@@ -34,6 +36,7 @@ interface Props {
   campaignNames: string[];
   dailyByCampaign: Record<string, any>[];
   leadContacts?: LeadContact[];
+  dailyCPL?: DailyCPL[];
 }
 
 function formatNum(n: number): string {
@@ -50,7 +53,7 @@ export default function LeadsClient({
   totalSpend, totalClicks, totalImpressions, totalConversions, totalReach,
   dailyData, campaignBreakdown, rangeFrom, rangeTo, activeAdCount,
   hubspotATM, hubspotMQLs, totalATM, totalSQLs, totalMQLs,
-  campaignNames, dailyByCampaign, leadContacts,
+  campaignNames, dailyByCampaign, leadContacts, dailyCPL,
 }: Props) {
   const router = useRouter();
   const [from, setFrom] = useState(rangeFrom);
@@ -251,6 +254,37 @@ export default function LeadsClient({
               className="cursor-pointer px-4 py-2 rounded-lg bg-gradient-to-r from-[#6B93D8] via-[#D06AB8] to-[#F04E80] text-white text-[13px] font-medium whitespace-nowrap min-h-[40px]">
               Connect HubSpot
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Daily CPL vs Spend */}
+      {dailyCPL && dailyCPL.length > 0 && hasHubSpot && (
+        <div className="lv-card p-6 mb-8">
+          <h2 className="text-[16px] font-semibold mb-1">Daily CPL vs Spend</h2>
+          <p className="text-[12px] text-gray-500 mb-4">Cost per lead (demo) compared to daily ad spend</p>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyCPL} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }}
+                  tickFormatter={(v) => { const d = new Date(v + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; }} />
+                <YAxis yAxisId="spend" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="cpl" orientation="right" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
+                  formatter={(value: any, name: string) => {
+                    if (value === null || value === undefined) return ["—", name];
+                    if (name === "Spend") return [`$${Number(value).toFixed(2)}`, "Spend"];
+                    if (name === "CPL") return [`$${Number(value).toFixed(2)}`, "CPL"];
+                    return [value, name];
+                  }}
+                />
+                <Legend />
+                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Spend" />
+                <Line yAxisId="cpl" type="monotone" dataKey="cpl" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 3, fill: "#F04E80" }} connectNulls name="CPL" />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
