@@ -130,7 +130,7 @@ export async function getLeadsFunnel(
     "hs_predictivescoringtier", config.leadSourceProperty,
     config.excludeSegmentProperty, config.mqlProperty,
     "hs_analytics_source", "hs_analytics_source_data_1",
-    "inbound_outbound",
+    "hs_analytics_source_data_2", "inbound_outbound",
   ];
 
   // Query 1: ATM leads — contacts with ATM date in range + lead source filter
@@ -170,7 +170,7 @@ export async function getLeadsFunnel(
         { filters: [...mqlFilters, { propertyName: "lifecyclestage", operator: "EQ", value: "lead" }] },
         { filters: [...mqlFilters, { propertyName: "lifecyclestage", operator: "EQ", value: "marketingqualifiedlead" }] },
       ],
-      properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", config.atmProperty, "company", config.excludeSegmentProperty, config.leadSourceProperty],
+      properties: ["firstname", "lastname", "email", "lifecyclestage", "createdate", config.atmProperty, "company", config.excludeSegmentProperty, config.leadSourceProperty, "hs_analytics_source", "hs_analytics_source_data_1", "hs_analytics_source_data_2"],
     });
   } catch (err) {
     console.error("MQL query failed (non-fatal):", err);
@@ -217,6 +217,9 @@ export async function getLeadsFunnel(
       email: contact.properties.email || "",
       company, stage, leadStatus, date: dateStr, tier, segment, leadSource,
       type: isSQL ? "sql" as const : "atm" as const,
+      source: contact.properties.hs_analytics_source || "",
+      sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
+      campaign: contact.properties.hs_analytics_source_data_2 || "",
     });
   }
 
@@ -240,6 +243,9 @@ export async function getLeadsFunnel(
       stage: contact.properties.lifecyclestage || "",
       date: dateStr,
       type: "mql" as const,
+      source: contact.properties.hs_analytics_source || "",
+      sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
+      campaign: contact.properties.hs_analytics_source_data_2 || "",
     });
   }
 

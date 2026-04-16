@@ -13,7 +13,7 @@ const COLORS = ["#6B93D8", "#D06AB8", "#F04E80", "#22c55e", "#f59e0b", "#8b5cf6"
 
 interface DailyData { date: string; spend: number; clicks: number; impressions: number }
 interface CampaignData { campaignName: string; spend: number; clicks: number; impressions: number; reach: number; cpc: number }
-interface LeadContact { id: string; name: string; email: string; company: string; stage: string; date: string; type: string }
+interface LeadContact { id: string; name: string; email: string; company: string; stage: string; date: string; type: string; source?: string; sourcePlatform?: string; campaign?: string }
 
 interface Props {
   totalSpend: number;
@@ -194,6 +194,8 @@ export default function LeadsClient({
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Name</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Email</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Company</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Source</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Campaign</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Stage</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Date</th>
                     </tr>
@@ -204,6 +206,12 @@ export default function LeadsClient({
                         <td className="py-2 px-2 font-medium text-gray-900">{c.name || "—"}</td>
                         <td className="py-2 px-2 text-gray-600">{c.email || "—"}</td>
                         <td className="py-2 px-2 text-gray-600">{c.company || "—"}</td>
+                        <td className="py-2 px-2">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${sourceColor(c.source)}`}>
+                            {friendlySource(c.source)}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "—"}>{c.campaign || "—"}</td>
                         <td className="py-2 px-2">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
                             c.type === "sql" ? "bg-cyan-50 text-cyan-700" :
@@ -221,6 +229,9 @@ export default function LeadsClient({
               </div>
             </div>
           )}
+
+          {/* Lead Attribution */}
+          {leadContacts && leadContacts.length > 0 && <LeadAttribution contacts={leadContacts} />}
         </>
       ) : (
         <div className="lv-card p-6 mb-8 border-l-4 border-[#8b5cf6]">
@@ -426,6 +437,197 @@ function StatCard({ label, value, color, subtitle }: { label: string; value: str
       <div className="text-2xl font-bold" style={color ? { color } : undefined}>{value}</div>
       <div className="text-[12px] text-gray-500 mt-1">{label}</div>
       {subtitle && <div className="text-[10px] text-gray-400">{subtitle}</div>}
+    </div>
+  );
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  PAID_SOCIAL: "Paid Social",
+  ORGANIC_SEARCH: "Organic Search",
+  DIRECT_TRAFFIC: "Direct",
+  SOCIAL_MEDIA: "Social Media",
+  PAID_SEARCH: "Paid Search",
+  EMAIL_MARKETING: "Email",
+  REFERRALS: "Referral",
+  OTHER_CAMPAIGNS: "Other Campaigns",
+  OFFLINE: "Offline",
+};
+
+function friendlySource(source?: string): string {
+  if (!source) return "Untracked";
+  return SOURCE_LABELS[source] || source.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function sourceColor(source?: string): string {
+  if (!source) return "bg-gray-100 text-gray-600";
+  switch (source) {
+    case "PAID_SOCIAL": return "bg-blue-50 text-blue-700";
+    case "ORGANIC_SEARCH": return "bg-green-50 text-green-700";
+    case "DIRECT_TRAFFIC": return "bg-amber-50 text-amber-700";
+    case "SOCIAL_MEDIA": return "bg-indigo-50 text-indigo-700";
+    case "PAID_SEARCH": return "bg-violet-50 text-violet-700";
+    case "EMAIL_MARKETING": return "bg-rose-50 text-rose-700";
+    case "REFERRALS": return "bg-teal-50 text-teal-700";
+    default: return "bg-gray-100 text-gray-600";
+  }
+}
+
+const SOURCE_COLORS: Record<string, string> = {
+  "Paid Social": "#6B93D8",
+  "Organic Search": "#22c55e",
+  "Direct": "#f59e0b",
+  "Social Media": "#8b5cf6",
+  "Paid Search": "#D06AB8",
+  "Email": "#ec4899",
+  "Referral": "#06b6d4",
+  "Untracked": "#9ca3af",
+};
+
+function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
+  const [view, setView] = useState<"source" | "campaign">("source");
+
+  // Group by source
+  const sourceMap = new Map<string, LeadContact[]>();
+  for (const c of contacts) {
+    const key = friendlySource(c.source);
+    if (!sourceMap.has(key)) sourceMap.set(key, []);
+    sourceMap.get(key)!.push(c);
+  }
+  const sourceData = Array.from(sourceMap.entries())
+    .map(([name, items]) => ({ name, count: items.length, fill: SOURCE_COLORS[name] || "#9ca3af" }))
+    .sort((a, b) => b.count - a.count);
+
+  // Group by campaign (for paid social only, plus "Untracked Inbound" for non-campaign leads)
+  const campaignMap = new Map<string, { count: number; source: string; contacts: LeadContact[] }>();
+  for (const c of contacts) {
+    const campaign = c.campaign && c.campaign.trim() ? c.campaign.trim() : "Untracked Inbound";
+    if (!campaignMap.has(campaign)) campaignMap.set(campaign, { count: 0, source: friendlySource(c.source), contacts: [] });
+    const entry = campaignMap.get(campaign)!;
+    entry.count++;
+    entry.contacts.push(c);
+  }
+  const campaignData = Array.from(campaignMap.entries())
+    .map(([name, data]) => ({ name, count: data.count, source: data.source }))
+    .sort((a, b) => b.count - a.count);
+
+  return (
+    <div className="lv-card p-6 mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-[16px] font-semibold text-gray-900">Lead Attribution</h2>
+          <p className="text-[12px] text-gray-500">Where are your leads coming from?</p>
+        </div>
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+          <button onClick={() => setView("source")}
+            className={`cursor-pointer px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${view === "source" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+            By Source
+          </button>
+          <button onClick={() => setView("campaign")}
+            className={`cursor-pointer px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${view === "campaign" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+            By Campaign
+          </button>
+        </div>
+      </div>
+
+      {view === "source" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Source pie chart */}
+          <div className="h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={sourceData} cx="50%" cy="50%" innerRadius={50} outerRadius={90}
+                  paddingAngle={2} dataKey="count" nameKey="name"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={{ stroke: "#9ca3af", strokeWidth: 1 }}>
+                  {sourceData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [`${value} leads`, "Count"]} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          {/* Source table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Source</th>
+                  <th className="text-right py-2 px-2 text-gray-500 font-medium">Leads</th>
+                  <th className="text-right py-2 px-2 text-gray-500 font-medium">% of Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceData.map((s) => (
+                  <tr key={s.name} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2.5 px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.fill }} />
+                        <span className="font-medium text-gray-900">{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-semibold">{s.count}</td>
+                    <td className="py-2.5 px-2 text-right text-gray-500">{((s.count / contacts.length) * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div>
+          {/* Campaign bar chart */}
+          <div className="h-[Math.max(200, campaignData.length * 40)]" style={{ height: Math.max(200, campaignData.length * 40) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={campaignData} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={220} tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => shortName(v, 35)} />
+                <Tooltip content={({ payload }) => {
+                  if (!payload?.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-3 text-[12px]">
+                      <div className="font-semibold mb-1">{d.name}</div>
+                      <div>{d.count} leads</div>
+                      <div className="text-gray-500">{d.source}</div>
+                    </div>
+                  );
+                }} />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                  {campaignData.map((d, i) => (
+                    <Cell key={i} fill={d.name === "Untracked Inbound" ? "#9ca3af" : COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {/* Campaign table */}
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Campaign</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Source</th>
+                  <th className="text-right py-2 px-2 text-gray-500 font-medium">Leads</th>
+                  <th className="text-right py-2 px-2 text-gray-500 font-medium">% of Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaignData.map((c) => (
+                  <tr key={c.name} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2.5 px-2 font-medium text-gray-900 max-w-[250px] truncate" title={c.name}>{c.name}</td>
+                    <td className="py-2.5 px-2 text-gray-500">{c.source}</td>
+                    <td className="py-2.5 px-2 text-right font-semibold">{c.count}</td>
+                    <td className="py-2.5 px-2 text-right text-gray-500">{((c.count / contacts.length) * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
