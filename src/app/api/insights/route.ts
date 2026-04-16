@@ -182,9 +182,12 @@ function generateInsights(adData: AdData[]): Insight[] {
     }
   }
 
-  // 3. Winning Ad Scale Opportunity — healthy ads with strong CTR
+  // 3. Winning Ad Scale Opportunity — only truly healthy ads (score < 20, stage = healthy)
   for (const ad of healthy) {
-    if (ad.recentAvgCTR >= 1.2 && ad.fatigueScore < 20) {
+    if (ad.recentAvgCTR >= 1.2 && ad.fatigueScore < 20 && ad.fatigueStage === "healthy") {
+      // Double-check: don't recommend scaling an ad that appears in fatigued/warning lists
+      const isFatiguing = fatigued.some(f => f.adName === ad.adName);
+      if (isFatiguing) continue;
       insights.push({
         id: nextId(),
         type: "opportunity",
@@ -264,10 +267,10 @@ function generateInsights(adData: AdData[]): Insight[] {
     }
   }
 
-  // 7. Quick Win — pair a bad ad with a good ad for budget reallocation
+  // 7. Quick Win — pair a bad ad with a truly healthy ad for budget reallocation
   if (fatigued.length > 0 && healthy.length > 0) {
     const worst = fatigued.sort((a, b) => b.fatigueScore - a.fatigueScore)[0];
-    const best = healthy[0];
+    const best = healthy.find(a => a.fatigueStage === "healthy" && a.fatigueScore < 20);
     if (worst && best && worst.dailySpend > 0) {
       insights.push({
         id: nextId(),
