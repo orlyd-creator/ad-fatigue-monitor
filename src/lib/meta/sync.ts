@@ -276,14 +276,13 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
 
     // Ground-truth cross-check: account-level spend vs ad-level spend sum.
-    // If they diverge, ad-level is missing rows (Meta sometimes drops them for deleted/archived ads).
+    // Account-level is what Ads Manager shows; ad-level can miss rows for deleted creative.
     try {
-      const acctLevel = await metaFetch(`/${actId}/insights`, token, {
+      const acctDaily = await paginateAll(`/${actId}/insights`, token, {
         fields: "spend,impressions,clicks",
         time_range: JSON.stringify({ since, until }),
         time_increment: "1",
       });
-      const acctDaily = acctLevel.data || [];
       console.log(`[sync] Account-level daily spend rows: ${acctDaily.length}`);
       const totalAcct = acctDaily.reduce((s: number, d: any) => s + parseFloat(d.spend || "0"), 0);
       const totalAdLevel = insights.reduce((s: number, r: any) => s + parseFloat(r.spend || "0"), 0);

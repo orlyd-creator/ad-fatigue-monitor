@@ -228,26 +228,17 @@ export async function getLeadsFunnel(
   console.log(`[hubspot] Tier distribution across ${companyTierMap.size} contacts:`, Object.fromEntries(tierDistribution));
   console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}, tier lookup hit: ${companyTierMap.size}`);
 
+  // Only EXCLUDE explicit Micro SMB. Everyone else (any tier, no tier, unknown tier) kept.
+  // This matches the user's actual business rule: exclude micro SMBs that haven't been re-tiered.
+  // Missing-tier contacts are kept to match the native HubSpot Inbound Leads report count.
   const filteredATM = atmContacts.filter(c => {
     const tier = companyTierMap.get(c.id) || "";
-    const normalized = normalizeTier(tier);
+    if (!isMicroSmb(tier)) return true; // keep everyone except explicit Micro SMB
+
+    // Micro SMB — keep only if re-tiered (SQL status or customer/opportunity stage)
     const stage = c.properties.lifecyclestage || "";
     const leadStatus = c.properties.hs_lead_status || "";
-    const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
-
-    // Valid tier — always keep
-    if (validTiers.has(normalized)) return true;
-
-    // Micro SMB — keep only if re-tiered
-    if (isMicroSmb(tier)) return isReTiered;
-
-    // No tier or unknown tier — only keep if re-tiered, OR if the tier lookup failed entirely
-    // (no company data available means we can't make a judgment, so keep to avoid under-counting)
-    if (companyTierMap.size === 0) return true; // tier API call failed, don't filter
-    if (!tier) return isReTiered; // contact has company, but no tier set — HS report would also exclude
-
-    // Unknown tier label — log for debugging, default to keep
-    return true;
+    return config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
   });
   console.log(`[hubspot] ATM after tier filter: ${filteredATM.length}`);
 
