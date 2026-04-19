@@ -207,16 +207,34 @@ export async function getLeadsFunnel(
     console.error("Company tier lookup failed (non-fatal, skipping tier filter):", err);
   }
 
-  // Apply tier-based exclusion: only keep contacts with a valid company tier (SMB/Mid-Market/Enterprise)
-  // If tier lookup succeeded, filter by tier. If it failed, fall back to no exclusion.
-  const validTiers = ["SMB", "Mid-Market", "Enterprise"];
-  const filteredATM = companyTierMap.size > 0
-    ? atmContacts.filter(c => {
-        const tier = companyTierMap.get(c.id);
-        if (!tier) return true; // no company or no tier set — keep (benefit of the doubt)
-        return validTiers.includes(tier); // exclude Micro SMB or unknown tiers
-      })
-    : atmContacts; // tier lookup failed — don't exclude anything
+  // EXCLUSION-BASED tier filter — include everyone by default, exclude ONLY explicit
+  // Micro SMB tiers. HubSpot tier values vary (SMB/smb/small-business/etc) so we normalize
+  // and block known-bad values rather than requiring an allowlist that might miss variants.
+  const isMicroSmb = (tier: string): boolean => {
+    const t = tier.toLowerCase().replace(/[_\s-]/g, "");
+    return t === "microsmb" || t === "micro" || t === "nano" ||
+           t.includes("1-10") || t.includes("1to10");
+  };
+  const tierDistribution = new Map<string, number>();
+  for (const tier of companyTierMap.values()) {
+    const key = tier || "(empty)";
+    tierDistribution.set(key, (tierDistribution.get(key) || 0) + 1);
+  }
+  console.log(`[hubspot] Tier distribution across ${companyTierMap.size} contacts:`, Object.fromEntries(tierDistribution));
+  console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}`);
+
+  const filteredATM = atmContacts.filter(c => {
+    const tier = companyTierMap.get(c.id) || "";
+    if (isMicroSmb(tier)) {
+      // Keep if re-tiered via lifecycle (customer/opportunity) or SQL status
+      const stage = c.properties.lifecyclestage || "";
+      const leadStatus = c.properties.hs_lead_status || "";
+      if (config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus)) return true;
+      return false;
+    }
+    return true; // everyone else kept
+  });
+  console.log(`[hubspot] ATM after tier filter: ${filteredATM.length}`);
 
   // Query 2: MQLs (optional — non-fatal)
   let mqlContacts: HubSpotContact[] = [];
