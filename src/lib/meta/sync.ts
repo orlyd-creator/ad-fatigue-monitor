@@ -261,10 +261,18 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         time_range: JSON.stringify({ since, until }),
         time_increment: "1",
         level: "ad",
-        use_account_attribution_setting: "true",
       });
     } catch (e: any) {
       result.errors.push(`Insights fetch failed: ${e.message}`);
+    }
+
+    // First, clear any stale synthetic "unattributed" rows from previous syncs in this window.
+    // We'll re-derive them from the current fetch so we never double-count.
+    try {
+      const { sql } = await import("drizzle-orm");
+      await db.run(sql`DELETE FROM daily_metrics WHERE ad_id LIKE '__unattributed_%' AND date >= ${since} AND date <= ${until}`);
+    } catch (e: any) {
+      console.log(`[sync] Could not clean stale unattributed rows: ${e.message}`);
     }
 
     // Ground-truth cross-check: account-level spend vs ad-level spend sum.
@@ -276,6 +284,10 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         time_increment: "1",
       });
       const acctDaily = acctLevel.data || [];
+      console.log(`[sync] Account-level daily spend rows: ${acctDaily.length}`);
+      const totalAcct = acctDaily.reduce((s: number, d: any) => s + parseFloat(d.spend || "0"), 0);
+      const totalAdLevel = insights.reduce((s: number, r: any) => s + parseFloat(r.spend || "0"), 0);
+      console.log(`[sync] Account-level total: $${totalAcct.toFixed(2)} | Ad-level total: $${totalAdLevel.toFixed(2)} | Gap: $${(totalAcct - totalAdLevel).toFixed(2)}`);
       const adLevelByDate = new Map<string, number>();
       for (const r of insights) {
         const d = r.date_start;
