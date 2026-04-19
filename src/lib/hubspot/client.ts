@@ -149,19 +149,69 @@ export async function getLeadsFunnel(
     properties: [...new Set(atmProps)],
   });
 
-  // Apply segment exclusion (e.g. exclude micro SMB) — but keep re-tiered contacts
-  // Contacts with excluded segment values are kept if they're qualified (re-tiered as SMB)
-  const filteredATM = atmContacts.filter(c => {
-    if (config.excludeSegmentValues.length === 0) return true;
-    const segment = c.properties[config.excludeSegmentProperty] || "";
-    if (!config.excludeSegmentValues.includes(segment)) return true;
-    // Micro SMB but re-tiered: keep if they've progressed to customer/opportunity or have SQL status
-    const stage = c.properties.lifecyclestage || "";
-    const leadStatus = c.properties.hs_lead_status || "";
-    if (config.sqlStages.includes(stage)) return true; // customer, opportunity
-    if (config.sqlStatuses.includes(leadStatus)) return true; // SQL, OPEN_DEAL
-    return false;
-  });
+  // Fetch associated company tiers for all ATM contacts
+  // The Company "tier" property (SMB/Mid-Market/Enterprise) is the real filter,
+  // not employee count — micro SMBs get re-tiered to SMB when qualified
+  const companyTierMap = new Map<string, string>();
+  try {
+    // Batch fetch company associations + tier for contacts
+    const contactIds = atmContacts.map(c => c.id);
+    for (let i = 0; i < contactIds.length; i += 100) {
+      const batch = contactIds.slice(i, i + 100);
+      const batchBody = {
+        inputs: batch.map(id => ({ id })),
+      };
+      const assocData = await hubspotFetch("/crm/v4/associations/contacts/companies/batch/read", {
+        method: "POST",
+        body: JSON.stringify(batchBody),
+      });
+      // Collect company IDs
+      const companyIds = new Set<string>();
+      const contactToCompany = new Map<string, string>();
+      for (const result of (assocData.results || [])) {
+        const contactId = result.from?.id;
+        const companyId = result.to?.[0]?.toObjectId;
+        if (contactId && companyId) {
+          contactToCompany.set(String(contactId), String(companyId));
+          companyIds.add(String(companyId));
+        }
+      }
+      // Fetch tier for these companies
+      if (companyIds.size > 0) {
+        const compIds = Array.from(companyIds);
+        for (let j = 0; j < compIds.length; j += 100) {
+          const compBatch = compIds.slice(j, j + 100);
+          const compData = await hubspotFetch("/crm/v3/objects/companies/batch/read", {
+            method: "POST",
+            body: JSON.stringify({
+              inputs: compBatch.map(id => ({ id })),
+              properties: ["tier"],
+            }),
+          });
+          for (const comp of (compData.results || [])) {
+            const tier = comp.properties?.tier || "";
+            // Map back to contacts
+            for (const [cId, coId] of contactToCompany.entries()) {
+              if (coId === comp.id) companyTierMap.set(cId, tier);
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Company tier lookup failed (non-fatal, skipping tier filter):", err);
+  }
+
+  // Apply tier-based exclusion: only keep contacts with a valid company tier (SMB/Mid-Market/Enterprise)
+  // If tier lookup succeeded, filter by tier. If it failed, fall back to no exclusion.
+  const validTiers = ["SMB", "Mid-Market", "Enterprise"];
+  const filteredATM = companyTierMap.size > 0
+    ? atmContacts.filter(c => {
+        const tier = companyTierMap.get(c.id);
+        if (!tier) return true; // no company or no tier set — keep (benefit of the doubt)
+        return validTiers.includes(tier); // exclude Micro SMB or unknown tiers
+      })
+    : atmContacts; // tier lookup failed — don't exclude anything
 
   // Query 2: MQLs (optional — non-fatal)
   let mqlContacts: HubSpotContact[] = [];
@@ -184,21 +234,12 @@ export async function getLeadsFunnel(
     console.error("MQL query failed (non-fatal):", err);
   }
 
-  // Filter MQLs: exclude ATM contacts, exclude segments
+  // Filter MQLs: exclude ATM contacts
   const atmContactIds = new Set(filteredATM.map(c => c.id));
   const pureMQLs = mqlContacts.filter(c => {
     if (atmContactIds.has(c.id)) return false;
     const atm = c.properties[config.atmProperty];
     if (atm && atm !== "" && atm !== "null") return false;
-    // Apply segment exclusion — but keep re-tiered contacts
-    if (config.excludeSegmentValues.length > 0) {
-      const segment = c.properties[config.excludeSegmentProperty] || "";
-      if (config.excludeSegmentValues.includes(segment)) {
-        const stage = c.properties.lifecyclestage || "";
-        const leadStatus = c.properties.hs_lead_status || "";
-        if (!config.sqlStages.includes(stage) && !config.sqlStatuses.includes(leadStatus)) return false;
-      }
-    }
     return true;
   });
 
