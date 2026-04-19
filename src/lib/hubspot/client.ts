@@ -139,20 +139,21 @@ export async function getLeadsFunnel(
     "first_conversion_event_name", "recent_conversion_event_name",
   ];
 
-  // Query 1: ATM leads — contacts with ATM date in range + lead source filter
+  // Query 1: ATM leads — contacts with ATM date in range.
+  // NO lead-source filter at query time: HubSpot's native "Inbound Leads By Tier" report
+  // filters by company TIER, not the contact's lead_source field. We'll match that logic
+  // below (tier-based denylist). This fixes the common case where a contact has
+  // lead_source="" or a variant label but is still a valid inbound on the tier-based report.
   const atmFilters: any[] = [
     { propertyName: config.atmProperty, operator: "GTE", value: String(fromTs) },
     { propertyName: config.atmProperty, operator: "LTE", value: String(toTs) },
   ];
-  // Add lead source filter if configured
-  if (config.leadSourceValue) {
-    atmFilters.push({ propertyName: config.leadSourceProperty, operator: "EQ", value: config.leadSourceValue });
-  }
 
   const atmContacts = await paginateHubSpotSearch({
     filterGroups: [{ filters: atmFilters }],
     properties: [...new Set(atmProps)],
   });
+  console.log(`[hubspot] Raw ATM contacts in range ${fromDate}→${toDate}: ${atmContacts.length}`);
 
   // Fetch associated company tiers for all ATM contacts
   // The Company "tier" property (SMB/Mid-Market/Enterprise) is the real filter,
@@ -207,32 +208,46 @@ export async function getLeadsFunnel(
     console.error("Company tier lookup failed (non-fatal, skipping tier filter):", err);
   }
 
-  // EXCLUSION-BASED tier filter — include everyone by default, exclude ONLY explicit
-  // Micro SMB tiers. HubSpot tier values vary (SMB/smb/small-business/etc) so we normalize
-  // and block known-bad values rather than requiring an allowlist that might miss variants.
+  // Match HubSpot's native "Inbound Leads By Tier" report logic exactly:
+  //   - Keep contacts whose associated company tier is SMB / Mid-Market / Enterprise
+  //   - Drop Micro SMB UNLESS the contact was re-tiered (became SQL / customer / opportunity)
+  //   - Drop contacts with no tier (not in the report) — but keep if re-tiered via stage/status
+  const normalizeTier = (t: string) => t.toLowerCase().replace(/[_\s-]/g, "");
+  const validTiers = new Set(["smb", "midmarket", "enterprise"]);
   const isMicroSmb = (tier: string): boolean => {
-    const t = tier.toLowerCase().replace(/[_\s-]/g, "");
+    const t = normalizeTier(tier);
     return t === "microsmb" || t === "micro" || t === "nano" ||
            t.includes("1-10") || t.includes("1to10");
   };
+
   const tierDistribution = new Map<string, number>();
   for (const tier of companyTierMap.values()) {
     const key = tier || "(empty)";
     tierDistribution.set(key, (tierDistribution.get(key) || 0) + 1);
   }
   console.log(`[hubspot] Tier distribution across ${companyTierMap.size} contacts:`, Object.fromEntries(tierDistribution));
-  console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}`);
+  console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}, tier lookup hit: ${companyTierMap.size}`);
 
   const filteredATM = atmContacts.filter(c => {
     const tier = companyTierMap.get(c.id) || "";
-    if (isMicroSmb(tier)) {
-      // Keep if re-tiered via lifecycle (customer/opportunity) or SQL status
-      const stage = c.properties.lifecyclestage || "";
-      const leadStatus = c.properties.hs_lead_status || "";
-      if (config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus)) return true;
-      return false;
-    }
-    return true; // everyone else kept
+    const normalized = normalizeTier(tier);
+    const stage = c.properties.lifecyclestage || "";
+    const leadStatus = c.properties.hs_lead_status || "";
+    const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
+
+    // Valid tier — always keep
+    if (validTiers.has(normalized)) return true;
+
+    // Micro SMB — keep only if re-tiered
+    if (isMicroSmb(tier)) return isReTiered;
+
+    // No tier or unknown tier — only keep if re-tiered, OR if the tier lookup failed entirely
+    // (no company data available means we can't make a judgment, so keep to avoid under-counting)
+    if (companyTierMap.size === 0) return true; // tier API call failed, don't filter
+    if (!tier) return isReTiered; // contact has company, but no tier set — HS report would also exclude
+
+    // Unknown tier label — log for debugging, default to keep
+    return true;
   });
   console.log(`[hubspot] ATM after tier filter: ${filteredATM.length}`);
 
@@ -243,9 +258,6 @@ export async function getLeadsFunnel(
       { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
       { propertyName: "createdate", operator: "LTE", value: String(toTs) },
     ];
-    if (config.leadSourceValue) {
-      mqlFilters.push({ propertyName: config.leadSourceProperty, operator: "EQ", value: config.leadSourceValue });
-    }
     mqlContacts = await paginateHubSpotSearch({
       filterGroups: [
         { filters: [...mqlFilters, { propertyName: "lifecyclestage", operator: "EQ", value: "lead" }] },
