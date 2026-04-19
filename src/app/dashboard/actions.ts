@@ -49,8 +49,10 @@ export async function refreshData() {
       totalMetrics += result.metricsUpserted;
       totalAlerts += result.alertsGenerated;
       if (result.errors.length > 0) {
-        // Suppress "no campaigns/ads" errors for secondary empty accounts — they're noise, not failures
-        const realErrors = result.errors.filter(e => !/no campaigns or ads found|no ads found|No ads found/i.test(e));
+        // Suppress "empty account" errors from secondary Meta accounts — they're noise, not failures
+        const realErrors = result.errors.filter(e =>
+          !/no campaigns|no ads found|make sure you have active campaigns/i.test(e)
+        );
         if (realErrors.length > 0) {
           allErrors.push(...realErrors.map(e => `${account.name}: ${e}`));
         }

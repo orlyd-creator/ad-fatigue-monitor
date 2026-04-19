@@ -226,8 +226,6 @@ export default function LeadsClient({
             </div>
           )}
 
-          {/* Lead Attribution */}
-          {leadContacts && leadContacts.length > 0 && <LeadAttribution contacts={leadContacts} />}
         </>
       ) : (
         <div className="lv-card p-6 mb-8 border-l-4 border-[#8b5cf6]">
