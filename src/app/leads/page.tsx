@@ -134,16 +134,20 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     for (const d of hubspotResult.dailyMQLs) allLeadContacts.push(...d.contacts);
   }
 
-  // Build daily CPL data — merge daily spend with daily ATM counts
-  const dailyCPL: { date: string; spend: number; atm: number; cpl: number | null }[] = [];
+  // Build daily CPL + daily Cost-per-SQL — merge daily spend with daily ATM & SQL counts
+  const dailyCPL: { date: string; spend: number; atm: number; sqls: number; cpl: number | null; costPerSql: number | null }[] = [];
   const atmByDate = new Map(hubspotATM.map(d => [d.date, d.atm]));
+  const sqlsByDate = new Map(hubspotATM.map(d => [d.date, d.sqls]));
   for (const day of dailyData) {
     const atm = atmByDate.get(day.date) || 0;
+    const sqls = sqlsByDate.get(day.date) || 0;
     dailyCPL.push({
       date: day.date,
       spend: day.spend,
       atm,
+      sqls,
       cpl: atm > 0 ? Math.round((day.spend / atm) * 100) / 100 : null,
+      costPerSql: sqls > 0 ? Math.round((day.spend / sqls) * 100) / 100 : null,
     });
   }
 
