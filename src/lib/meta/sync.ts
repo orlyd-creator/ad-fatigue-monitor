@@ -254,33 +254,56 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     ].join(",");
 
     try {
-      // Fetch account-level insights for active + paused ads
+      // Fetch ALL insights (including archived/deleted) — spend from any ad counts toward totals
+      // No status filter so we capture every dollar spent in the period
       insights = await paginateAll(`/${actId}/insights`, token, {
         fields: insightFields,
         time_range: JSON.stringify({ since, until }),
         time_increment: "1",
         level: "ad",
-        filtering: JSON.stringify([{
-          field: "ad.effective_status",
-          operator: "IN",
-          value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"],
-        }]),
       });
     } catch (e: any) {
-      console.error(`[sync] Filtered insights failed, trying unfiltered: ${e.message}`);
-      try {
-        insights = await paginateAll(`/${actId}/insights`, token, {
-          fields: insightFields,
-          time_range: JSON.stringify({ since, until }),
-          time_increment: "1",
-          level: "ad",
-        });
-      } catch (e2: any) {
-        result.errors.push(`Insights fetch failed: ${e2.message}`);
-      }
+      result.errors.push(`Insights fetch failed: ${e.message}`);
     }
 
     console.log(`[sync] Got ${insights.length} insight rows`);
+
+    // Identify insight ads we don't have records for (archived/deleted) — create stub ad rows
+    // so their spend isn't dropped by join filters on the leads page
+    const knownAdIds = new Set(allAds.map((a: any) => a.id));
+    const orphanAdIds = new Set<string>();
+    for (const insight of insights) {
+      if (insight.ad_id && !knownAdIds.has(insight.ad_id)) {
+        orphanAdIds.add(insight.ad_id);
+      }
+    }
+    if (orphanAdIds.size > 0) {
+      console.log(`[sync] Creating stub records for ${orphanAdIds.size} archived/deleted ads so their spend is preserved`);
+      for (const orphanId of orphanAdIds) {
+        const insightRow = insights.find((i: any) => i.ad_id === orphanId);
+        await db.insert(ads)
+          .values({
+            id: orphanId,
+            accountId,
+            campaignId: "",
+            campaignName: "Archived/Deleted",
+            adsetId: "",
+            adsetName: "Archived/Deleted",
+            adName: insightRow?.ad_name || `Archived Ad ${orphanId}`,
+            status: "ARCHIVED",
+            createdAt: null,
+            lastSyncedAt: Date.now(),
+            thumbnailUrl: null,
+            imageUrl: null,
+            adBody: null,
+            adHeadline: null,
+            adLinkUrl: null,
+          })
+          .onConflictDoNothing()
+          .run();
+        result.adsFound++;
+      }
+    }
 
     // Batch process insights
     for (const insight of insights) {

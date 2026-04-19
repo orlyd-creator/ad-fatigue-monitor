@@ -144,25 +144,44 @@ function generateInsights(adData: AdData[]): Insight[] {
   let idCounter = 0;
   const nextId = () => `insight-${++idCounter}`;
 
+  // Severely fatigued (score 75+) — take action NOW
+  const severelyFatigued = adData.filter((a) => a.fatigueScore >= 75).sort((a, b) => b.fatigueScore - a.fatigueScore);
+  // Fatiguing (score 50-74) — heading south
+  const fatiguing = adData.filter((a) => a.fatigueScore >= 50 && a.fatigueScore < 75);
+  // All at-risk
   const fatigued = adData.filter((a) => a.fatigueScore >= 50);
+  const earlyWarning = adData.filter((a) => a.fatigueScore >= 25 && a.fatigueScore < 50);
   const healthy = adData
     .filter((a) => a.fatigueScore < 25)
     .sort((a, b) => b.recentAvgCTR - a.recentAvgCTR);
 
-  // 1. Budget Waste Alert — if spending on fatigued ads
-  if (fatigued.length > 0) {
-    const wastedDaily = fatigued.reduce((s, a) => s + a.dailySpend, 0);
+  // 0. SEVERE FATIGUE — top priority, spending $/day on dead ads
+  if (severelyFatigued.length > 0) {
+    const wastedDaily = severelyFatigued.reduce((s, a) => s + a.dailySpend, 0);
+    const worst = severelyFatigued[0];
+    insights.push({
+      id: nextId(),
+      type: "critical",
+      title: `🚨 ${severelyFatigued.length} Ad${severelyFatigued.length > 1 ? "s" : ""} Severely Fatigued`,
+      body: `"${worst.adName}" is scoring ${worst.fatigueScore}/100 (${worst.fatigueStage}) — CTR ${worst.recentAvgCTR}%, freq ${worst.recentAvgFrequency}x. You're burning ~$${wastedDaily.toFixed(0)}/day on dead creative.`,
+      action: `Pause ${severelyFatigued.slice(0, 3).map((a) => `"${a.adName}"`).join(", ")} immediately. Move budget to winners.`,
+      adName: worst.adName,
+      campaignName: worst.campaignName,
+      impact: `Save $${wastedDaily.toFixed(0)}/day`,
+    });
+  }
+
+  // 1. Budget Waste Alert — fatiguing but not yet severe
+  if (fatiguing.length > 0) {
+    const wastedDaily = fatiguing.reduce((s, a) => s + a.dailySpend, 0);
     if (wastedDaily > 0) {
       insights.push({
         id: nextId(),
-        type: "critical",
-        title: "Budget Waste Alert",
-        body: `You're spending ~$${wastedDaily.toFixed(0)}/day on ${fatigued.length} fatigued ad${fatigued.length > 1 ? "s" : ""}. Reallocate to your winners.`,
-        action: `Pause ${fatigued
-          .slice(0, 3)
-          .map((a) => `"${a.adName}"`)
-          .join(", ")} and move budget to healthy performers.`,
-        impact: `Save ~$${wastedDaily.toFixed(0)}/day`,
+        type: "warning",
+        title: "Budget Leak",
+        body: `${fatiguing.length} ad${fatiguing.length > 1 ? "s are" : " is"} fatiguing (score 50-74) — performance actively declining. ~$${wastedDaily.toFixed(0)}/day is working harder than it needs to.`,
+        action: `Queue replacement creative for ${fatiguing.slice(0, 3).map((a) => `"${a.adName}"`).join(", ")}. Plan the swap within 3-5 days.`,
+        impact: `At risk: $${wastedDaily.toFixed(0)}/day`,
       });
     }
   }
@@ -281,6 +300,57 @@ function generateInsights(adData: AdData[]): Insight[] {
         impact: `Save ~$${worst.dailySpend.toFixed(0)}/day`,
       });
     }
+  }
+
+  // 8. Signal-level insights — use individual signals to explain WHY
+  for (const ad of [...severelyFatigued, ...fatiguing].slice(0, 5)) {
+    const top = [...ad.signals].sort((a, b) => b.score - a.score).slice(0, 2);
+    if (top.length === 0 || top[0].score < 50) continue;
+    const worst = top[0];
+    const second = top[1];
+    const why = second && second.score >= 40 ? `${worst.label} and ${second.label}` : worst.label;
+
+    insights.push({
+      id: nextId(),
+      type: ad.fatigueScore >= 75 ? "critical" : "warning",
+      title: `Why "${ad.adName.slice(0, 40)}${ad.adName.length > 40 ? "..." : ""}" is Fatiguing`,
+      body: `Primary drivers: ${why}. ${worst.detail}.`,
+      action: `${ad.recentAvgFrequency > 3.5 ? "Audience is saturated — launch new creative or expand targeting." : worst.name === "ctr_decline" ? "Hook is stale — try a new opening 3 seconds, different thumbnail, or punchier headline." : worst.name === "cpm_rising" ? "Meta is penalizing relevance. Refresh creative or pause and relaunch." : worst.name === "frequency" ? "Audience saturated — broaden to lookalikes or a new interest stack." : "Rework creative hook or expand audience."}`,
+      adName: ad.adName,
+      campaignName: ad.campaignName,
+    });
+  }
+
+  // 9. Early warning — ads trending toward fatigue (score 25-49)
+  const earlyWarningBad = earlyWarning.filter((a) => {
+    const topSignal = [...a.signals].sort((x, y) => y.score - x.score)[0];
+    return topSignal && topSignal.score >= 50;
+  });
+  for (const ad of earlyWarningBad.slice(0, 3)) {
+    const topSignal = [...ad.signals].sort((a, b) => b.score - a.score)[0];
+    insights.push({
+      id: nextId(),
+      type: "info",
+      title: "Early Warning",
+      body: `"${ad.adName}" isn't fatigued yet (score ${ad.fatigueScore}) but ${topSignal.label.toLowerCase()} is elevated. ${topSignal.detail}.`,
+      action: `Start prepping replacement creative now — you've got ~${ad.fatigueScore < 35 ? "7-10" : "3-5"} days before this needs to rotate.`,
+      adName: ad.adName,
+      campaignName: ad.campaignName,
+    });
+  }
+
+  // 10. Zero-conversion spenders — burning budget with no results
+  const zeroConv = adData.filter((a) => a.totalActions === 0 && a.totalSpend > 50 && a.totalDays >= 7);
+  if (zeroConv.length > 0) {
+    const totalBurn = zeroConv.reduce((s, a) => s + a.totalSpend, 0);
+    insights.push({
+      id: nextId(),
+      type: "critical",
+      title: "Zero-Conversion Money Pit",
+      body: `${zeroConv.length} ad${zeroConv.length > 1 ? "s have" : " has"} spent $${totalBurn.toFixed(0)}+ with 0 conversions over 7+ days. This is pure burn.`,
+      action: `Pause ${zeroConv.slice(0, 3).map((a) => `"${a.adName}"`).join(", ")} and kill any that haven't converted after $100 spend.`,
+      impact: `Recover $${totalBurn.toFixed(0)}`,
+    });
   }
 
   // Sort by priority: critical > warning > opportunity > info

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
@@ -13,7 +13,7 @@ const COLORS = ["#6B93D8", "#D06AB8", "#F04E80", "#22c55e", "#f59e0b", "#8b5cf6"
 
 interface DailyData { date: string; spend: number; clicks: number; impressions: number }
 interface CampaignData { campaignName: string; spend: number; clicks: number; impressions: number; reach: number; cpc: number }
-interface LeadContact { id: string; name: string; email: string; company: string; stage: string; date: string; type: string; source?: string; sourcePlatform?: string; campaign?: string }
+interface LeadContact { id: string; name: string; email: string; company: string; stage: string; date: string; type: string; source?: string; sourcePlatform?: string; campaign?: string; adset?: string; ad?: string }
 
 interface DailyCPL { date: string; spend: number; atm: number; cpl: number | null }
 
@@ -58,8 +58,8 @@ export default function LeadsClient({
   const router = useRouter();
   const [from, setFrom] = useState(rangeFrom);
   const [to, setTo] = useState(rangeTo);
-  const [drillDown, setDrillDown] = useState<"mql" | "atm" | "sql" | null>(null);
-  const [refreshingHS, setRefreshingHS] = useState(false);
+  const [drillDown, setDrillDown] = useState<"atm" | "sql" | null>(null);
+  const [isPending, startTransition] = useTransition();
   const [dateChanged, setDateChanged] = useState(false);
 
   // Auto-apply dates after debounce
@@ -76,9 +76,9 @@ export default function LeadsClient({
   };
 
   const handleRefreshHS = () => {
-    setRefreshingHS(true);
-    router.refresh();
-    setTimeout(() => setRefreshingHS(false), 3000);
+    startTransition(() => {
+      router.refresh();
+    });
   };
 
   const cplATM = totalATM && totalATM > 0 ? totalSpend / totalATM : null;
@@ -89,7 +89,6 @@ export default function LeadsClient({
 
   // Drill-down filtered contacts
   const drillContacts = leadContacts?.filter(c => {
-    if (drillDown === "mql") return c.type === "mql";
     if (drillDown === "atm") return c.type === "atm" || c.type === "sql";
     if (drillDown === "sql") return c.type === "sql";
     return false;
@@ -148,26 +147,20 @@ export default function LeadsClient({
         <>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[16px] font-semibold text-gray-900">Lead Funnel</h2>
-            <button onClick={handleRefreshHS} disabled={refreshingHS}
+            <button onClick={handleRefreshHS} disabled={isPending}
               className="cursor-pointer flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 min-h-[32px]">
-              <svg className={`w-3.5 h-3.5 ${refreshingHS ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <svg className={`w-3.5 h-3.5 ${isPending ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
               </svg>
               <span className="pointer-events-none">Refresh HubSpot</span>
             </button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-            <button onClick={() => setDrillDown(drillDown === "mql" ? null : "mql")}
-              className={`cursor-pointer text-left lv-card p-4 transition-all ${drillDown === "mql" ? "ring-2 ring-[#8b5cf6]" : "hover:shadow-md"}`}>
-              <div className="text-2xl font-bold text-[#8b5cf6]">{totalMQLs ?? 0}</div>
-              <div className="text-[12px] text-gray-500 mt-1">Inbound Leads</div>
-              <div className="text-[10px] text-gray-400">Form Fills</div>
-            </button>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <button onClick={() => setDrillDown(drillDown === "atm" ? null : "atm")}
               className={`cursor-pointer text-left lv-card p-4 transition-all ${drillDown === "atm" ? "ring-2 ring-[#D06AB8]" : "hover:shadow-md"}`}>
               <div className="text-2xl font-bold text-[#D06AB8]">{totalATM ?? 0}</div>
-              <div className="text-[12px] text-gray-500 mt-1">Demos Booked</div>
-              <div className="text-[10px] text-gray-400">ATM</div>
+              <div className="text-[12px] text-gray-500 mt-1">Inbound Leads</div>
+              <div className="text-[10px] text-gray-400">ATM / Demos Booked</div>
             </button>
             <button onClick={() => setDrillDown(drillDown === "sql" ? null : "sql")}
               className={`cursor-pointer text-left lv-card p-4 transition-all ${drillDown === "sql" ? "ring-2 ring-[#06b6d4]" : "hover:shadow-md"}`}>
@@ -175,9 +168,8 @@ export default function LeadsClient({
               <div className="text-[12px] text-gray-500 mt-1">SQLs</div>
               <div className="text-[10px] text-gray-400">Qualified</div>
             </button>
-            <StatCard label="CPL" value={cplATM ? `$${cplATM.toFixed(2)}` : "—"} color="#D06AB8" subtitle="per Demo" />
+            <StatCard label="CPL" value={cplATM ? `$${cplATM.toFixed(2)}` : "—"} color="#D06AB8" subtitle="per Inbound Lead" />
             <StatCard label="Cost per SQL" value={costPerSQL ? `$${costPerSQL.toFixed(2)}` : "—"} color="#F04E80" />
-            <StatCard label="MQL → ATM" value={totalMQLs && totalATM ? `${Math.round((totalATM / (totalMQLs + totalATM)) * 100)}%` : "—"} color="#22c55e" subtitle="Conversion" />
           </div>
 
           {/* Drill-down table */}
@@ -185,7 +177,7 @@ export default function LeadsClient({
             <div className="lv-card p-6 mb-8 animate-in slide-in-from-top-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[15px] font-semibold text-gray-900">
-                  {drillDown === "mql" ? "Inbound Leads (MQLs)" : drillDown === "atm" ? "Demos Booked (ATM)" : "SQLs"} — {drillContacts.length} contacts
+                  {drillDown === "atm" ? "Inbound Leads (ATM)" : "SQLs"} — {drillContacts.length} contacts
                 </h3>
                 <button onClick={() => setDrillDown(null)} className="cursor-pointer text-[12px] text-gray-400 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 min-h-[32px]">
                   Close
@@ -519,7 +511,7 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
-  const [view, setView] = useState<"source" | "campaign">("source");
+  const [view, setView] = useState<"source" | "campaign" | "adset" | "ad">("source");
 
   // Group by source
   const sourceMap = new Map<string, LeadContact[]>();
@@ -532,18 +524,29 @@ function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
     .map(([name, items]) => ({ name, count: items.length, fill: SOURCE_COLORS[name] || "#9ca3af" }))
     .sort((a, b) => b.count - a.count);
 
-  // Group by campaign (for paid social only, plus "Untracked Inbound" for non-campaign leads)
-  const campaignMap = new Map<string, { count: number; source: string; contacts: LeadContact[] }>();
-  for (const c of contacts) {
-    const campaign = c.campaign && c.campaign.trim() ? c.campaign.trim() : "Untracked Inbound";
-    if (!campaignMap.has(campaign)) campaignMap.set(campaign, { count: 0, source: friendlySource(c.source), contacts: [] });
-    const entry = campaignMap.get(campaign)!;
-    entry.count++;
-    entry.contacts.push(c);
-  }
-  const campaignData = Array.from(campaignMap.entries())
-    .map(([name, data]) => ({ name, count: data.count, source: data.source }))
-    .sort((a, b) => b.count - a.count);
+  // Build campaign/adset/ad groupings. Only count paid leads for granular views.
+  const groupBy = (key: "campaign" | "adset" | "ad") => {
+    const map = new Map<string, { count: number; source: string; campaign?: string; adset?: string; contacts: LeadContact[] }>();
+    for (const c of contacts) {
+      const raw = (c as any)[key] as string | undefined;
+      const source = friendlySource(c.source);
+      // For adset/ad views, skip contacts without that level (non-paid or missing UTMs)
+      if ((key === "adset" || key === "ad") && (!raw || !raw.trim())) continue;
+      const name = raw && raw.trim() ? raw.trim() : "Untracked Inbound";
+      if (!map.has(name)) map.set(name, { count: 0, source, campaign: c.campaign, adset: c.adset, contacts: [] });
+      const entry = map.get(name)!;
+      entry.count++;
+      entry.contacts.push(c);
+    }
+    return Array.from(map.entries())
+      .map(([name, data]) => ({ name, count: data.count, source: data.source, campaign: data.campaign, adset: data.adset }))
+      .sort((a, b) => b.count - a.count);
+  };
+  const campaignData = groupBy("campaign");
+  const adsetData = groupBy("adset");
+  const adData = groupBy("ad");
+  const granularData = view === "campaign" ? campaignData : view === "adset" ? adsetData : adData;
+  const granularLabel = view === "campaign" ? "Campaign" : view === "adset" ? "Ad Set" : "Ad";
 
   return (
     <div className="lv-card p-6 mb-8">
@@ -553,14 +556,12 @@ function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
           <p className="text-[12px] text-gray-500">Where are your leads coming from?</p>
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-          <button onClick={() => setView("source")}
-            className={`cursor-pointer px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${view === "source" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            By Source
-          </button>
-          <button onClick={() => setView("campaign")}
-            className={`cursor-pointer px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${view === "campaign" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            By Campaign
-          </button>
+          {(["source", "campaign", "adset", "ad"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)}
+              className={`cursor-pointer px-3 py-1.5 rounded-md text-[12px] font-medium transition-all capitalize ${view === v ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+              By {v === "source" ? "Source" : v === "campaign" ? "Campaign" : v === "adset" ? "Ad Set" : "Ad"}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -609,16 +610,21 @@ function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
             </table>
           </div>
         </div>
+      ) : granularData.length === 0 ? (
+        <div className="py-12 text-center text-gray-500 text-[13px]">
+          <div className="font-semibold mb-1 text-gray-700">No {granularLabel.toLowerCase()}-level attribution found</div>
+          <div>Tag your Meta ads with UTMs (utm_campaign, utm_term, utm_content) so leads can be attributed here.</div>
+        </div>
       ) : (
         <div>
-          {/* Campaign bar chart */}
-          <div className="h-[Math.max(200, campaignData.length * 40)]" style={{ height: Math.max(200, campaignData.length * 40) }}>
+          {/* Granular bar chart */}
+          <div style={{ height: Math.max(240, granularData.length * 36) }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={campaignData} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 10 }}>
+              <BarChart data={granularData} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={220} tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => shortName(v, 35)} />
+                <YAxis type="category" dataKey="name" width={240} tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => shortName(v, 38)} />
                 <Tooltip content={({ payload }) => {
                   if (!payload?.length) return null;
                   const d = payload[0].payload;
@@ -627,32 +633,38 @@ function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
                       <div className="font-semibold mb-1">{d.name}</div>
                       <div>{d.count} leads</div>
                       <div className="text-gray-500">{d.source}</div>
+                      {d.campaign && view !== "campaign" && <div className="text-gray-400 text-[11px] mt-1">Campaign: {d.campaign}</div>}
+                      {d.adset && view === "ad" && <div className="text-gray-400 text-[11px]">Ad Set: {d.adset}</div>}
                     </div>
                   );
                 }} />
                 <Bar dataKey="count" radius={[0, 6, 6, 0]}>
-                  {campaignData.map((d, i) => (
+                  {granularData.map((d, i) => (
                     <Cell key={i} fill={d.name === "Untracked Inbound" ? "#9ca3af" : COLORS[i % COLORS.length]} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Campaign table */}
+          {/* Granular table */}
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Campaign</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">{granularLabel}</th>
+                  {view !== "campaign" && <th className="text-left py-2 px-2 text-gray-500 font-medium">Campaign</th>}
+                  {view === "ad" && <th className="text-left py-2 px-2 text-gray-500 font-medium">Ad Set</th>}
                   <th className="text-left py-2 px-2 text-gray-500 font-medium">Source</th>
                   <th className="text-right py-2 px-2 text-gray-500 font-medium">Leads</th>
                   <th className="text-right py-2 px-2 text-gray-500 font-medium">% of Total</th>
                 </tr>
               </thead>
               <tbody>
-                {campaignData.map((c) => (
+                {granularData.map((c) => (
                   <tr key={c.name} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2.5 px-2 font-medium text-gray-900 max-w-[250px] truncate" title={c.name}>{c.name}</td>
+                    <td className="py-2.5 px-2 font-medium text-gray-900 max-w-[260px] truncate" title={c.name}>{c.name}</td>
+                    {view !== "campaign" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "—"}>{c.campaign || "—"}</td>}
+                    {view === "ad" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.adset || "—"}>{c.adset || "—"}</td>}
                     <td className="py-2.5 px-2 text-gray-500">{c.source}</td>
                     <td className="py-2.5 px-2 text-right font-semibold">{c.count}</td>
                     <td className="py-2.5 px-2 text-right text-gray-500">{((c.count / contacts.length) * 100).toFixed(1)}%</td>

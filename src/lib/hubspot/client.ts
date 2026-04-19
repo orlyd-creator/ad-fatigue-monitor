@@ -132,6 +132,11 @@ export async function getLeadsFunnel(
     "hs_analytics_source", "hs_analytics_source_data_1",
     "hs_analytics_source_data_2", "inbound_outbound",
     "qualified_lead",
+    // Paid ad attribution
+    "hs_latest_source", "hs_latest_source_data_1", "hs_latest_source_data_2",
+    "hs_analytics_first_url", "hs_analytics_first_referrer",
+    "utm_campaign", "utm_content", "utm_term", "utm_medium", "utm_source",
+    "first_conversion_event_name", "recent_conversion_event_name",
   ];
 
   // Query 1: ATM leads — contacts with ATM date in range + lead source filter
@@ -264,6 +269,10 @@ export async function getLeadsFunnel(
     const day = atmDateMap.get(dateStr)!;
     day.atm++;
     if (isSQL) day.sqls++;
+    // UTMs often hold the most precise paid-ad attribution (campaign/ad)
+    const utmCampaign = contact.properties.utm_campaign || "";
+    const utmContent = contact.properties.utm_content || ""; // usually the ad
+    const utmTerm = contact.properties.utm_term || ""; // usually the adset
     day.contacts.push({
       id: contact.id,
       name: `${contact.properties.firstname || ""} ${contact.properties.lastname || ""}`.trim(),
@@ -272,7 +281,9 @@ export async function getLeadsFunnel(
       type: isSQL ? "sql" as const : "atm" as const,
       source: contact.properties.hs_analytics_source || "",
       sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
-      campaign: contact.properties.hs_analytics_source_data_2 || "",
+      campaign: utmCampaign || contact.properties.hs_analytics_source_data_2 || "",
+      adset: utmTerm || "",
+      ad: utmContent || "",
     });
   }
 
@@ -288,6 +299,9 @@ export async function getLeadsFunnel(
     if (!mqlDateMap.has(dateStr)) mqlDateMap.set(dateStr, { mqls: 0, contacts: [] });
     const day = mqlDateMap.get(dateStr)!;
     day.mqls++;
+    const utmCampaignM = contact.properties.utm_campaign || "";
+    const utmContentM = contact.properties.utm_content || "";
+    const utmTermM = contact.properties.utm_term || "";
     day.contacts.push({
       id: contact.id,
       name: `${contact.properties.firstname || ""} ${contact.properties.lastname || ""}`.trim(),
@@ -298,7 +312,9 @@ export async function getLeadsFunnel(
       type: "mql" as const,
       source: contact.properties.hs_analytics_source || "",
       sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
-      campaign: contact.properties.hs_analytics_source_data_2 || "",
+      campaign: utmCampaignM || contact.properties.hs_analytics_source_data_2 || "",
+      adset: utmTermM || "",
+      ad: utmContentM || "",
     });
   }
 
