@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import DateRangePicker from "@/components/DateRangePicker";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   BarChart, Bar,
@@ -146,15 +147,6 @@ export default function ExecutiveClient({
     router.push(`${basePath}?preset=custom&from=${from}&to=${to}`);
   };
 
-  const presetButtons: Array<{ key: string; label: string }> = [
-    { key: "this-month", label: "This month" },
-    { key: "last-month", label: "Last month" },
-    { key: "3m", label: "Last 3 months" },
-    { key: "6m", label: "Last 6 months" },
-    { key: "ytd", label: "Year to date" },
-    { key: "12m", label: "Last 12 months" },
-  ];
-
   return (
     <main className="exec-root max-w-6xl mx-auto px-6 py-8">
       {/* Header */}
@@ -178,38 +170,9 @@ export default function ExecutiveClient({
         </button>
       </div>
 
-      {/* Date range selector */}
-      <div className="exec-no-print lv-card p-4 mb-6">
-        <div className="flex flex-wrap gap-2 items-center">
-          {presetButtons.map(b => (
-            <button
-              key={b.key}
-              onClick={() => applyPreset(b.key)}
-              className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
-                preset === b.key
-                  ? "bg-[#9B7ED0] text-white shadow-sm"
-                  : "bg-white/60 text-muted-foreground hover:bg-white hover:text-foreground border border-border"
-              }`}
-            >
-              {b.label}
-            </button>
-          ))}
-          <div className="flex items-center gap-2 ml-auto">
-            <input
-              type="date"
-              defaultValue={rangeFrom}
-              onChange={(e) => applyCustom(e.target.value, rangeTo)}
-              className="px-2 py-1.5 rounded-lg border border-border bg-white/60 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-[#9b87f5]/40"
-            />
-            <span className="text-[12px] text-muted-foreground">→</span>
-            <input
-              type="date"
-              defaultValue={rangeTo}
-              onChange={(e) => applyCustom(rangeFrom, e.target.value)}
-              className="px-2 py-1.5 rounded-lg border border-border bg-white/60 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-[#9b87f5]/40"
-            />
-          </div>
-        </div>
+      {/* Date range + comparison selector (global component) */}
+      <div className="exec-no-print mb-6 flex justify-end">
+        <DateRangePicker />
       </div>
 
       {/* Range-wide totals (the headline for the entire selected period) */}
