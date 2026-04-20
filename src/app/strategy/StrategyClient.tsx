@@ -4,7 +4,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ScatterChart
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import FatigueScoreBadge from "@/components/FatigueScoreBadge";
+import RecommendationsPanel from "@/components/RecommendationsPanel";
 import type { FatigueStage } from "@/lib/fatigue/types";
+import type { Recommendation } from "@/lib/strategy/recommendations";
 
 interface AdSummary {
   id: string;
@@ -61,6 +63,7 @@ interface StrategyClientProps {
   totalROAS: number | null;
   unmatchedRevenue: Array<{ campaign: string; revenue: number; deals: number }>;
   unmatchedRevenueTotal: number;
+  recommendations: Recommendation[];
   rangeLabel: string;
 }
 
@@ -92,7 +95,7 @@ export default function StrategyClient({
   totalATM, totalSQLs, costPerDemo, costPerSQL, demoToSQLRate, clickToLeadRate,
   dayOfWeek, campaignCPL, unmatchedUtm,
   totalRevenue, wonCount, totalROAS, unmatchedRevenue, unmatchedRevenueTotal,
-  rangeLabel,
+  recommendations, rangeLabel,
 }: StrategyClientProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -328,6 +331,15 @@ export default function StrategyClient({
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* Strategic recommendations — always at the top of Analytics so
+              Orly sees the most impactful actions first. */}
+          {recommendations.length > 0 && (
+            <RecommendationsPanel
+              recommendations={recommendations}
+              rangeLabel={rangeLabel}
+            />
+          )}
 
           {/* Top-line Revenue + ROAS card */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

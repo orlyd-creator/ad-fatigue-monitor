@@ -11,6 +11,10 @@ import { getLeadsFunnel, getATMLeadsByCampaign, getClosedWonRevenue } from "@/li
 import StrategyClient from "./StrategyClient";
 import LeadsClient from "../leads/LeadsClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
+import {
+  generateCampaignRecommendations,
+  type CampaignInput,
+} from "@/lib/strategy/recommendations";
 
 export const dynamic = "force-dynamic";
 // Full getLeadsFunnel + ATM-by-campaign + closed-won fan out to multiple HS
@@ -422,6 +426,39 @@ export default async function StrategyPage({
     totalConversions: rangeScopedAll.reduce((s, m) => s + (m.actions ?? 0), 0),
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // STRATEGY ENGINE: generate campaign-level recommendations.
+  // Campaign-level is where HubSpot attribution is reliable (ATM leads are
+  // joined via hs_analytics_source_data_2 which contains the Meta campaign
+  // name). Each rec has a number + action + confidence.
+  // ─────────────────────────────────────────────────────────────
+  const fatigueByCampaign = new Map<string, { sum: number; n: number }>();
+  for (const a of adSummaries) {
+    const agg = fatigueByCampaign.get(a.campaignName) ?? { sum: 0, n: 0 };
+    agg.sum += a.fatigueScore;
+    agg.n += 1;
+    fatigueByCampaign.set(a.campaignName, agg);
+  }
+  const activeCountByCampaign = new Map<string, number>();
+  for (const a of adSummaries) {
+    activeCountByCampaign.set(a.campaignName, (activeCountByCampaign.get(a.campaignName) ?? 0) + 1);
+  }
+  const campaignInputs: CampaignInput[] = campaignROAS.map((c) => {
+    const fatigueAgg = fatigueByCampaign.get(c.campaignName);
+    return {
+      campaignName: c.campaignName,
+      spend: c.spend,
+      leads: c.leads,
+      revenue: c.revenue,
+      roas: c.roas,
+      cpl: c.cpl,
+      activeAdCount: activeCountByCampaign.get(c.campaignName) ?? 0,
+      avgFatigue: fatigueAgg && fatigueAgg.n > 0 ? Math.round(fatigueAgg.sum / fatigueAgg.n) : 0,
+    };
+  });
+  const accountCPL = totalATM > 0 ? totalSpend / totalATM : null;
+  const recommendations = generateCampaignRecommendations(campaignInputs, accountCPL, totalSpend);
+
   const lastSyncedAt = allAdsRaw.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
 
   return (
@@ -459,6 +496,7 @@ export default async function StrategyPage({
         dailySpendByAd={dailySpendByAd}
         campaignSpend={campaignSpend}
         accountHealth={accountHealth}
+        recommendations={recommendations}
         totalSpend={Math.round(totalSpend * 100) / 100}
         totalReach={totalReach}
         totalClicks={totalClicks}
