@@ -20,6 +20,7 @@ export default function ConnectHubSpotPage() {
   const [testError, setTestError] = useState("");
   const [contactCount, setContactCount] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [funnel, setFunnel] = useState<FunnelConfig>({
     atmProperty: "agreed_to_meet_date___test_",
@@ -73,12 +74,18 @@ export default function ConnectHubSpotPage() {
               : funnel.mqlDefinition,
         }),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(body || `Save failed (${res.status})`);
+      }
       const data = await res.json();
       if (data.success) {
         setStep("done");
+      } else {
+        throw new Error(data.error || "Save failed. Please try again.");
       }
-    } catch {
-      // silently fail for now
+    } catch (err: any) {
+      setSaveError(err?.message || "Save failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -372,6 +379,11 @@ export default function ConnectHubSpotPage() {
                 "Save & Connect"
               )}
             </button>
+            {saveError && (
+              <div className="mt-3 px-4 py-2 rounded-lg bg-red-50 border border-red-200 text-[13px] text-red-700">
+                {saveError}
+              </div>
+            )}
           </div>
         )}
 

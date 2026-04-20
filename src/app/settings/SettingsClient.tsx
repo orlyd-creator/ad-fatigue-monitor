@@ -18,6 +18,7 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
   const [settings, setSettings] = useState<SettingsData>(initialSettings);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handlePresetChange = (preset: string) => {
     if (PRESETS[preset]) setSettings((s) => ({ ...s, ...PRESETS[preset].values, sensitivityPreset: preset }));
@@ -27,8 +28,24 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
   };
   const handleSave = async () => {
     setSaving(true);
-    await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(body || `Save failed (${res.status})`);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err: any) {
+      setSaveError(err?.message || "Save failed. Try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const totalWeight = settings.ctrWeight + settings.cpmWeight + settings.frequencyWeight + settings.conversionWeight + settings.costPerResultWeight + settings.engagementWeight;
@@ -102,6 +119,11 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
           Reset to Default
         </button>
       </div>
+      {saveError && (
+        <div className="mt-3 px-4 py-2 rounded-lg bg-red-50 border border-red-200 text-[13px] text-red-700">
+          {saveError}
+        </div>
+      )}
     </main>
   );
 }
