@@ -23,7 +23,7 @@ export default async function AlertsPage() {
   if (userAdIds.length === 0) {
     return (
       <div className="min-h-screen">
-        <main className="max-w-3xl mx-auto px-6 py-8">
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts & Insights</h1>
             <p className="text-[14px] text-muted-foreground mt-1">AI-powered recommendations and fatigue alerts</p>
@@ -68,7 +68,7 @@ export default async function AlertsPage() {
 
   return (
     <div className="min-h-screen">
-      <main className="max-w-3xl mx-auto px-6 py-8">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Alerts & Insights</h1>
           <p className="text-[14px] text-muted-foreground mt-1">

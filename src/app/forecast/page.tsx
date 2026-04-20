@@ -37,6 +37,8 @@ export default async function ForecastPage() {
   // Range 3: 90 days for daily history chart (smoothing)
   const ninetyDaysAgo = format(subDays(now, 89), "yyyy-MM-dd");
 
+  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await refreshAdStatusesForAccounts(allAccountIds);
   const accountRows = await db.select().from(accounts).where(inArray(accounts.id, allAccountIds)).all();
 
   const [allAdsRaw, metricsRaw, hsMTD, hsLast, liveBudget] = await Promise.all([

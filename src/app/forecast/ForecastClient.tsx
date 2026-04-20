@@ -78,7 +78,7 @@ export default function ForecastClient({ forecast, atRisk, rising, budgetBreakdo
   const firstProjectedDate = chart.projectedCplPath[0]?.date;
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>

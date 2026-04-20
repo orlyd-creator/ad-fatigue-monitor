@@ -128,7 +128,7 @@ export default function StrategyClient({
   ];
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">

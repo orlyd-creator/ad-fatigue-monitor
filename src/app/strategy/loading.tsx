@@ -1,7 +1,7 @@
 export default function StrategyLoading() {
   return (
     <div className="min-h-screen">
-      <main className="max-w-6xl mx-auto px-6 py-8 animate-pulse">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-pulse">
         <div className="mb-6">
           <div className="h-9 w-40 bg-gray-200 rounded-lg" />
           <div className="h-4 w-56 bg-gray-100 rounded mt-2" />

@@ -1,7 +1,7 @@
 export default function LeadsLoading() {
   return (
     <div className="min-h-screen">
-      <main className="max-w-6xl mx-auto px-6 py-8 animate-pulse">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-pulse">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
             <div className="h-9 w-32 bg-gray-200 rounded-lg" />

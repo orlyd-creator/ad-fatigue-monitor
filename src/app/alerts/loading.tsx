@@ -1,7 +1,7 @@
 export default function AlertsLoading() {
   return (
     <div className="min-h-screen">
-      <main className="max-w-3xl mx-auto px-6 py-8 animate-pulse">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-pulse">
         <div className="mb-8">
           <div className="h-8 w-48 bg-gray-200 rounded-lg" />
           <div className="h-4 w-72 bg-gray-100 rounded mt-2" />

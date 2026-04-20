@@ -51,7 +51,7 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
   const totalWeight = settings.ctrWeight + settings.cpmWeight + settings.frequencyWeight + settings.conversionWeight + settings.costPerResultWeight + settings.engagementWeight;
 
   return (
-    <main className="max-w-2xl mx-auto px-6 py-8">
+    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
         <p className="text-[14px] text-muted-foreground mt-1">Control how sensitive fatigue detection is. Most people just pick a preset.</p>

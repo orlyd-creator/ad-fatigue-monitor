@@ -149,7 +149,7 @@ export default function ExecutiveClient({
   };
 
   return (
-    <main className="exec-root max-w-6xl mx-auto px-6 py-8">
+    <main className="exec-root max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>

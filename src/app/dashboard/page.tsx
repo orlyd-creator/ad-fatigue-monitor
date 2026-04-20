@@ -62,6 +62,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Get ACTIVE ads from ALL of user's ad accounts. Dashboard is "what's
   // running now", paused/archived/deleted shouldn't clutter the view.
   // Historical spend from non-active ads still counts on Executive.
+  // Before reading ad statuses, refresh any accounts whose freshest ad is
+  // >5 min old. Keeps paused/archived ads from showing as ACTIVE if the user
+  // just paused them in Meta.
+  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await refreshAdStatusesForAccounts(allAccountIds);
   const allAdsRaw = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
   const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
 

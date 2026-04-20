@@ -67,9 +67,10 @@ const links = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -91,6 +92,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const handleNav = (href: string) => {
     if (pathname === href) return;
     setNavigating(href);
+    onMobileClose?.();
     // Use startTransition for instant visual feedback while navigating
     startTransition(() => {
       router.push(href);
