@@ -54,8 +54,10 @@ function AdCompareCard({
   isPublic: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const src = ad.thumbnailUrl;
-  const showImage = !!src && !imgFailed;
+  // Route through the server-side image proxy so Meta URL expiry doesn't
+  // show broken images here.
+  const src = `/api/ad-image/${ad.adId}`;
+  const showImage = !imgFailed;
   const isWinner = verdict === "winner";
   const accent = isWinner ? "from-emerald-100 to-emerald-50 border-emerald-200" : "from-rose-100 to-rose-50 border-rose-200";
   const badge = isWinner ? "bg-emerald-500 text-white" : "bg-rose-500 text-white";

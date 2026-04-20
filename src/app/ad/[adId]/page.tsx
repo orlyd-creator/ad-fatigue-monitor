@@ -88,21 +88,19 @@ export default function AdDetailPage() {
           <div className="lv-card p-6 mb-6">
             <h3 className="text-[15px] font-semibold text-foreground mb-4">Ad Creative</h3>
             <div className="flex gap-6">
-              {(ad.imageUrl || ad.thumbnailUrl) && (
-                imgFailed ? (
-                  <div className="w-72 h-80 rounded-xl bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-12 h-12 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                    </svg>
-                  </div>
-                ) : (
-                  <img
-                    src={ad.imageUrl || ad.thumbnailUrl || ""}
-                    alt=""
-                    onError={() => setImgFailed(true)}
-                    className="w-72 max-h-80 object-contain rounded-xl bg-gray-50 flex-shrink-0"
-                  />
-                )
+              {imgFailed ? (
+                <div className="w-72 h-80 rounded-xl bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-12 h-12 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                  </svg>
+                </div>
+              ) : (
+                <img
+                  src={`/api/ad-image/${ad.id}`}
+                  alt=""
+                  onError={() => setImgFailed(true)}
+                  className="w-72 max-h-80 object-contain rounded-xl bg-gray-50 flex-shrink-0"
+                />
               )}
               <div className="flex-1 min-w-0">
                 {ad.adHeadline && (

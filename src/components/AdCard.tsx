@@ -25,8 +25,10 @@ interface Props {
 export default function AdCard({ id, adName, campaignName, status, fatigue, recentMetrics, thumbnailUrl, imageUrl, adBody }: Props) {
   const router = useRouter();
   const [imgFailed, setImgFailed] = useState(false);
-  const src = imageUrl || thumbnailUrl || "";
-  const showImage = !!src && !imgFailed;
+  // Route through our server-side image proxy. Resolves the freshest URL
+  // from Meta on demand so signed-URL expiry never shows broken images.
+  const src = `/api/ad-image/${id}`;
+  const showImage = !imgFailed;
   const isCollecting = fatigue.dataStatus !== "sufficient";
   const glowClass = !isCollecting ? STAGE_GLOW[fatigue.stage] : "";
 
