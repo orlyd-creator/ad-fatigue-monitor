@@ -54,4 +54,51 @@ export async function register() {
     // Don't crash the app — log and continue. The app still boots without this.
     console.error("[instrumentation] Schema bootstrap failed:", err);
   }
+
+  // ── Hourly auto-sync ──
+  // Railway doesn't read vercel.json crons and we've seen syncs go 5+ days
+  // stale. This in-process interval guarantees that as long as the server is
+  // running, every connected Meta account is re-synced every 60 min.
+  // Single global interval so multiple imports don't create duplicates.
+  // We guard on a global to survive Next.js hot-reload in dev.
+  try {
+    const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+    const g = globalThis as any;
+    if (!g.__metaAutoSyncStarted) {
+      g.__metaAutoSyncStarted = true;
+      // Delay first run so it doesn't fight the initial deploy warm-up.
+      const schedule = () => setTimeout(runAutoSync, SYNC_INTERVAL_MS);
+      const runAutoSync = async () => {
+        try {
+          const { db } = await import("@/lib/db");
+          const { accounts } = await import("@/lib/db/schema");
+          const { syncAccount } = await import("@/lib/meta/sync");
+          const { clearHubSpotCache } = await import("@/lib/hubspot/client");
+          const rows = await db.select().from(accounts).all();
+          console.log(`[auto-sync] starting — ${rows.length} accounts`);
+          for (const account of rows) {
+            if (account.tokenExpiresAt < Date.now()) {
+              console.warn(`[auto-sync] skipping ${account.id} (token expired)`);
+              continue;
+            }
+            try {
+              const res = await syncAccount(account.id);
+              console.log(`[auto-sync] ${account.id}: ${res.adsFound} ads, ${res.metricsUpserted} metrics`);
+            } catch (err: any) {
+              console.error(`[auto-sync] ${account.id} failed:`, err?.message || err);
+            }
+          }
+          clearHubSpotCache();
+        } catch (err: any) {
+          console.error("[auto-sync] tick failed:", err?.message || err);
+        } finally {
+          schedule();
+        }
+      };
+      schedule();
+      console.log("[instrumentation] Hourly auto-sync registered");
+    }
+  } catch (err) {
+    console.error("[instrumentation] Auto-sync registration failed:", err);
+  }
 }

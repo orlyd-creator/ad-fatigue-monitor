@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { useState, useTransition, useEffect } from "react";
-import { refreshData } from "@/app/dashboard/actions";
 import { signOutUser } from "@/app/login/actions";
 
 const links = [
@@ -97,23 +96,40 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     return true;
   })[0];
 
+  // Refresh uses a plain fetch to /api/sync (not a server action) so the
+  // transport can't be killed by navigation / Next.js action-stream quirks.
+  // The AbortController is intentionally NOT tied to navigation — the sync
+  // keeps running even if the user leaves the page.
   const handleSync = () => {
     setSyncError(null);
     startTransition(async () => {
       try {
-        const result = await refreshData();
-        if (result.error) {
-          setSyncError(result.error);
-          setTimeout(() => setSyncError(null), 5000);
+        const res = await fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          keepalive: true,
+        });
+        let body: any = {};
+        try { body = await res.json(); } catch {}
+        if (!res.ok) {
+          // 401 = token expired or not logged in
+          if (res.status === 401 || body?.error?.match?.(/token|expired|reconnect/i)) {
+            setSyncError("Meta token expired — reconnect");
+            setTimeout(() => setSyncError(null), 10000);
+            return;
+          }
+          setSyncError(body?.error || `Sync failed (HTTP ${res.status})`);
+          setTimeout(() => setSyncError(null), 8000);
           return;
         }
-        if (result.errors && result.errors.length > 0 && result.adsFound === 0) {
-          setSyncError(result.errors[0]);
+        if (body.errors && body.errors.length > 0 && body.adsFound === 0) {
+          setSyncError(body.errors[0]);
           setTimeout(() => setSyncError(null), 15000);
           return;
         }
-        if (result.errors && result.errors.length > 0) {
-          setSyncError(`Synced ${result.adsFound} ads but: ${result.errors[0]}`);
+        if (body.errors && body.errors.length > 0) {
+          setSyncError(`Synced ${body.adsFound} ads, but: ${body.errors[0]}`);
           setTimeout(() => setSyncError(null), 10000);
         }
         setSyncDone(true);
@@ -121,11 +137,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           setSyncDone(false);
           router.refresh();
         }, 1500);
-      } catch {
-        // The server action transport can fail (Railway stream timeout, user
-        // navigation during the long sync, etc.) even when the backend wrote
-        // the data fine. Verify by pinging a recent-syncedAt signal before
-        // showing the scary "something went wrong" banner.
+      } catch (err: any) {
+        // Network error, timeout, or stream drop. Peek at lastSyncedAt — if a
+        // sync completed in the background we treat it as success.
         try {
           const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
           if (check.ok) {
@@ -133,7 +147,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             const mostRecent = Array.isArray(data?.ads)
               ? data.ads.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0)
               : 0;
-            if (Date.now() - mostRecent < 120000) {
+            if (Date.now() - mostRecent < 180000) {
               setSyncDone(true);
               setTimeout(() => {
                 setSyncDone(false);
@@ -142,9 +156,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               return;
             }
           }
-        } catch { /* fall through to error */ }
-        setSyncError("Sync didn't finish. Try again or reload.");
-        setTimeout(() => setSyncError(null), 5000);
+        } catch { /* fall through */ }
+        setSyncError(err?.message?.includes("abort") ? "Cancelled" : "Couldn't reach sync. Try again.");
+        setTimeout(() => setSyncError(null), 6000);
       }
     });
   };
