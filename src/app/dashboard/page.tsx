@@ -126,13 +126,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // the period total. The filtered `allAds` is only for the card list.
   const userAdIds = new Set(allAdsRaw.map(a => a.id));
 
-  // Compute spend data for the selected range (filtered to user's ads)
+  // Compute spend data for the selected range (filtered to user's ads).
+  // Dedupe by (ad_id, date) to survive legacy Turso rows that pre-date the
+  // unique index, which would otherwise double-count.
   const allMetricsRangeRaw = await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, rangeStart))
     .all();
-  const allMetricsRange = allMetricsRangeRaw.filter(m => m.date <= rangeEnd && userAdIds.has(m.adId));
+  const dashDedupe = new Map<string, typeof allMetricsRangeRaw[number]>();
+  for (const m of allMetricsRangeRaw) {
+    if (m.date > rangeEnd) continue;
+    if (!userAdIds.has(m.adId)) continue;
+    const key = `${m.adId}:${m.date}`;
+    const existing = dashDedupe.get(key);
+    if (!existing || (m.spend ?? 0) > (existing.spend ?? 0)) {
+      dashDedupe.set(key, m);
+    }
+  }
+  const allMetricsRange = Array.from(dashDedupe.values());
 
   const totalSpendRange = allMetricsRange.reduce((sum, m) => sum + (m.spend ?? 0), 0);
   const totalImpressionsRange = allMetricsRange.reduce((sum, m) => sum + (m.impressions ?? 0), 0);

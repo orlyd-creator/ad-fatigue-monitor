@@ -78,7 +78,16 @@ export default async function ExecutivePage({
   // gap-filler rows. Historical completeness comes from the 90-day rolling
   // sync window which keeps __unattributed_* rows current for the last 3 months.
   const allAdIds = new Set(allAds.map(a => a.id));
-  const metrics = metricsRaw.filter(m => m.date <= rangeToStr && allAdIds.has(m.adId));
+  // Dedupe by (ad_id, date) to survive any legacy duplicate rows in Turso.
+  const execDedupe = new Map<string, typeof metricsRaw[number]>();
+  for (const m of metricsRaw) {
+    if (m.date > rangeToStr) continue;
+    if (!allAdIds.has(m.adId)) continue;
+    const key = `${m.adId}:${m.date}`;
+    const existing = execDedupe.get(key);
+    if (!existing || (m.spend ?? 0) > (existing.spend ?? 0)) execDedupe.set(key, m);
+  }
+  const metrics = Array.from(execDedupe.values());
 
   // Month buckets covering the selected range
   type MonthBucket = {

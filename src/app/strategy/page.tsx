@@ -151,15 +151,26 @@ export default async function StrategyPage({
 
   // TOP-LINE TOTALS: sum from ALL ads in range (including paused/archived/
   // unattributed) so the numbers match Dashboard's Performance card exactly.
+  // DEDUPE: Turso prod had accumulated duplicate (ad_id, date) rows from a
+  // pre-unique-index sync, which doubled spend. Collapse to one row per
+  // (ad_id, date) picking the max spend, to survive that legacy state.
   const allAdIdsFull = new Set(allAdsRaw.map(a => a.id));
   const rangeMetricsAll = await db
     .select()
     .from(dailyMetrics)
     .where(gte(dailyMetrics.date, rangeStart))
     .all();
-  const rangeScopedAll = rangeMetricsAll.filter(
-    m => m.date <= rangeEnd && allAdIdsFull.has(m.adId),
-  );
+  const dedupeMap = new Map<string, typeof rangeMetricsAll[number]>();
+  for (const m of rangeMetricsAll) {
+    if (m.date > rangeEnd) continue;
+    if (!allAdIdsFull.has(m.adId)) continue;
+    const key = `${m.adId}:${m.date}`;
+    const existing = dedupeMap.get(key);
+    if (!existing || (m.spend ?? 0) > (existing.spend ?? 0)) {
+      dedupeMap.set(key, m);
+    }
+  }
+  const rangeScopedAll = Array.from(dedupeMap.values());
   const totalSpend = rangeScopedAll.reduce((s, m) => s + (m.spend ?? 0), 0);
   const totalReach = rangeScopedAll.reduce((s, m) => s + (m.reach ?? 0), 0);
   const totalClicks = rangeScopedAll.reduce((s, m) => s + (m.clicks ?? 0), 0);
