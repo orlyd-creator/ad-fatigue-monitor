@@ -52,12 +52,12 @@ export default function QuickPresets() {
     p.set("from", format(from, "yyyy-MM-dd"));
     p.set("to", format(to, "yyyy-MM-dd"));
     p.set("preset", preset);
+    // router.push inside startTransition triggers a server re-render with
+    // the new search params automatically. No router.refresh() needed — it
+    // was creating a race where a second render landed before push committed,
+    // making chip clicks feel unresponsive.
     start(() => {
-      router.push(`${pathname}?${p.toString()}`);
-      // Force the server component to re-render with the new params. Without
-      // this the page sometimes keeps the stale data because Next's app
-      // router treats the URL change as a soft navigation.
-      router.refresh();
+      router.push(`${pathname}?${p.toString()}`, { scroll: false });
     });
   };
 
