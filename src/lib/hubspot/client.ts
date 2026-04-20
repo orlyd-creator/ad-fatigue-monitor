@@ -299,18 +299,18 @@ async function _getLeadsFunnelLiteUncached(
   };
 }
 
-// Closed-won stage IDs across all Obol pipelines (from the diagnostic endpoint).
-// If a new pipeline is added with its own closed-won stage, add the ID here.
+// Closed-won stage IDs across Obol pipelines — strictly the revenue-generating
+// Closed Won stages (legacy, micro-SMB, upsell). PLG stages (Live, Upsell
+// Completed, Lost) are excluded from ROAS because "Live" can include free
+// trials that haven't converted to paid, which would inflate revenue.
+// If a new revenue-bearing pipeline is added, add its Closed Won ID here.
 const CLOSED_WON_STAGE_IDS = [
   "270845155",  // Closed Won (Obol Sales Pipeline LEGACY)
   "1735129325", // Closed Won (Micro SMB Sales Pipeline)
   "2626624699", // Closed Won (Upsell Pipeline)
-  "4562277596", // Lost (PLG) — excluded below, kept here only for reference
-  "4704358635", // Upsell Completed (PLG)
-  "4666719467", // Live (PLG)  — treated as won (customer is paying)
 ];
-// Stages explicitly NOT counted as revenue
-const CLOSED_WON_EXCLUDE = new Set(["4562277596"]);
+// Unused now (kept for future gating of borderline stages).
+const CLOSED_WON_EXCLUDE = new Set<string>();
 
 /**
  * ROAS data: pulls closed-won deals whose close date is in the range and
@@ -687,8 +687,15 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
             properties: [
               "firstname", "lastname", "email", "lifecyclestage",
               "hs_lead_status", "hs_analytics_source", "hs_analytics_source_data_1",
-              "hs_analytics_source_data_2", "utm_campaign", "utm_content", "utm_term",
-              "utm_medium", "utm_source", "hs_predictivescoringtier",
+              "hs_analytics_source_data_2",
+              // NOTE: utm_* properties do NOT exist on Obol's HubSpot contact
+              // schema (verified 2026-04-20). Requesting them 400s the WHOLE
+              // batch/read and silently loses attribution for every contact.
+              // Use hs_analytics_{first,last}_touch_converting_campaign for
+              // the Meta-campaign label instead.
+              "hs_analytics_first_touch_converting_campaign",
+              "hs_analytics_last_touch_converting_campaign",
+              "hs_predictivescoringtier",
               config.atmProperty, "createdate",
             ],
           }),
@@ -774,9 +781,11 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
     day.atm++;
     if (isSQL) day.sqls++;
 
-    const utmCampaign = primary?.properties.utm_campaign || "";
-    const utmContent = primary?.properties.utm_content || "";
-    const utmTerm = primary?.properties.utm_term || "";
+    const campaignLabel =
+      primary?.properties.hs_analytics_source_data_2 ||
+      primary?.properties.hs_analytics_last_touch_converting_campaign ||
+      primary?.properties.hs_analytics_first_touch_converting_campaign ||
+      "";
     day.contacts.push({
       id: primary?.id || company.id,
       name: primary ? `${primary.properties.firstname || ""} ${primary.properties.lastname || ""}`.trim() : "",
@@ -791,9 +800,9 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
       type: isSQL ? "sql" as const : "atm" as const,
       source: primary?.properties.hs_analytics_source || "",
       sourcePlatform: primary?.properties.hs_analytics_source_data_1 || "",
-      campaign: utmCampaign || primary?.properties.hs_analytics_source_data_2 || "",
-      adset: utmTerm || "",
-      ad: utmContent || "",
+      campaign: campaignLabel,
+      adset: "",
+      ad: "",
     });
   }
 
@@ -809,9 +818,11 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
     if (!mqlDateMap.has(dateStr)) mqlDateMap.set(dateStr, { mqls: 0, contacts: [] });
     const day = mqlDateMap.get(dateStr)!;
     day.mqls++;
-    const utmCampaignM = contact.properties.utm_campaign || "";
-    const utmContentM = contact.properties.utm_content || "";
-    const utmTermM = contact.properties.utm_term || "";
+    const campaignLabelM =
+      contact.properties.hs_analytics_source_data_2 ||
+      contact.properties.hs_analytics_last_touch_converting_campaign ||
+      contact.properties.hs_analytics_first_touch_converting_campaign ||
+      "";
     day.contacts.push({
       id: contact.id,
       name: `${contact.properties.firstname || ""} ${contact.properties.lastname || ""}`.trim(),
@@ -822,9 +833,9 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
       type: "mql" as const,
       source: contact.properties.hs_analytics_source || "",
       sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
-      campaign: utmCampaignM || contact.properties.hs_analytics_source_data_2 || "",
-      adset: utmTermM || "",
-      ad: utmContentM || "",
+      campaign: campaignLabelM,
+      adset: "",
+      ad: "",
     });
   }
 

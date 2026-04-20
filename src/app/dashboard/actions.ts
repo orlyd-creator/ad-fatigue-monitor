@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { syncAccount } from "@/lib/meta/sync";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { clearHubSpotCache } from "@/lib/hubspot/client";
 
 export async function refreshData() {
   try {
@@ -62,6 +63,11 @@ export async function refreshData() {
         console.log(`[refreshData] Account ${account.name} has ${result.adsFound} ads!`);
       }
     }
+
+    // Clear the HubSpot in-memory cache so manual Refresh actually pulls fresh
+    // HS data too. Without this, users see stale HubSpot numbers for up to 3
+    // minutes after clicking Refresh (the cache TTL).
+    clearHubSpotCache();
 
     // Invalidate every cached data-dependent page so both Meta metrics (re-synced
     // above) AND HubSpot data (re-fetched on next render via getLeadsFunnel) get
