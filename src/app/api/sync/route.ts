@@ -12,7 +12,24 @@ import { revalidatePath } from "next/cache";
 // so we raise it here. Route Handlers respect this.
 export const maxDuration = 300;
 
+// Global lock: if a sync is already in progress for an account, new requests
+// wait on the existing promise instead of kicking off a parallel sync. Prevents
+// row-lock contention in Turso when user mashes Refresh + auto-sync fires.
+const activeSyncs = new Map<string, Promise<any>>();
+
 async function runSync(accountIds: string[]) {
+  const lockKey = accountIds.slice().sort().join(",");
+  const existing = activeSyncs.get(lockKey);
+  if (existing) {
+    console.log(`[sync] Joining in-flight sync for ${lockKey}`);
+    return existing;
+  }
+  const p = _runSyncInner(accountIds).finally(() => activeSyncs.delete(lockKey));
+  activeSyncs.set(lockKey, p);
+  return p;
+}
+
+async function _runSyncInner(accountIds: string[]) {
   const allAccounts = await db
     .select()
     .from(accounts)

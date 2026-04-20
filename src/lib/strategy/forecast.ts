@@ -75,14 +75,17 @@ function weekdaySeasonality(points: DailyPoint[]): number[] {
   const sums = [0, 0, 0, 0, 0, 0, 0];
   const counts = [0, 0, 0, 0, 0, 0, 0];
   for (const p of points) {
-    const d = new Date(p.date + "T00:00:00");
+    const d = new Date(p.date + "T12:00:00");
     const dow = d.getDay();
     sums[dow] += p.value;
     counts[dow] += 1;
   }
   const dowAvg = sums.map((s, i) => counts[i] > 0 ? s / counts[i] : 0);
-  const overallAvg = dowAvg.reduce((a, b) => a + b, 0) / 7 || 1;
-  return dowAvg.map((v) => (overallAvg === 0 ? 1 : v / overallAvg));
+  const overallAvg = dowAvg.reduce((a, b) => a + b, 0) / 7;
+  // If the whole window is zero (or near-zero), return flat 1.0 multipliers
+  // so the caller still gets a valid array. Avoids NaN propagation.
+  if (overallAvg <= 0) return [1, 1, 1, 1, 1, 1, 1];
+  return dowAvg.map((v) => v / overallAvg);
 }
 
 export function forecastSeries(
@@ -115,7 +118,7 @@ export function forecastSeries(
   const seasonality = weekdaySeasonality(seasonWindow);
 
   // Generate forecast
-  const lastDate = new Date(sorted[sorted.length - 1].date + "T00:00:00");
+  const lastDate = new Date(sorted[sorted.length - 1].date + "T12:00:00");
   const startX = ys.length - 1; // x-coord of last known point
   const points: ForecastPoint[] = [];
   for (let i = 1; i <= horizon; i++) {

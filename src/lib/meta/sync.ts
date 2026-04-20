@@ -112,6 +112,27 @@ export async function syncTodayOnly(accountId: string): Promise<{
   ].join(",");
 
   try {
+    // Refresh ad statuses first so "paused in Meta" reflects in our DB
+    // within 2 min (the micro-sync interval). Small payload, fast fetch.
+    try {
+      const statusRows = await paginateAll(`/${actId}/ads`, token, {
+        fields: "id,status,effective_status",
+        effective_status: JSON.stringify([
+          "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
+          "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
+          "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
+        ]),
+      });
+      const { sql } = await import("drizzle-orm");
+      for (const row of statusRows) {
+        const s = row.effective_status || row.status;
+        if (!row.id || !s) continue;
+        await db.run(sql`UPDATE ads SET status = ${s}, last_synced_at = ${Date.now()} WHERE id = ${row.id}`);
+      }
+    } catch (err: any) {
+      console.warn(`[today-sync] status refresh failed (non-fatal):`, err?.message || err);
+    }
+
     const insights = await paginateAll(`/${actId}/insights`, token, {
       fields: insightFields,
       time_range: JSON.stringify({ since: today, until: today }),

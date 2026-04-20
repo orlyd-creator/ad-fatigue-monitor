@@ -137,10 +137,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Daily spend for the range
   const dailySpendMap = new Map<string, number>();
   if (isCustom) {
-    const start = new Date(customFrom);
-    const end = new Date(customTo);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      dailySpendMap.set(format(d, "yyyy-MM-dd"), 0);
+    // Parse with explicit midday time to avoid TZ off-by-one. Loop in a way
+    // that correctly iterates to and including `end` (previous version used
+    // d.setDate() as a loop expression which mutates in-place and can skip
+    // the final day).
+    const start = new Date(customFrom + "T12:00:00");
+    const end = new Date(customTo + "T12:00:00");
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      dailySpendMap.set(format(cursor, "yyyy-MM-dd"), 0);
+      cursor.setDate(cursor.getDate() + 1);
     }
   } else {
     for (let i = rangeDays - 1; i >= 0; i--) {

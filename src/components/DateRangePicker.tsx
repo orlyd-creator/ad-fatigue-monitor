@@ -78,13 +78,13 @@ export default function DateRangePicker() {
 
   // Parse current selection from URL (defaults: this month)
   const currentFrom = sp.get("from")
-    ? new Date(sp.get("from") + "T00:00:00")
+    ? new Date(sp.get("from") + "T12:00:00")
     : startOfMonth(now);
   const currentTo = sp.get("to")
-    ? new Date(sp.get("to") + "T00:00:00")
+    ? new Date(sp.get("to") + "T12:00:00")
     : now;
-  const currentCompareFrom = sp.get("compareFrom") ? new Date(sp.get("compareFrom") + "T00:00:00") : null;
-  const currentCompareTo = sp.get("compareTo") ? new Date(sp.get("compareTo") + "T00:00:00") : null;
+  const currentCompareFrom = sp.get("compareFrom") ? new Date(sp.get("compareFrom") + "T12:00:00") : null;
+  const currentCompareTo = sp.get("compareTo") ? new Date(sp.get("compareTo") + "T12:00:00") : null;
   const urlPreset = (sp.get("preset") as Preset) || "this-month";
 
   const [draftFrom, setDraftFrom] = useState(format(currentFrom, "yyyy-MM-dd"));
@@ -158,13 +158,13 @@ export default function DateRangePicker() {
   };
 
   const applyCustom = () => {
-    const f = new Date(draftFrom + "T00:00:00");
-    const t = new Date(draftTo + "T00:00:00");
+    const f = new Date(draftFrom + "T12:00:00");
+    const t = new Date(draftTo + "T12:00:00");
     if (isNaN(f.getTime()) || isNaN(t.getTime()) || f > t) return;
     const opts: any = { from: f, to: t, preset: "custom" as Preset, mode: compareMode };
     if (compareMode === "custom") {
-      opts.compareFrom = draftCompareFrom ? new Date(draftCompareFrom + "T00:00:00") : null;
-      opts.compareTo = draftCompareTo ? new Date(draftCompareTo + "T00:00:00") : null;
+      opts.compareFrom = draftCompareFrom ? new Date(draftCompareFrom + "T12:00:00") : null;
+      opts.compareTo = draftCompareTo ? new Date(draftCompareTo + "T12:00:00") : null;
     }
     apply(opts);
   };
@@ -324,10 +324,10 @@ export function resolveDateRange(searchParams: {
   preset?: string;
 }): ActiveRange {
   const now = new Date();
-  const from = searchParams.from ? new Date(searchParams.from + "T00:00:00") : startOfMonth(now);
-  const to = searchParams.to ? new Date(searchParams.to + "T00:00:00") : now;
-  const compareFrom = searchParams.compareFrom ? new Date(searchParams.compareFrom + "T00:00:00") : null;
-  const compareTo = searchParams.compareTo ? new Date(searchParams.compareTo + "T00:00:00") : null;
+  const from = searchParams.from ? new Date(searchParams.from + "T12:00:00") : startOfMonth(now);
+  const to = searchParams.to ? new Date(searchParams.to + "T12:00:00") : now;
+  const compareFrom = searchParams.compareFrom ? new Date(searchParams.compareFrom + "T12:00:00") : null;
+  const compareTo = searchParams.compareTo ? new Date(searchParams.compareTo + "T12:00:00") : null;
   return {
     from, to,
     fromStr: format(from, "yyyy-MM-dd"),
