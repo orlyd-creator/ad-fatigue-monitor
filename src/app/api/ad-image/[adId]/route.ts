@@ -47,18 +47,30 @@ async function resolveImageUrl(
     const data = await res.json();
     const creative = data.creative || {};
 
-    // HIGHEST PRIORITY: image_hash -> adimages permalink_url.
-    // This is the original uploaded image at full resolution, stable URL,
-    // doesn't expire. Meta's thumbnail_url can upscale a low-res source;
-    // permalink_url returns the exact bytes Orly uploaded.
-    const hash = creative.image_hash;
-    if (hash && accountId) {
+    // Gather all possible image_hash candidates in priority order.
+    // Carousel ads have NO root image_hash — their hashes live on each
+    // child_attachment. We pick the first card's image as the hero thumbnail.
+    const childAttachments =
+      creative.object_story_spec?.link_data?.child_attachments || [];
+    const carouselFirstHash = childAttachments[0]?.image_hash;
+    const carouselFirstUrl = childAttachments[0]?.picture;
+
+    const candidateHashes: string[] = [
+      creative.image_hash,
+      carouselFirstHash,
+      ...(creative.asset_feed_spec?.images?.map((i: any) => i.hash).filter(Boolean) || []),
+    ].filter(Boolean);
+
+    // HIGHEST PRIORITY: any image_hash -> adimages permalink_url.
+    // Full-resolution original upload, stable URL, doesn't expire.
+    if (accountId && candidateHashes.length > 0) {
       try {
         const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
-        const imgRes = await fetch(
-          `https://graph.facebook.com/v21.0/${actId}/adimages?hashes=${encodeURIComponent(JSON.stringify([hash]))}&fields=permalink_url,url,url_128&access_token=${token}`,
-        );
-        if (imgRes.ok) {
+        for (const hash of candidateHashes) {
+          const imgRes = await fetch(
+            `https://graph.facebook.com/v21.0/${actId}/adimages?hashes=${encodeURIComponent(JSON.stringify([hash]))}&fields=permalink_url,url,url_128&access_token=${token}`,
+          );
+          if (!imgRes.ok) continue;
           const imgData = await imgRes.json();
           const permalink = imgData.data?.[0]?.permalink_url || imgData.data?.[0]?.url;
           if (permalink) {
@@ -71,11 +83,15 @@ async function resolveImageUrl(
       }
     }
 
-    // SECONDARY: asset_feed_spec uploads are usually hi-res originals too.
+    // SECONDARY: direct URLs on asset_feed_spec / carousel cards (usually hi-res).
     const assetFeed = creative.asset_feed_spec?.images?.[0]?.url;
     if (assetFeed) {
       urlCache.set(adId, { url: assetFeed, fetchedAt: Date.now() });
       return assetFeed;
+    }
+    if (carouselFirstUrl) {
+      urlCache.set(adId, { url: carouselFirstUrl, fetchedAt: Date.now() });
+      return carouselFirstUrl;
     }
 
     // FALLBACK: explicitly-sized thumbnail (may upscale a low-res source).
