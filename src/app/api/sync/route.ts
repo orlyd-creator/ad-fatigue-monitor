@@ -158,13 +158,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Default mode for user-triggered Refresh = "quick" (today-only, ~5s).
-  // Full 180-day sync still runs automatically every 10 min via
-  // instrumentation.ts, so historical data stays fresh without making the
-  // user wait a minute on every manual click.
+  // Default = "full" (the original slow, thorough 180-day sync).
+  // Opt in to ?mode=quick for the 5-second today-only version.
   const url = new URL(req.url);
   const modeParam = url.searchParams.get("mode");
-  const mode: "full" | "quick" = modeParam === "full" ? "full" : "quick";
+  const mode: "full" | "quick" = modeParam === "quick" ? "quick" : "full";
 
   const result = await runSync(allAccountIds, mode);
   // NOTE: historical backfill is handled by the 10-min auto-sync in

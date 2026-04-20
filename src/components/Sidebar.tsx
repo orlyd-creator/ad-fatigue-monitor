@@ -160,7 +160,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
     }, 1800);
   };
 
-  const handleSync = () => {
+  const runSyncRequest = (mode: "full" | "quick") => {
     if (isPublic) {
       setShowPermPrompt(true);
       return;
@@ -168,9 +168,10 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
     setSyncError(null);
     setShowOverlay("syncing");
     const startedAt = Date.now();
+    const endpoint = mode === "quick" ? "/api/sync?mode=quick" : "/api/sync";
     startTransition(async () => {
       try {
-        const res = await fetch("/api/sync", {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           cache: "no-store",
@@ -222,6 +223,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
       }
     });
   };
+
+  const handleSync = () => runSyncRequest("full");
+  const handleQuickSync = () => runSyncRequest("quick");
 
   return (
     <>
@@ -429,6 +433,25 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           {!collapsed && (
             syncDone ? "Synced" : isPending ? "Syncing..." : syncError ? "Retry" : "Refresh"
           )}
+        </button>
+
+        {/* Quick refresh, today-only sync, ~5s instead of 30-60s */}
+        <button
+          onClick={handleQuickSync}
+          disabled={isPending}
+          title={collapsed ? "Quick refresh (today only)" : undefined}
+          className={clsx(
+            "cursor-pointer w-full flex items-center gap-2 rounded-lg text-[12px] font-medium select-none min-h-[36px]",
+            collapsed ? "justify-center px-0 py-2" : "px-3 py-2",
+            isPending
+              ? "text-gray-400"
+              : "text-gray-500 hover:text-gray-900 hover:bg-gray-200/40"
+          )}
+        >
+          <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          {!collapsed && "Quick refresh"}
         </button>
 
         {/* Share workspace, visible to everyone (public viewers get a prompt) */}
