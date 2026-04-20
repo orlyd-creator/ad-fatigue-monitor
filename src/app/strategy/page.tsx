@@ -4,7 +4,7 @@ import { eq, inArray, gte } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth } from "date-fns";
 import StrategyClient from "./StrategyClient";
@@ -12,11 +12,11 @@ import StrategyClient from "./StrategyClient";
 export const dynamic = "force-dynamic";
 
 export default async function StrategyPage() {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
+  const accountId = session.accountId;
   if (!accountId) redirect("/login");
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const allAccountIds: string[] = session.allAccountIds;
 
   // Get settings
   const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();

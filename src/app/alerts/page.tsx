@@ -3,17 +3,17 @@ import { alerts, ads } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import AlertFeed from "@/components/AlertFeed";
 import InsightsPanel from "@/components/InsightsPanel";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AlertsPage() {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
+  const accountId = session.accountId;
   if (!accountId) redirect("/login");
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const allAccountIds: string[] = session.allAccountIds;
 
   // Get ACTIVE ad IDs belonging to ALL of user's accounts — never show alerts for paused/archived ads
   const userAds = await db.select({ id: ads.id, status: ads.status }).from(ads).where(inArray(ads.accountId, allAccountIds)).all();

@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { alerts, ads } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 
 export async function GET() {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const accountId = (session as any).accountId as string;
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const accountId = session.accountId;
+  const allAccountIds: string[] = session.allAccountIds;
   if (!accountId) return NextResponse.json({ error: "No account connected" }, { status: 400 });
 
   const allAlerts = await db

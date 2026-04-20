@@ -5,13 +5,13 @@ import { eq, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 
 export async function GET() {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const accountId = (session as any).accountId as string;
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const accountId = session.accountId;
+  const allAccountIds: string[] = session.allAccountIds;
   if (!accountId) return NextResponse.json({ error: "No account connected" }, { status: 400 });
 
   // Get settings

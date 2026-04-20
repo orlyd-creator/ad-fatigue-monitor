@@ -54,11 +54,14 @@ export default async function ExecutivePage({
       return null;
     }),
   ]);
-  // Don't filter metrics by allAds.id — Meta removes ads from its list API once
-  // they're deleted, but dailyMetrics persists historical rows. Filtering them
-  // out silently drops real spend from past months. Every row in dailyMetrics
-  // was synced from one of the owner's accounts, so include it in the totals.
-  const metrics = metricsRaw.filter(m => m.date <= rangeToStr);
+  // Filter metrics to this owner's ads (including synthetic __unattributed_*
+  // reconciliation rows, which the sync creates with accountId set to the
+  // owner's account so they ARE in allAds). Dropping the filter would pull in
+  // rows from other accounts in the same DB and/or double-count the sync's
+  // gap-filler rows. Historical completeness comes from the 90-day rolling
+  // sync window which keeps __unattributed_* rows current for the last 3 months.
+  const allAdIds = new Set(allAds.map(a => a.id));
+  const metrics = metricsRaw.filter(m => m.date <= rangeToStr && allAdIds.has(m.adId));
 
   // Month buckets covering the selected range
   type MonthBucket = {
