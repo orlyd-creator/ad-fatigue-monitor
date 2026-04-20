@@ -23,24 +23,43 @@ const inFlight = new Map<string, Promise<void>>();
 async function refreshOneAccount(accountId: string, token: string): Promise<void> {
   const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
   try {
-    const url = `https://graph.facebook.com/v21.0/${actId}/ads?fields=id,status,effective_status&effective_status=${encodeURIComponent(
-      JSON.stringify([
-        "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
-        "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
-        "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
-      ]),
-    )}&limit=500&access_token=${token}`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const body = await res.json();
+    // Paginate through ALL ads in the account. limit=500 truncates large
+    // accounts silently and that's exactly how paused-ad-stays-ACTIVE bugs
+    // sneak in. Follow the `paging.next` cursor until no more data.
+    const all: Array<{ id: string; status?: string; effective_status?: string }> = [];
+    let url: string | null =
+      `https://graph.facebook.com/v21.0/${actId}/ads?fields=id,status,effective_status&effective_status=${encodeURIComponent(
+        JSON.stringify([
+          "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
+          "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
+          "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
+        ]),
+      )}&limit=200&access_token=${token}`;
+    let pages = 0;
+    while (url && pages < 25) {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`[statusRefresh] ${accountId} page ${pages} HTTP ${res.status}`);
+        break;
+      }
+      const body = await res.json();
+      for (const row of body.data || []) all.push(row);
+      url = body.paging?.next || null;
+      pages++;
+    }
+
+    // Unconditional update: always write status + lastSyncedAt so even
+    // same-status rows refresh their timestamp. Avoids the bug where a
+    // "no-op" WHERE clause skips the write and the row looks stale forever.
     const now = Date.now();
-    for (const row of (body.data || []) as Array<{
-      id: string; status?: string; effective_status?: string;
-    }>) {
+    let changed = 0;
+    for (const row of all) {
       const newStatus = row.effective_status || row.status;
       if (!row.id || !newStatus) continue;
-      await db.run(sql`UPDATE ads SET status = ${newStatus}, last_synced_at = ${now} WHERE id = ${row.id} AND status != ${newStatus}`);
+      await db.run(sql`UPDATE ads SET status = ${newStatus}, last_synced_at = ${now} WHERE id = ${row.id}`);
+      changed++;
     }
+    console.log(`[statusRefresh] ${accountId}: scanned ${all.length} ads, wrote ${changed}`);
   } catch (err) {
     console.warn(`[statusRefresh] ${accountId} failed:`, err);
   }
