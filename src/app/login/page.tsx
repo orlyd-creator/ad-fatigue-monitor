@@ -49,8 +49,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </h2>
           <p className="text-[14px] text-gray-600 mb-6 leading-relaxed">
             {shareState === "pending"
-              ? "Just sign in with Facebook — no integrations needed. You'll land on the shared dashboard in one click."
-              : "We'll pull your ad performance and lead data into one place — so you always know what's working, what's fatigued, and where your next lead is coming from."}
+              ? "Just sign in with Facebook, no integrations needed. You'll land on the shared dashboard in one click."
+              : "We'll pull your ad performance and lead data into one place, so you always know what's working, what's fatigued, and where your next lead is coming from."}
           </p>
 
           <form action={signInWithFacebook}>
@@ -90,7 +90,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
             <p className="text-[12px] text-green-800 leading-relaxed">
-              Read-only access only — we never change anything in your ad account. Your data, your control.
+              Read-only access only, we never change anything in your ad account. Your data, your control.
             </p>
           </div>
         </div>

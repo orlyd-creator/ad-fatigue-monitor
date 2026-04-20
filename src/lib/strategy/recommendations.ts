@@ -22,8 +22,8 @@ export type RecommendationSeverity = "critical" | "warning" | "opportunity" | "i
 export type RecommendationAction =
   | "pause"          // stop spending immediately
   | "swap_creative"  // new creative needed
-  | "scale_up"       // healthy performer — more budget
-  | "narrow_audience" // frequency too high — tighten targeting
+  | "scale_up"       // healthy performer, more budget
+  | "narrow_audience" // frequency too high, tighten targeting
   | "reallocate"     // shift budget between ads
   | "refresh_soon"   // prep replacement within N days
   | "investigate"    // data is weird, human look needed
@@ -60,7 +60,7 @@ export interface AdInput {
   cpm: number;
   frequency: number;
   cpc: number;
-  // lead attribution (optional — supplied when HS data is joined)
+  // lead attribution (optional, supplied when HS data is joined)
   atmLeads?: number;
   sqls?: number;
   closedWonRevenue?: number;
@@ -86,7 +86,7 @@ const T = {
   MIN_SPEND_FOR_SIGNAL: 50,    // below this, data is too noisy for strong recs
   FREQUENCY_HEAVY: 3.0,        // cold prospecting threshold
   FREQUENCY_CRITICAL: 5.0,
-  CTR_WEAK: 0.7,               // % — below this means creative isn't landing
+  CTR_WEAK: 0.7,               // %, below this means creative isn't landing
   CTR_CRITICAL: 0.4,
   CPL_OVER_AVG: 1.5,           // if ad CPL > 1.5× account CPL, flag
   CPL_BLOWOUT: 2.5,
@@ -126,7 +126,7 @@ export function computeAdQuality(
   const roas =
     ad.closedWonRevenue && ad.spend > 0 ? ad.closedWonRevenue / ad.spend : null;
 
-  // Score components — each 0..1, then weighted
+  // Score components, each 0..1, then weighted
   let cplScore = 0.5;
   let dominantSignal = "insufficient data";
   if (cpl !== null && accountCPL && accountCPL > 0) {
@@ -141,21 +141,21 @@ export function computeAdQuality(
           : "average CPL";
   }
 
-  // SQL conversion rate — 40% is exceptional for lead-gen, 10% is poor
+  // SQL conversion rate, 40% is exceptional for lead-gen, 10% is poor
   let conversionScore = 0.5;
   if (leadToSQLRate !== null) {
     conversionScore = Math.max(0, Math.min(1, leadToSQLRate / 0.4));
     if (leadToSQLRate > 0.35) dominantSignal = "high SQL rate";
   }
 
-  // Volume bonus — an ad with 15+ ATMs beats one with 2, even at same CPL
+  // Volume bonus, an ad with 15+ ATMs beats one with 2, even at same CPL
   const volumeScore =
     ad.atmLeads && ad.atmLeads > 0 ? Math.min(1, Math.log2(ad.atmLeads + 1) / 5) : 0;
 
   // ROAS bonus (0 if no revenue data)
   const roasScore = roas !== null ? Math.min(1, roas / 3) : 0;
 
-  // Fatigue penalty — a "great CPL but burning out" ad isn't a scale candidate
+  // Fatigue penalty, a "great CPL but burning out" ad isn't a scale candidate
   const fatiguePenalty = Math.max(0, 1 - ad.fatigue.fatigueScore / 100);
 
   // Weighted: CPL 35 · conversion 25 · volume 15 · ROAS 15 · fatigueHealth 10
@@ -194,7 +194,7 @@ export function generateRecommendations(
   for (const ad of activeAds) {
     const cpl = ad.atmLeads && ad.atmLeads > 0 ? ad.spend / ad.atmLeads : null;
 
-    // 1. Zero-conversion blowout — highest severity
+    // 1. Zero-conversion blowout, highest severity
     if (
       ad.spend >= T.ZERO_CONVERSION_SPEND &&
       (ad.atmLeads === undefined || ad.atmLeads === 0)
@@ -205,7 +205,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "critical",
         action: "pause",
-        title: `Pause "${truncate(ad.adName, 38)}" — $${ad.spend.toFixed(0)} spent, 0 demos`,
+        title: `Pause "${truncate(ad.adName, 38)}", $${ad.spend.toFixed(0)} spent, 0 demos`,
         body: `This ad burned through $${ad.spend.toFixed(0)} in the range without generating a single ATM lead. Every additional dollar is waste.`,
         action_copy: `Pause today. Save ~$${Math.round(dailyRun(ad.spend) * 30)} / month.`,
         impact_usd: Math.round(dailyRun(ad.spend) * 30),
@@ -215,7 +215,7 @@ export function generateRecommendations(
       continue; // if we're pausing, no need for softer recs on this ad
     }
 
-    // 2. CPL blowout — spending 2.5× avg
+    // 2. CPL blowout, spending 2.5× avg
     if (
       cpl !== null &&
       account.accountCPL &&
@@ -238,7 +238,7 @@ export function generateRecommendations(
       continue;
     }
 
-    // 3. Fatigue — critical stage
+    // 3. Fatigue, critical stage
     if (
       ad.fatigue.fatigueScore >= T.FATIGUE_CRITICAL &&
       ad.fatigue.dataStatus === "sufficient"
@@ -249,7 +249,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "critical",
         action: "swap_creative",
-        title: `Replace "${truncate(ad.adName, 32)}" — fatigue ${ad.fatigue.fatigueScore}/100`,
+        title: `Replace "${truncate(ad.adName, 32)}", fatigue ${ad.fatigue.fatigueScore}/100`,
         body: `Multiple signals show this creative has worn out its audience. ${ad.fatigue.signals.slice(0, 2).map(s => s.label).join(" and ")} are the biggest drags.`,
         action_copy: `Swap the creative by ${dateInDays(2)}. Target new hook, same offer.`,
         impact_leads: ad.atmLeads ? Math.round(ad.atmLeads * 0.3) : undefined,
@@ -259,7 +259,7 @@ export function generateRecommendations(
       continue;
     }
 
-    // 4. Fatigue — prep replacement
+    // 4. Fatigue, prep replacement
     if (
       ad.fatigue.fatigueScore >= T.FATIGUE_WARN &&
       ad.fatigue.predictedDaysToFatigue !== null &&
@@ -271,7 +271,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "warning",
         action: "refresh_soon",
-        title: `Prep replacement for "${truncate(ad.adName, 30)}" — ${ad.fatigue.predictedDaysToFatigue}d to fatigue`,
+        title: `Prep replacement for "${truncate(ad.adName, 30)}", ${ad.fatigue.predictedDaysToFatigue}d to fatigue`,
         body: `Trajectory projects full fatigue in ${ad.fatigue.predictedDaysToFatigue} days. Start sketching a new variant now so you can swap before CPL climbs.`,
         action_copy: `Draft new creative by ${dateInDays(ad.fatigue.predictedDaysToFatigue - 2)}.`,
         confidence: "medium",
@@ -279,7 +279,7 @@ export function generateRecommendations(
       });
     }
 
-    // 5. Frequency too high — narrow audience
+    // 5. Frequency too high, narrow audience
     if (ad.frequency >= T.FREQUENCY_CRITICAL && ad.spend >= T.MIN_SPEND_FOR_SIGNAL) {
       recs.push({
         id: `freq-crit-${ad.id}`,
@@ -287,7 +287,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "warning",
         action: "narrow_audience",
-        title: `Frequency ${ad.frequency.toFixed(1)}× on "${truncate(ad.adName, 28)}" — audience burned`,
+        title: `Frequency ${ad.frequency.toFixed(1)}× on "${truncate(ad.adName, 28)}", audience burned`,
         body: `Each person in your audience has seen this ad ${ad.frequency.toFixed(1)} times. Above 5× you typically see CPM spike and CTR crater.`,
         action_copy: `Tighten targeting (remove broad interests) or increase audience size by 2×.`,
         confidence: "medium",
@@ -295,7 +295,7 @@ export function generateRecommendations(
       });
     }
 
-    // 6. Weak CTR — creative isn't landing
+    // 6. Weak CTR, creative isn't landing
     if (
       ad.ctr > 0 &&
       ad.ctr < T.CTR_CRITICAL &&
@@ -307,7 +307,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "warning",
         action: "swap_creative",
-        title: `"${truncate(ad.adName, 32)}" CTR ${ad.ctr.toFixed(2)}% — creative not hooking`,
+        title: `"${truncate(ad.adName, 32)}" CTR ${ad.ctr.toFixed(2)}%, creative not hooking`,
         body: `CTR below 0.4% for a lead-gen campaign means the hook isn't landing. Headline, opening line, or visual need a rethink.`,
         action_copy: `Test a new hook. Keep offer same, change the first 3 seconds / first line.`,
         confidence: "medium",
@@ -315,7 +315,7 @@ export function generateRecommendations(
       });
     }
 
-    // 7. Scale-up candidate — cheap CPL, healthy fatigue, decent volume
+    // 7. Scale-up candidate, cheap CPL, healthy fatigue, decent volume
     if (
       cpl !== null &&
       account.accountCPL &&
@@ -330,7 +330,7 @@ export function generateRecommendations(
         campaignName: ad.campaignName,
         severity: "opportunity",
         action: "scale_up",
-        title: `Scale "${truncate(ad.adName, 36)}" — CPL $${cpl.toFixed(0)} (avg $${account.accountCPL.toFixed(0)})`,
+        title: `Scale "${truncate(ad.adName, 36)}", CPL $${cpl.toFixed(0)} (avg $${account.accountCPL.toFixed(0)})`,
         body: `This ad converts ${((1 - cpl / account.accountCPL) * 100).toFixed(0)}% below account average and fatigue is healthy. Room to push 20–50% more budget before efficiency drops.`,
         action_copy: `Raise daily budget 30% step. Re-evaluate in 7 days.`,
         impact_leads: projIncrementalLeads,
@@ -410,7 +410,7 @@ export function generateRecommendations(
 // ─────────────────────────────────────────────────────────────────
 // Campaign-level recommendations. HubSpot attributes leads to the Meta
 // campaign (via hs_analytics_source_data_2), so CPL / ROAS recs are most
-// reliable at campaign granularity — ad-level attribution isn't available.
+// reliable at campaign granularity, ad-level attribution isn't available.
 // ─────────────────────────────────────────────────────────────────
 export interface CampaignInput {
   campaignName: string;
@@ -432,7 +432,7 @@ export function generateCampaignRecommendations(
   const significant = campaigns.filter((c) => c.spend >= T.MIN_SPEND_FOR_SIGNAL);
   if (significant.length === 0 || !accountCPL) return recs;
 
-  // 1. Zero-lead campaign burning >$200 — hard pause
+  // 1. Zero-lead campaign burning >$200, hard pause
   for (const c of significant) {
     if (c.leads === 0 && c.spend >= 200) {
       recs.push({
@@ -440,7 +440,7 @@ export function generateCampaignRecommendations(
         campaignName: c.campaignName,
         severity: "critical",
         action: "pause",
-        title: `Pause campaign "${truncate(c.campaignName, 36)}" — $${c.spend.toFixed(0)} / 0 demos`,
+        title: `Pause campaign "${truncate(c.campaignName, 36)}", $${c.spend.toFixed(0)} / 0 demos`,
         body: `Zero attributed ATM leads this period despite $${c.spend.toFixed(0)} in spend. Even accounting for utm mismatch, this is a non-performer.`,
         action_copy: `Pause the campaign or isolate a single ad to test. Reallocate spend.`,
         impact_usd: Math.round(c.spend),
@@ -466,7 +466,7 @@ export function generateCampaignRecommendations(
       });
     }
 
-    // 3. Scale-up candidate — cheap CPL, decent volume, healthy fatigue
+    // 3. Scale-up candidate, cheap CPL, decent volume, healthy fatigue
     if (
       c.cpl !== null &&
       c.cpl < accountCPL * T.SCALE_UP_CPL_RATIO &&
@@ -479,7 +479,7 @@ export function generateCampaignRecommendations(
         campaignName: c.campaignName,
         severity: "opportunity",
         action: "scale_up",
-        title: `Scale "${truncate(c.campaignName, 36)}" — CPL $${c.cpl.toFixed(0)} (avg $${accountCPL.toFixed(0)})`,
+        title: `Scale "${truncate(c.campaignName, 36)}", CPL $${c.cpl.toFixed(0)} (avg $${accountCPL.toFixed(0)})`,
         body: `Converting ${((1 - c.cpl / accountCPL) * 100).toFixed(0)}% cheaper than account average, fatigue still healthy (${c.avgFatigue}/100 avg). Room to push more budget.`,
         action_copy: `Raise daily budget 30% step. Hold targeting. Re-evaluate in 7 days.`,
         impact_leads: projGain,
@@ -488,14 +488,14 @@ export function generateCampaignRecommendations(
       });
     }
 
-    // 4. ROAS under 1× — spending more than earning
+    // 4. ROAS under 1×, spending more than earning
     if (c.roas !== null && c.roas < 1 && c.revenue > 0 && c.spend >= 500) {
       recs.push({
         id: `camp-roas-${hashCampaign(c.campaignName)}`,
         campaignName: c.campaignName,
         severity: "warning",
         action: "investigate",
-        title: `"${truncate(c.campaignName, 30)}" ROAS ${c.roas.toFixed(2)}× — spending > earning`,
+        title: `"${truncate(c.campaignName, 30)}" ROAS ${c.roas.toFixed(2)}×, spending > earning`,
         body: `Closed-won revenue is $${c.revenue.toFixed(0)} on $${c.spend.toFixed(0)} spend. Lead quality or deal-size here isn't covering acquisition cost.`,
         action_copy: `Check deal cohort: are these SMB? If so, either raise pricing for this audience or pivot targeting.`,
         confidence: "medium",
@@ -536,7 +536,7 @@ export function generateCampaignRecommendations(
     }
   }
 
-  // 6. Concentration risk — single campaign > 70% of spend
+  // 6. Concentration risk, single campaign > 70% of spend
   const topSpender = [...significant].sort((a, b) => b.spend - a.spend)[0];
   if (topSpender && totalSpend > 0 && topSpender.spend / totalSpend > 0.7) {
     recs.push({
@@ -570,7 +570,7 @@ function dateInDays(days: number): string {
   d.setDate(d.getDate() + days);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
-// Daily run-rate from range spend — assumes range is the current month so far
+// Daily run-rate from range spend, assumes range is the current month so far
 function dailyRun(totalSpend: number): number {
   const daysSoFar = new Date().getDate();
   return totalSpend / Math.max(1, daysSoFar);

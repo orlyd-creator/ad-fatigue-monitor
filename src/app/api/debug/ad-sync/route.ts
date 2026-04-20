@@ -122,8 +122,8 @@ export async function GET(req: NextRequest) {
         diagnosis: force && forcedWrite
           ? `FORCED WRITE: DB was '${forcedWrite.before}', now '${forcedWrite.after}'. Refresh the page.`
           : dbStatus === liveStatus
-            ? "OK — DB matches Meta"
-            : `DRIFT — DB='${dbStatus}' but Meta='${liveStatus}'. Append &force=1 to this URL to fix it now, or click Refresh.`,
+            ? "OK, DB matches Meta"
+            : `DRIFT, DB='${dbStatus}' but Meta='${liveStatus}'. Append &force=1 to this URL to fix it now, or click Refresh.`,
       },
       ...(forcedWrite ? { forcedWrite } : {}),
     });

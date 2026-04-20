@@ -13,7 +13,7 @@ import {
 /**
  * Find the best-performing 7-day window to use as baseline.
  * Scoring combines CTR (primary) and conversion rate (if available) so we pick
- * the true peak — not a fluke day with one click-happy user.
+ * the true peak, not a fluke day with one click-happy user.
  */
 function findBaselineWindow(
   metrics: DailyMetric[],
@@ -25,12 +25,12 @@ function findBaselineWindow(
   let best: DailyMetric[] = metrics.slice(0, windowSize);
   let bestScore = -Infinity;
 
-  // Only search windows NOT in the most recent `recentWindowDays` — we want baseline vs recent
+  // Only search windows NOT in the most recent `recentWindowDays`, we want baseline vs recent
   const searchEnd = metrics.length - Math.max(3, Math.floor(windowSize / 2));
 
   for (let i = 0; i <= searchEnd - windowSize; i++) {
     const window = metrics.slice(i, i + windowSize);
-    // Require minimum impressions — skip sparse windows
+    // Require minimum impressions, skip sparse windows
     const totalImpressions = window.reduce((s, m) => s + m.impressions, 0);
     if (totalImpressions < 100) continue;
 
@@ -51,7 +51,7 @@ function findBaselineWindow(
 }
 
 /**
- * Compute a simplified fatigue score for a single rolling window — used for velocity.
+ * Compute a simplified fatigue score for a single rolling window, used for velocity.
  */
 function scoreForWindow(
   metrics: DailyMetric[],
@@ -88,7 +88,7 @@ function scoreForWindow(
 }
 
 /**
- * Fatigue velocity — slope of score over the last 7 days of rolling 3-day windows.
+ * Fatigue velocity, slope of score over the last 7 days of rolling 3-day windows.
  * Positive = getting worse, negative = recovering.
  */
 function calculateFatigueVelocity(
@@ -255,7 +255,7 @@ export function calculateFatigueScore(
     reasons.push("engagement collapsing");
   }
 
-  // 7) Recent acceleration — if last 3 days show a sharp decline trend vs 7-day
+  // 7) Recent acceleration, if last 3 days show a sharp decline trend vs 7-day
   const last3CtrSlope = (() => {
     if (metrics.length < 3) return 0;
     const last3 = metrics.slice(-3).map((m) => m.ctr);

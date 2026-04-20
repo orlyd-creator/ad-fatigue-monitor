@@ -32,7 +32,7 @@ async function metaFetch(url: string, token: string, params: Record<string, stri
     throw new Error(`Meta API ${res.status}: ${msg}`);
   }
 
-  console.log(`[meta] OK — ${Array.isArray(body?.data) ? body.data.length + " items" : "object"}`);
+  console.log(`[meta] OK, ${Array.isArray(body?.data) ? body.data.length + " items" : "object"}`);
   return body;
 }
 
@@ -71,7 +71,7 @@ async function paginateAll(url: string, token: string, params: Record<string, st
     console.log(`[meta] Paginating page ${page}...`);
     const res = await fetch(next);
     if (!res.ok) {
-      console.warn(`[meta] Pagination stopped at page ${page} (HTTP ${res.status}) — some data may be missing`);
+      console.warn(`[meta] Pagination stopped at page ${page} (HTTP ${res.status}), some data may be missing`);
       break;
     }
     const data = await res.json();
@@ -79,7 +79,7 @@ async function paginateAll(url: string, token: string, params: Record<string, st
     next = data.paging?.next;
   }
   if (next) {
-    console.error(`[meta] WARNING: Hit 100-page pagination cap. Account has more than ~50k items — data is being truncated.`);
+    console.error(`[meta] WARNING: Hit 100-page pagination cap. Account has more than ~50k items, data is being truncated.`);
   }
   return all;
 }
@@ -127,7 +127,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
   }
 
-  // Determine lookback window — pull a rolling 180-day (~6mo) window on every
+  // Determine lookback window, pull a rolling 180-day (~6mo) window on every
   // sync. The Executive view has a "Last 6 months" preset and partial months
   // at the far edge cause investor-facing charts to look wrong (e.g. Jan
   // showing $13.8k when only Jan 20-31 was captured). 180d covers the widest
@@ -155,7 +155,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
 
     // ── Step 2: Fetch ALL ads regardless of status ─
-    // Pulling everything ensures ad statuses are always up-to-date — if user paused
+    // Pulling everything ensures ad statuses are always up-to-date, if user paused
     // an ad in Meta, we'll see the new status on next sync.
     console.log("[sync] Step 2: Fetching all ads (all statuses)...");
     let allAdsFetch: any[] = [];
@@ -277,14 +277,14 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         assetLink ||
         null;
 
-      // Image URL priority — balance SHARPNESS vs EXPIRY:
-      //   1-3. Stable CDN URLs (asset_feed, story_picture, story_photo) —
+      // Image URL priority, balance SHARPNESS vs EXPIRY:
+      //   1-3. Stable CDN URLs (asset_feed, story_picture, story_photo),
       //        scontent.* URLs that don't expire. Use when available.
-      //   4.   image_hash → adimages.permalink_url — stable, full resolution.
-      //   5.   creative.thumbnail_url at 1080x1080 — SIGNED, expires ~8h,
+      //   4.   image_hash → adimages.permalink_url, stable, full resolution.
+      //   5.   creative.thumbnail_url at 1080x1080, SIGNED, expires ~8h,
       //        but we resync hourly so the URL stays fresh. Much sharper
       //        than image_url. ACCEPTABLE because sync keeps it current.
-      //   6.   creative.image_url — small (~100-400px) but stable. Last resort.
+      //   6.   creative.image_url, small (~100-400px) but stable. Last resort.
       const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
       const storyPictureLink = creative.object_story_spec?.link_data?.picture;
       const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
@@ -294,7 +294,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         storyPictureLink ||
         storyPicturePhoto ||
         hashResolved ||
-        creative.thumbnail_url ||   // 1080x1080 signed — refreshed by hourly sync
+        creative.thumbnail_url ||   // 1080x1080 signed, refreshed by hourly sync
         creative.image_url ||
         null;
       // thumbnailUrl is ONLY used if imageUrl is missing. It's signed/expiring,
@@ -337,7 +337,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
 
     // ── Step 3: Fetch insights for ALL synced ads (active + paused) ─
-    // Paused ads may have had spend earlier in the month — must include them
+    // Paused ads may have had spend earlier in the month, must include them
     console.log("[sync] Step 3: Fetching insights for all synced ads...");
     await delay(500);
 
@@ -461,7 +461,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     console.log(`[sync] Got ${insights.length} insight rows`);
 
-    // Identify insight ads we don't have records for (archived/deleted) — create stub ad rows
+    // Identify insight ads we don't have records for (archived/deleted), create stub ad rows
     // so their spend isn't dropped by join filters on the leads page
     const knownAdIds = new Set(allAds.map((a: any) => a.id));
     const orphanAdIds = new Set<string>();

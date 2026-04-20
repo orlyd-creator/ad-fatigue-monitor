@@ -204,7 +204,7 @@ export default function TeamClient({
           <span className="text-[11px] font-medium text-[#D06AB8] bg-[#D06AB8]/10 px-2 py-0.5 rounded-full">No login</span>
         </div>
         <p className="text-[13px] text-muted-foreground mb-4">
-          Create a link that opens the <span className="font-medium text-foreground">whole platform</span> — Dashboard, Leads, Executive, Ads, all of it.
+          Create a link that opens the <span className="font-medium text-foreground">whole platform</span>, Dashboard, Leads, Executive, Ads, all of it.
           No sign-in, no Facebook. Live data, view-only. Revoke anytime.
         </p>
         <form onSubmit={handleCreatePublic} className="flex gap-2">
@@ -358,7 +358,7 @@ export default function TeamClient({
         )}
         {successEmail && (
           <div className="mt-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-[13px] text-green-700">
-            Invited {successEmail}. Send them the app URL — they'll log in with Facebook and get access.
+            Invited {successEmail}. Send them the app URL, they'll log in with Facebook and get access.
           </div>
         )}
       </div>
@@ -395,7 +395,7 @@ export default function TeamClient({
       </div>
 
       <div className="mt-6 text-[12px] text-muted-foreground leading-relaxed">
-        Teammates see your exact view — same Meta Ads, same HubSpot, no integrations required.
+        Teammates see your exact view, same Meta Ads, same HubSpot, no integrations required.
       </div>
     </main>
   );

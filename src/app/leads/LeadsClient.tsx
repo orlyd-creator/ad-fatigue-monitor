@@ -87,7 +87,7 @@ export default function LeadsClient({
   const costPerClick = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const hasHubSpot = (hubspotATM && hubspotATM.length > 0) || (hubspotMQLs && hubspotMQLs.length > 0);
 
-  // Week-over-week ATM — bucket daily ATM counts into ISO weeks (Mon → Sun)
+  // Week-over-week ATM, bucket daily ATM counts into ISO weeks (Mon → Sun)
   const weeklyATM = (() => {
     if (!hubspotATM || hubspotATM.length === 0) return [] as { weekStart: string; atm: number; sqls: number; label: string }[];
     const getMonday = (d: Date) => {
@@ -149,7 +149,7 @@ export default function LeadsClient({
             <span className="gradient-text">Leads</span>
           </h1>
           <p className="text-gray-600 mt-1 text-[14px]">
-            Meta ad performance {hasHubSpot ? "& HubSpot leads" : ""} — your source of truth
+            Meta ad performance {hasHubSpot ? "& HubSpot leads" : ""}, your source of truth
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 glass rounded-xl px-3 py-2 shadow-sm">
@@ -203,8 +203,8 @@ export default function LeadsClient({
               <div className="text-[12px] text-gray-500 mt-1">SQLs</div>
               <div className="text-[10px] text-gray-400">Qualified</div>
             </button>
-            <StatCard label="CPL" value={cplATM ? `$${cplATM.toFixed(2)}` : "—"} color="#D06AB8" subtitle="per Inbound Lead" />
-            <StatCard label="Cost per SQL" value={costPerSQL ? `$${costPerSQL.toFixed(2)}` : "—"} color="#F04E80" />
+            <StatCard label="CPL" value={cplATM ? `$${cplATM.toFixed(2)}` : "-"} color="#D06AB8" subtitle="per Inbound Lead" />
+            <StatCard label="Cost per SQL" value={costPerSQL ? `$${costPerSQL.toFixed(2)}` : "-"} color="#F04E80" />
           </div>
 
           {/* Drill-down table */}
@@ -212,7 +212,7 @@ export default function LeadsClient({
             <div className="lv-card p-6 mb-8 animate-in slide-in-from-top-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[15px] font-semibold text-gray-900">
-                  {drillDown === "atm" ? "Inbound Leads (ATM)" : "SQLs"} — {drillContacts.length} contacts
+                  {drillDown === "atm" ? "Inbound Leads (ATM)" : "SQLs"}, {drillContacts.length} contacts
                 </h3>
                 <button onClick={() => setDrillDown(null)} className="cursor-pointer text-[12px] text-gray-400 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 min-h-[32px]">
                   Close
@@ -234,15 +234,15 @@ export default function LeadsClient({
                   <tbody>
                     {drillContacts.map((c) => (
                       <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-2 px-2 font-medium text-gray-900">{c.name || "—"}</td>
-                        <td className="py-2 px-2 text-gray-600">{c.email || "—"}</td>
-                        <td className="py-2 px-2 text-gray-600">{c.company || "—"}</td>
+                        <td className="py-2 px-2 font-medium text-gray-900">{c.name || "-"}</td>
+                        <td className="py-2 px-2 text-gray-600">{c.email || "-"}</td>
+                        <td className="py-2 px-2 text-gray-600">{c.company || "-"}</td>
                         <td className="py-2 px-2">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${sourceColor(c.source)}`}>
                             {friendlySource(c.source)}
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "—"}>{c.campaign || "—"}</td>
+                        <td className="py-2 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "-"}>{c.campaign || "-"}</td>
                         <td className="py-2 px-2">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
                             c.type === "sql" ? "bg-cyan-50 text-cyan-700" :
@@ -300,7 +300,7 @@ export default function LeadsClient({
                 <Tooltip
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
-                    if (value === null || value === undefined) return ["—", name];
+                    if (value === null || value === undefined) return ["-", name];
                     if (name === "Spend") return [`$${Number(value).toFixed(2)}`, "Spend"];
                     if (name === "CPL") return [`$${Number(value).toFixed(2)}`, "CPL"];
                     return [value, name];
@@ -331,7 +331,7 @@ export default function LeadsClient({
                 <Tooltip
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
-                    if (value === null || value === undefined) return ["—", name];
+                    if (value === null || value === undefined) return ["-", name];
                     if (name === "Spend") return [`$${Number(value).toFixed(2)}`, "Spend"];
                     if (name === "Cost per SQL") return [`$${Number(value).toFixed(2)}`, "Cost per SQL"];
                     return [value, name];
@@ -373,7 +373,7 @@ export default function LeadsClient({
         </div>
       </div>
 
-      {/* Daily Spend by Campaign — Stacked Area */}
+      {/* Daily Spend by Campaign, Stacked Area */}
       <div className="lv-card p-6 mb-8">
         <h2 className="text-[16px] font-semibold mb-1">Daily Spend by Campaign</h2>
         <p className="text-[12px] text-gray-500 mb-4">Where is your budget going each day?</p>
@@ -727,8 +727,8 @@ function LeadAttribution({ contacts }: { contacts: LeadContact[] }) {
                 {granularData.map((c) => (
                   <tr key={c.name} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-2.5 px-2 font-medium text-gray-900 max-w-[260px] truncate" title={c.name}>{c.name}</td>
-                    {view !== "campaign" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "—"}>{c.campaign || "—"}</td>}
-                    {view === "ad" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.adset || "—"}>{c.adset || "—"}</td>}
+                    {view !== "campaign" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.campaign || "-"}>{c.campaign || "-"}</td>}
+                    {view === "ad" && <td className="py-2.5 px-2 text-gray-600 max-w-[180px] truncate" title={c.adset || "-"}>{c.adset || "-"}</td>}
                     <td className="py-2.5 px-2 text-gray-500">{c.source}</td>
                     <td className="py-2.5 px-2 text-right font-semibold">{c.count}</td>
                     <td className="py-2.5 px-2 text-right text-gray-500">{((c.count / contacts.length) * 100).toFixed(1)}%</td>

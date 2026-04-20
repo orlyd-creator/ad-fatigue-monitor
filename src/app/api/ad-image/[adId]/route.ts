@@ -48,7 +48,7 @@ async function resolveImageUrl(
     const creative = data.creative || {};
 
     // Gather all possible image_hash candidates in priority order.
-    // Carousel ads have NO root image_hash — their hashes live on each
+    // Carousel ads have NO root image_hash, their hashes live on each
     // child_attachment. We pick the first card's image as the hero thumbnail.
     const childAttachments =
       creative.object_story_spec?.link_data?.child_attachments || [];

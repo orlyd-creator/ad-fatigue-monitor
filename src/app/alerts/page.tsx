@@ -15,7 +15,7 @@ export default async function AlertsPage() {
   if (!accountId) redirect("/login");
   const allAccountIds: string[] = session.allAccountIds;
 
-  // Get ACTIVE ad IDs belonging to ALL of user's accounts — never show alerts for paused/archived ads
+  // Get ACTIVE ad IDs belonging to ALL of user's accounts, never show alerts for paused/archived ads
   const userAds = await db.select({ id: ads.id, status: ads.status }).from(ads).where(inArray(ads.accountId, allAccountIds)).all();
   const activeAdIds = userAds.filter(a => a.status === "ACTIVE").map(a => a.id);
   const userAdIds = activeAdIds;

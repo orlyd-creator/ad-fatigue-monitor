@@ -100,7 +100,7 @@ button, a, [role="button"] {
 }
 .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 
-/* === Cards — solid whites, no backdrop-filter, no pseudo-element overlays === */
+/* === Cards, solid whites, no backdrop-filter, no pseudo-element overlays === */
 .lv-card {
   background: rgba(255, 255, 255, 0.88);
   border-radius: 20px;
@@ -118,7 +118,7 @@ button, a, [role="button"] {
   border-radius: 12px;
 }
 
-/* Status cards — clean hover, no pseudo-elements */
+/* Status cards, clean hover, no pseudo-elements */
 .status-card-hover:hover {
   box-shadow: 0 8px 24px rgba(107, 147, 216, 0.12);
 }
@@ -167,7 +167,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE);
 }
 
-/* Print styles — drives the "Export PDF" button on /executive */
+/* Print styles, drives the "Export PDF" button on /executive */
 @media print {
   /* Kill chrome: sidebar, chat bubble, any explicitly-excluded element */
   aside, nav, .sidebar, #chat-bot-root, .exec-no-print, [data-exec-no-print] {

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const label = String(body.label || "").trim().slice(0, 80) || null;
 
-  // 24 hex chars — URL-safe and collision-resistant enough for an internal share link.
+  // 24 hex chars, URL-safe and collision-resistant enough for an internal share link.
   const token = randomBytes(12).toString("hex");
   const createdBy = (session as any).email || null;
 

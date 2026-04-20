@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
   // Known property internal names for Obol's HubSpot portal (confirmed 2026-04-20):
   //   "Agreed to Meet Date" (company) → willing_to_meet  (yes, the label is "Agreed to Meet Date"
-  //     even though the internal name is willing_to_meet — HS lets you rename labels)
+  //     even though the internal name is willing_to_meet, HS lets you rename labels)
   //   "Lead Source " (company, note trailing space in label) → lead_source__cloned_
   //   "Tier" (company) → tier
   const atmProp = "willing_to_meet";

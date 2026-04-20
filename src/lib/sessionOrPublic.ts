@@ -36,7 +36,7 @@ export async function getSessionOrPublic(): Promise<SessionLike | null> {
     };
   }
 
-  // No real session — check the public token cookie
+  // No real session, check the public token cookie
   const jar = await cookies();
   const token = jar.get("public_view")?.value;
   if (!token) return null;

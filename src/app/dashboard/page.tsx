@@ -60,7 +60,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     : DEFAULT_SETTINGS;
 
   // Get ACTIVE ads from ALL of user's ad accounts. Dashboard is "what's
-  // running now" — paused/archived/deleted shouldn't clutter the view.
+  // running now", paused/archived/deleted shouldn't clutter the view.
   // Historical spend from non-active ads still counts on Executive.
   const allAdsRaw = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
   const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
@@ -116,7 +116,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);
 
   // For aggregate spend/clicks/impressions use ALL ads including paused,
-  // archived, deleted, and synthetic __unattributed_* rows — Meta stops
+  // archived, deleted, and synthetic __unattributed_* rows, Meta stops
   // exposing ads once deleted but their historical spend still counts in
   // the period total. The filtered `allAds` is only for the card list.
   const userAdIds = new Set(allAdsRaw.map(a => a.id));
@@ -174,7 +174,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const clickChange = prevClicks > 0 ? ((totalClicksRange - prevClicks) / prevClicks) * 100 : 0;
   const ctrChange = prevCTR > 0 ? ((overallCTR - prevCTR) / prevCTR) * 100 : 0;
 
-  // --- Wasted spend estimate (ACTIVE ads only — don't count old/paused ads) ---
+  // --- Wasted spend estimate (ACTIVE ads only, don't count old/paused ads) ---
   const fatiguedAds = results.filter(r => r.status === "ACTIVE" && r.fatigue.fatigueScore >= 50);
   const fatiguedAdIds = new Set(
     fatiguedAds.map(r => r.id)

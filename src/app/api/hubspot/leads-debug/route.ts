@@ -17,7 +17,7 @@ interface SearchResponse {
   paging?: { next?: { after: string } };
 }
 
-// Same defaults as lib/hubspot/client.ts — keep in sync
+// Same defaults as lib/hubspot/client.ts, keep in sync
 const ATM_PROPERTY = "agreed_to_meet_date___test_";
 const SQL_STATUSES = ["SQL", "OPEN_DEAL"];
 const SQL_STAGES = ["opportunity", "customer"];
@@ -25,7 +25,7 @@ const VALID_TIERS = new Set(["smb", "midmarket", "enterprise"]);
 
 const normalizeTier = (t: string) => t.toLowerCase().replace(/[_\s-]/g, "");
 
-/** HS returns date properties as "YYYY-MM-DD" strings OR millisecond timestamps — handle both. */
+/** HS returns date properties as "YYYY-MM-DD" strings OR millisecond timestamps, handle both. */
 function parseAtmDate(val: string | null | undefined): string {
   if (!val) return "";
   if (val.includes("-")) return val.slice(0, 10);
@@ -65,9 +65,9 @@ async function paginate(apiKey: string, body: any): Promise<HubSpotContact[]> {
 }
 
 /**
- * Diagnostic endpoint — mirrors getLeadsFunnel's ATM filter chain and returns
+ * Diagnostic endpoint, mirrors getLeadsFunnel's ATM filter chain and returns
  * per-company detail so the result set can be diff'd against HubSpot's native
- * "Inbound Leads By Tier" report. Permanent tool — hit this whenever counts drift.
+ * "Inbound Leads By Tier" report. Permanent tool, hit this whenever counts drift.
  *
  * Usage: /api/hubspot/leads-debug?from=YYYY-MM-DD&to=YYYY-MM-DD
  */
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       "firstname", "lastname", "email", "lifecyclestage",
       ATM_PROPERTY, "hs_lead_status", "company",
       "hs_analytics_source",
-      // Contact-level attribution fields — native report may filter on one of these
+      // Contact-level attribution fields, native report may filter on one of these
       "lead_source", "inbound_outbound", "qualified_lead",
       "hs_latest_source", "hs_analytics_source_data_1",
       "createdate",

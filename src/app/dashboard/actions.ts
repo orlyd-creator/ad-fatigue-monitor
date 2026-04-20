@@ -37,7 +37,7 @@ export async function refreshData() {
     let totalAlerts = 0;
     const allErrors: string[] = [];
 
-    // Sync ALL accounts — errors from empty accounts are suppressed when at least one has ads
+    // Sync ALL accounts, errors from empty accounts are suppressed when at least one has ads
     for (const account of accountsToSync) {
       if (account.tokenExpiresAt < Date.now()) {
         allErrors.push(`Account ${account.name}: token expired`);
@@ -50,7 +50,7 @@ export async function refreshData() {
       totalMetrics += result.metricsUpserted;
       totalAlerts += result.alertsGenerated;
       if (result.errors.length > 0) {
-        // Suppress "empty account" errors from secondary Meta accounts — they're noise, not failures
+        // Suppress "empty account" errors from secondary Meta accounts, they're noise, not failures
         const realErrors = result.errors.filter(e =>
           !/no campaigns|no ads found|make sure you have active campaigns/i.test(e)
         );

@@ -118,7 +118,7 @@ function TopAdCard({ title, ad, metric }: { title: string; ad: TopAd; metric: "s
           <div className="text-[12px] text-muted-foreground truncate mb-2">{ad.campaignName}</div>
           <div className="flex gap-4 text-[13px]">
             <div><span className="text-muted-foreground">Spend</span>{" "}<span className="font-semibold text-foreground tabular-nums">{formatMoney(ad.spend)}</span></div>
-            <div><span className="text-muted-foreground">{metric === "conversions" ? "Conversions" : "Cost/result"}</span>{" "}<span className="font-semibold text-foreground tabular-nums">{metric === "conversions" ? ad.conversions.toLocaleString() : ad.cpConv != null ? formatMoney(ad.cpConv) : "—"}</span></div>
+            <div><span className="text-muted-foreground">{metric === "conversions" ? "Conversions" : "Cost/result"}</span>{" "}<span className="font-semibold text-foreground tabular-nums">{metric === "conversions" ? ad.conversions.toLocaleString() : ad.cpConv != null ? formatMoney(ad.cpConv) : "-"}</span></div>
           </div>
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function ExecutiveClient({
         <button
           onClick={() => window.print()}
           className="exec-no-print flex-shrink-0 px-4 py-2.5 rounded-xl text-[13px] font-medium text-white bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] shadow-md shadow-purple-100 hover:shadow-lg transition-all flex items-center gap-2"
-          title="Save as PDF — use your browser's print dialog"
+          title="Save as PDF, use your browser's print dialog"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -230,11 +230,11 @@ export default function ExecutiveClient({
           </div>
           <div>
             <div className="text-[11px] text-muted-foreground uppercase tracking-wide">Cost per demo</div>
-            <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.cpl != null ? formatMoney(rangeTotals.cpl) : "—"}</div>
+            <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.cpl != null ? formatMoney(rangeTotals.cpl) : "-"}</div>
           </div>
           <div>
             <div className="text-[11px] text-muted-foreground uppercase tracking-wide">Cost per SQL</div>
-            <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.costPerSQL != null ? formatMoney(rangeTotals.costPerSQL) : "—"}</div>
+            <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.costPerSQL != null ? formatMoney(rangeTotals.costPerSQL) : "-"}</div>
           </div>
         </div>
       </div>
@@ -248,7 +248,7 @@ export default function ExecutiveClient({
         <StatCard label="Ad spend" value={formatMoney(thisMonth.spend)} delta={deltas.spend} />
         <StatCard label="Demos booked" value={thisMonth.atm.toLocaleString()} delta={deltas.atm} />
         <StatCard label="SQLs" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} />
-        <StatCard label="Cost per demo" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "—"} delta={deltas.cpl} invertDelta />
+        <StatCard label="Cost per demo" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "-"} delta={deltas.cpl} invertDelta />
       </div>
 
       {/* Main trend chart */}
@@ -281,7 +281,7 @@ export default function ExecutiveClient({
         )}
       </div>
 
-      {/* Efficiency charts — CPL + Cost per SQL + SQL rate */}
+      {/* Efficiency charts, CPL + Cost per SQL + SQL rate */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="lv-card p-6">
           <div className="mb-4">
@@ -375,8 +375,8 @@ export default function ExecutiveClient({
                 <td className="py-2 pr-4 text-right tabular-nums">{formatMoney(row.spend)}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{row.atm.toLocaleString()}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{row.sqls.toLocaleString()}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{row.atm > 0 ? formatMoney(row.cpl) : "—"}</td>
-                <td className="py-2 text-right tabular-nums">{row.sqls > 0 ? formatMoney(row.costPerSQL) : "—"}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">{row.atm > 0 ? formatMoney(row.cpl) : "-"}</td>
+                <td className="py-2 text-right tabular-nums">{row.sqls > 0 ? formatMoney(row.costPerSQL) : "-"}</td>
               </tr>
             ))}
           </tbody>

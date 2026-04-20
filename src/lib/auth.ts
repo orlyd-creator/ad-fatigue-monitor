@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 
 // Google is enabled only when both env vars are set, so a missing GOOGLE_CLIENT_ID
-// won't crash the app — FB continues to work alone.
+// won't crash the app, FB continues to work alone.
 const googleEnabled = !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
 const providers: any[] = [
   Facebook({
@@ -17,7 +17,7 @@ const providers: any[] = [
     // No explicit scope → defaults to public_profile only. This lets ANY FB user
     // log in (ads_read/ads_management would require them to be added as a dev on
     // Orly's FB app or the app to pass FB review). The owner's Meta token was
-    // already stored on her first login and is still valid in the DB — we don't
+    // already stored on her first login and is still valid in the DB, we don't
     // try to refresh it on subsequent sign-ins. If she ever needs to refresh,
     // that can be a separate admin-only "Reconnect Meta" flow.
   }),
@@ -59,7 +59,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         : [];
       const isOwner = existingOwnerAccounts.length > 0;
 
-      // Check if this user was invited — either by specific email OR by domain.
+      // Check if this user was invited, either by specific email OR by domain.
       // Domain invites look like "@obol.app" and match any email ending in that domain.
       let isInvitedTeammate = false;
       if (email) {
@@ -77,7 +77,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .where(eq(teamInvites.email, email))
             .run();
         } else {
-          // Domain invite — check all "@domain" entries
+          // Domain invite, check all "@domain" entries
           const domain = email.includes("@") ? `@${email.split("@")[1]}` : "";
           if (domain) {
             const domainInvite = await db
@@ -145,7 +145,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const isFirstUser = anyAccountExists === 0;
 
       if (!isOwner && !isInvitedTeammate && !hasValidShareToken && !isFirstUser) {
-        console.log(`[auth] Rejected sign-in from ${email || fbUserId} — not owner, not invited, no share token`);
+        console.log(`[auth] Rejected sign-in from ${email || fbUserId}, not owner, not invited, no share token`);
         return false;
       }
 
@@ -159,7 +159,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Owner (or first-ever user): try to refresh Meta ad-account token, but
       // don't block the login if it fails. The FB app scope no longer requests
       // ads_read/ads_management (that scope blocks non-dev-team users), so
-      // most logins won't have a token usable for Meta Graph — and that's fine,
+      // most logins won't have a token usable for Meta Graph, and that's fine,
       // the owner's existing stored token keeps working.
       try {
         const permsRes = await fetch(
@@ -171,7 +171,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .map((p: any) => p.permission);
         const hasAds = granted.includes("ads_read") || granted.includes("ads_management");
         if (!hasAds) {
-          console.log(`[auth] Owner signed in without ads permissions — keeping existing stored Meta token`);
+          console.log(`[auth] Owner signed in without ads permissions, keeping existing stored Meta token`);
           return true;
         }
 
@@ -181,7 +181,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           process.env.META_APP_SECRET!
         );
         const adAccounts = await getAdAccounts(longLived.access_token);
-        console.log(`[auth] Found ${adAccounts.length} ad accounts — refreshing stored tokens`);
+        console.log(`[auth] Found ${adAccounts.length} ad accounts, refreshing stored tokens`);
 
         for (const adAccount of adAccounts) {
           const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
@@ -206,7 +206,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
         return true;
       } catch (err) {
-        // Non-fatal — fall through and let the owner log in on existing token.
+        // Non-fatal, fall through and let the owner log in on existing token.
         console.error("[auth] Meta refresh failed (non-fatal):", err);
         return true;
       }
@@ -230,7 +230,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         ? await db.select().from(accounts).where(eq(accounts.userId, providerAccountId)).all()
         : [];
 
-      // Invited teammate: no accounts under their ID — fall through to the shared
+      // Invited teammate: no accounts under their ID, fall through to the shared
       // (owner's) account so they see the same data as the owner.
       if (userAccounts.length === 0) {
         userAccounts = await db.select().from(accounts).all();

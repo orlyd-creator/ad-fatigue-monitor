@@ -52,7 +52,7 @@ export default async function PublicExecutivePage({
     .where(eq(publicLinks.token, token))
     .run();
 
-  // Owner's Meta accounts — public viewer sees everything across every connected ad account.
+  // Owner's Meta accounts, public viewer sees everything across every connected ad account.
   const allAccountRows = await db.select({ id: accounts.id }).from(accounts).all();
   const allAccountIds = allAccountRows.map(r => r.id);
 
@@ -223,7 +223,7 @@ export default async function PublicExecutivePage({
       <div className="bg-gradient-to-r from-[#6B93D8]/10 via-[#9B7ED0]/10 to-[#D06AB8]/10 border-b border-border exec-no-print">
         <div className="max-w-6xl mx-auto px-6 py-2 text-[12px] text-muted-foreground flex items-center justify-between">
           <span>
-            {link.label ? <>Shared view — <span className="font-medium text-foreground">{link.label}</span></> : "Shared view"}
+            {link.label ? <>Shared view, <span className="font-medium text-foreground">{link.label}</span></> : "Shared view"}
           </span>
           <span className="text-[11px]">View-only · live data</span>
         </div>
@@ -234,7 +234,7 @@ export default async function PublicExecutivePage({
         rangeLabel={
           buckets.length === 1
             ? buckets[0].label
-            : `${format(fromDate, "MMM d, yyyy")} — ${format(toDate, "MMM d, yyyy")}`
+            : `${format(fromDate, "MMM d, yyyy")}, ${format(toDate, "MMM d, yyyy")}`
         }
         rangeFrom={rangeFromStr}
         rangeTo={rangeToStr}

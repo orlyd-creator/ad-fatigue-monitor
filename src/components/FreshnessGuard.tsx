@@ -32,7 +32,7 @@ export default function FreshnessGuard({
     const minutes = Math.floor((Date.now() - lastSyncedAt) / 60000);
     setAgeMin(minutes);
 
-    // Public viewers don't trigger sync — keep it owner-only so we don't
+    // Public viewers don't trigger sync, keep it owner-only so we don't
     // burn Meta rate limits on every anonymous link click.
     if (isPublic) return;
     if (minutes < staleAfterMinutes) return;
@@ -71,7 +71,7 @@ export default function FreshnessGuard({
         <span className="font-medium text-foreground">{metaLabel}</span>
       </div>
 
-      {/* HubSpot freshness pill — fetched live on every page load */}
+      {/* HubSpot freshness pill, fetched live on every page load */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 border border-border">
         <span className="w-2 h-2 rounded-full bg-emerald-500" />
         <span className="text-muted-foreground">HubSpot</span>
@@ -89,7 +89,7 @@ export default function FreshnessGuard({
 
       {status === "error" && (
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-700">
-          Auto-refresh failed — click Refresh in the sidebar
+          Auto-refresh failed, click Refresh in the sidebar
         </div>
       )}
     </div>

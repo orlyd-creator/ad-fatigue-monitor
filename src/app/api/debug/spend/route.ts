@@ -7,7 +7,7 @@ import { gte, lte, and, sql, inArray } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 /**
- * Debug spend — hit /api/debug/spend?from=2026-04-01&to=2026-04-20 (logged in).
+ * Debug spend, hit /api/debug/spend?from=2026-04-01&to=2026-04-20 (logged in).
  * Breaks down daily_metrics totals by account + unattributed vs real so we can
  * see exactly where the $27k-vs-$13.9k gap is coming from.
  */

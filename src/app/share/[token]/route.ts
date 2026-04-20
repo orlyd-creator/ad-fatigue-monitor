@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  *
  * Implemented as a Route Handler (GET) rather than a Server Component
  * because cookies().set() is not allowed inside Server Components in
- * Next.js 16 — only in Route Handlers and Server Actions.
+ * Next.js 16, only in Route Handlers and Server Actions.
  */
 export async function GET(
   req: NextRequest,

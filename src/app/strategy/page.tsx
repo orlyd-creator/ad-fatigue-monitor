@@ -33,7 +33,7 @@ export default async function StrategyPage({
   const allAccountIds: string[] = session.allAccountIds;
 
   // Read the user-selected date range (used by the Leads date picker that
-  // lives inside LeadsClient — pushes ?from=&to= to this page).
+  // lives inside LeadsClient, pushes ?from=&to= to this page).
   const params = (await searchParams) || {};
 
   // Get settings
@@ -53,18 +53,18 @@ export default async function StrategyPage({
     : DEFAULT_SETTINGS;
 
   // Fetch ALL ads (needed for range-scoped spend totals that include paused /
-  // archived / unattributed rows — matches Dashboard accuracy).
+  // archived / unattributed rows, matches Dashboard accuracy).
   const allAdsRaw = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
   // ACTIVE-only ad summaries for the per-ad detail cards.
   const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
 
-  // This month is the default range — matches the Executive + Dashboard defaults.
+  // This month is the default range, matches the Executive + Dashboard defaults.
   // Allow ?from=&to= override from the Leads date picker.
   const now = new Date();
   const rangeStart = params.from || format(startOfMonth(now), "yyyy-MM-dd");
   const rangeEnd = params.to || format(endOfMonth(now), "yyyy-MM-dd");
 
-  // Process each ACTIVE ad — summaries use ALL-TIME metrics for fatigue scoring
+  // Process each ACTIVE ad, summaries use ALL-TIME metrics for fatigue scoring
   // (fatigue needs history) but display numbers are range-scoped to this month.
   const adSummaries = await Promise.all(
     allAds.map(async (ad) => {
@@ -160,7 +160,7 @@ export default async function StrategyPage({
   const totalClicks = rangeScopedAll.reduce((s, m) => s + (m.clicks ?? 0), 0);
   const totalImpressionsAll = rangeScopedAll.reduce((s, m) => s + (m.impressions ?? 0), 0);
 
-  // Campaign-level aggregates — spend/reach/clicks MUST include paused/archived/
+  // Campaign-level aggregates, spend/reach/clicks MUST include paused/archived/
   // unattributed rows so totals match Dashboard + top-line. Previous version summed
   // adSummaries (ACTIVE-only) which silently dropped historical spend.
   const campaignNameById = new Map(allAdsRaw.map(a => [a.id, a.campaignName]));
@@ -201,7 +201,7 @@ export default async function StrategyPage({
     : 100;
 
   // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
-  // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
+  // Meta-driven cost-per-demo and cost-per-SQL, the numbers that actually
   // matter for growth decisions.
   const [hs, utmLeads, won] = await Promise.all([
     getLeadsFunnel(rangeStart, rangeEnd).catch((err) => {
@@ -406,7 +406,7 @@ export default async function StrategyPage({
     return row;
   });
 
-  // Daily CPL + Cost-per-SQL — merges daily spend with daily ATM & SQL counts.
+  // Daily CPL + Cost-per-SQL, merges daily spend with daily ATM & SQL counts.
   const atmByDate = new Map(hubspotATM.map((d) => [d.date, d.atm]));
   const sqlsByDate = new Map(hubspotATM.map((d) => [d.date, d.sqls]));
   const dailyCPL = dailyData.map((day) => {

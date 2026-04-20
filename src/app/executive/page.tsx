@@ -18,7 +18,7 @@ export const revalidate = 0;
 export const maxDuration = 300;
 
 /**
- * Executive View — CEO-friendly dashboard with:
+ * Executive View, CEO-friendly dashboard with:
  * - Date range selector (query-driven so links + PDFs are shareable)
  * - KPI cards with month-over-month deltas
  * - Trend lines, CPL trend, campaign breakdown, monthly summary table
@@ -38,7 +38,7 @@ export default async function ExecutivePage({
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
-  // Default to this month — it's the most actionable view on page load.
+  // Default to this month, it's the most actionable view on page load.
   // Users can switch to 3m/6m/YTD via the preset buttons.
   const defaultFrom = thisMonthStart;
 
@@ -128,7 +128,7 @@ export default async function ExecutivePage({
   }
   for (const b of buckets) b.spend = Math.round(b.spend * 100) / 100;
 
-  // Current vs previous month (for top cards) — computed from the ALL-metrics
+  // Current vs previous month (for top cards), computed from the ALL-metrics
   // set (metricsRaw) so the card works regardless of the selected range.
   const lastMonthStart = lastMonthStartLocal;
   const lastMonthEnd = endOfMonth(lastMonthStart);
@@ -254,7 +254,7 @@ export default async function ExecutivePage({
         rangeLabel={
           buckets.length === 1
             ? buckets[0].label
-            : `${format(fromDate, "MMM d, yyyy")} — ${format(toDate, "MMM d, yyyy")}`
+            : `${format(fromDate, "MMM d, yyyy")}, ${format(toDate, "MMM d, yyyy")}`
         }
         rangeFrom={rangeFromStr}
         rangeTo={rangeToStr}

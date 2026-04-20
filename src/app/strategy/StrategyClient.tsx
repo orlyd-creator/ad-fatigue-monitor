@@ -166,7 +166,7 @@ export default function StrategyClient({
       {/* FUNNEL: Spend → Clicks → Demos → SQLs (Meta × HubSpot) */}
       <div className="lv-card p-6 mb-6 bg-gradient-to-br from-[#6B93D8]/5 via-[#9B7ED0]/5 to-[#D06AB8]/5">
         <div className="mb-4">
-          <h2 className="text-[15px] font-semibold text-foreground">Funnel — {rangeLabel}</h2>
+          <h2 className="text-[15px] font-semibold text-foreground">Funnel, {rangeLabel}</h2>
           <p className="text-[12px] text-muted-foreground">Ad spend through to qualified deals.</p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -185,14 +185,14 @@ export default function StrategyClient({
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Demos Booked</div>
             <div className="text-[22px] font-bold text-[#9B7ED0] tabular-nums">{totalATM}</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              {clickToLeadRate !== null ? `${clickToLeadRate.toFixed(2)}% of clicks` : "—"}
+              {clickToLeadRate !== null ? `${clickToLeadRate.toFixed(2)}% of clicks` : "-"}
             </div>
           </div>
           <div className="rounded-xl bg-white/70 p-4 text-center">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">SQLs</div>
             <div className="text-[22px] font-bold text-[#D06AB8] tabular-nums">{totalSQLs}</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              {demoToSQLRate !== null ? `${demoToSQLRate.toFixed(1)}% of demos` : "—"}
+              {demoToSQLRate !== null ? `${demoToSQLRate.toFixed(1)}% of demos` : "-"}
             </div>
           </div>
         </div>
@@ -200,13 +200,13 @@ export default function StrategyClient({
           <div className="rounded-xl bg-gradient-to-r from-[#6B93D8]/10 to-[#9B7ED0]/10 p-4">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per Demo</div>
             <div className="text-[24px] font-bold text-foreground tabular-nums">
-              {costPerDemo !== null ? formatCurrency(costPerDemo) : "—"}
+              {costPerDemo !== null ? formatCurrency(costPerDemo) : "-"}
             </div>
           </div>
           <div className="rounded-xl bg-gradient-to-r from-[#9B7ED0]/10 to-[#D06AB8]/10 p-4">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per SQL</div>
             <div className="text-[24px] font-bold text-foreground tabular-nums">
-              {costPerSQL !== null ? formatCurrency(costPerSQL) : "—"}
+              {costPerSQL !== null ? formatCurrency(costPerSQL) : "-"}
             </div>
           </div>
         </div>
@@ -216,7 +216,7 @@ export default function StrategyClient({
       <div className="lv-card p-6 mb-6">
         <div className="mb-4">
           <h2 className="text-[15px] font-semibold text-foreground">Day-of-week performance</h2>
-          <p className="text-[12px] text-muted-foreground">Spend + CTR by weekday — spot your best + worst days.</p>
+          <p className="text-[12px] text-muted-foreground">Spend + CTR by weekday, spot your best + worst days.</p>
         </div>
         <div style={{ width: "100%", height: 220 }}>
           <ResponsiveContainer>
@@ -332,7 +332,7 @@ export default function StrategyClient({
             </div>
           </div>
 
-          {/* Strategic recommendations — always at the top of Analytics so
+          {/* Strategic recommendations, always at the top of Analytics so
               Orly sees the most impactful actions first. */}
           {recommendations.length > 0 && (
             <RecommendationsPanel
@@ -360,7 +360,7 @@ export default function StrategyClient({
             <div className="lv-card p-5 bg-gradient-to-br from-emerald-50 to-emerald-100/50">
               <div className="text-[11px] uppercase tracking-wide text-emerald-700 mb-1">ROAS</div>
               <div className="text-2xl font-semibold tabular-nums" style={{ color: totalROAS !== null && totalROAS >= 1 ? "#059669" : "#dc2626" }}>
-                {totalROAS !== null ? `${totalROAS.toFixed(2)}×` : "—"}
+                {totalROAS !== null ? `${totalROAS.toFixed(2)}×` : "-"}
               </div>
               <div className="text-[11px] text-emerald-700/70 mt-1">
                 ${totalROAS !== null ? totalROAS.toFixed(2) : "0"} revenue per $1 spent
@@ -368,7 +368,7 @@ export default function StrategyClient({
             </div>
           </div>
 
-          {/* Per-Campaign CPL + ROAS — Meta spend × HubSpot ATM leads + won revenue */}
+          {/* Per-Campaign CPL + ROAS, Meta spend × HubSpot ATM leads + won revenue */}
           <div className="lv-card p-6">
             <h2 className="text-[16px] font-semibold mb-1">Cost per Demo & ROAS by Campaign</h2>
             <p className="text-[12px] text-gray-500 mb-4">
@@ -408,17 +408,17 @@ export default function StrategyClient({
                         ${row.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </td>
                       <td className="py-2 pr-4 text-right tabular-nums">
-                        {row.leads > 0 ? row.leads : <span className="text-gray-400">—</span>}
+                        {row.leads > 0 ? row.leads : <span className="text-gray-400">-</span>}
                       </td>
                       <td className="py-2 pr-4 text-right tabular-nums font-semibold">
                         {row.cpl !== null
                           ? `$${row.cpl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                          : <span className="text-gray-400 font-normal">—</span>}
+                          : <span className="text-gray-400 font-normal">-</span>}
                       </td>
                       <td className="py-2 pr-4 text-right tabular-nums">
                         {row.revenue > 0
                           ? `$${row.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                          : <span className="text-gray-400">—</span>}
+                          : <span className="text-gray-400">-</span>}
                         {row.dealsWon > 0 && (
                           <span className="text-[10px] text-gray-400 ml-1">({row.dealsWon})</span>
                         )}
@@ -428,10 +428,10 @@ export default function StrategyClient({
                           <span style={{ color: row.roas >= 1 ? "#059669" : "#dc2626" }}>
                             {row.roas.toFixed(2)}×
                           </span>
-                        ) : <span className="text-gray-400 font-normal">—</span>}
+                        ) : <span className="text-gray-400 font-normal">-</span>}
                       </td>
                       <td className="py-2 pr-4 text-[11px] text-gray-500 truncate max-w-[200px]">
-                        {row.matchedUtm || <span className="text-gray-300">—</span>}
+                        {row.matchedUtm || <span className="text-gray-300">-</span>}
                       </td>
                     </tr>
                   ))}
@@ -473,7 +473,7 @@ export default function StrategyClient({
           {/* Daily Spend Trend (top ads) */}
           {dailySpendByAd.length > 0 && (
             <div className="lv-card p-6">
-              <h2 className="text-[16px] font-semibold mb-1">Daily Spend — Top Ads</h2>
+              <h2 className="text-[16px] font-semibold mb-1">Daily Spend, Top Ads</h2>
               <p className="text-[12px] text-gray-500 mb-4">Last 30 days spend per ad</p>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -526,7 +526,7 @@ export default function StrategyClient({
         <div className="space-y-6">
           {/* Spend Ranking */}
           <div className="lv-card p-6">
-            <h2 className="text-[16px] font-semibold mb-4">Spend Ranking — All Active Ads</h2>
+            <h2 className="text-[16px] font-semibold mb-4">Spend Ranking, All Active Ads</h2>
             <div className="space-y-2">
               {spendRanking.map((ad, i) => {
                 const pct = spendRanking[0].totalSpend > 0 ? (ad.totalSpend / spendRanking[0].totalSpend) * 100 : 0;

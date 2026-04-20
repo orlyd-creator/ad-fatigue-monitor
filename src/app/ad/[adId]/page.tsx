@@ -143,7 +143,7 @@ export default function AdDetailPage() {
           <p className="text-[13px] font-semibold mt-3" style={{ color: stageColor }}>{rec.action}</p>
         </div>
 
-        {/* Ad quality score + attribution — this month */}
+        {/* Ad quality score + attribution, this month */}
         {data.quality && data.context && (
           <div className="lv-card p-6 mb-6 relative overflow-hidden">
             <div
@@ -178,12 +178,12 @@ export default function AdDetailPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-gray-100">
-              <QualityStat label="CPL" value={data.context.adCPLThisMonth !== null ? `$${data.context.adCPLThisMonth}` : "—"} sub={data.context.accountCPL ? `avg $${data.context.accountCPL}` : undefined} />
+              <QualityStat label="CPL" value={data.context.adCPLThisMonth !== null ? `$${data.context.adCPLThisMonth}` : "-"} sub={data.context.accountCPL ? `avg $${data.context.accountCPL}` : undefined} />
               <QualityStat label="Leads" value={String(data.context.adLeadsThisMonth)} sub="this month" />
               <QualityStat label="Revenue" value={`$${data.context.adRevenueThisMonth.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="closed-won" />
               <QualityStat
                 label="ROAS"
-                value={data.context.adROASThisMonth !== null ? `${data.context.adROASThisMonth.toFixed(2)}×` : "—"}
+                value={data.context.adROASThisMonth !== null ? `${data.context.adROASThisMonth.toFixed(2)}×` : "-"}
                 valueColor={data.context.adROASThisMonth !== null && data.context.adROASThisMonth >= 1 ? "#059669" : data.context.adROASThisMonth !== null ? "#dc2626" : undefined}
               />
             </div>

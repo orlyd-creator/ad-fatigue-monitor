@@ -1,5 +1,5 @@
 /**
- * Next.js instrumentation — runs once when the server boots.
+ * Next.js instrumentation, runs once when the server boots.
  * Applies lightweight, idempotent schema changes that must exist on every deploy.
  * We intentionally avoid Drizzle's full migrator here because the production DB
  * was bootstrapped without migration tracking (migrator would try to recreate
@@ -24,7 +24,7 @@ export async function register() {
         last_seen_at INTEGER
       )
     `);
-    // share_tokens: shareable links — click URL → FB login → auto access.
+    // share_tokens: shareable links, click URL → FB login → auto access.
     await client.execute(`
       CREATE TABLE IF NOT EXISTS share_tokens (
         token TEXT PRIMARY KEY,
@@ -37,7 +37,7 @@ export async function register() {
       )
     `);
     // public_links: anonymous view-only links to executive dashboard.
-    // No login required — anyone with the URL sees the live executive view.
+    // No login required, anyone with the URL sees the live executive view.
     // Added 2026-04-20.
     await client.execute(`
       CREATE TABLE IF NOT EXISTS public_links (
@@ -51,7 +51,7 @@ export async function register() {
     `);
     console.log("[instrumentation] Schema ensured");
   } catch (err) {
-    // Don't crash the app — log and continue. The app still boots without this.
+    // Don't crash the app, log and continue. The app still boots without this.
     console.error("[instrumentation] Schema bootstrap failed:", err);
   }
 
@@ -75,7 +75,7 @@ export async function register() {
           const { syncAccount } = await import("@/lib/meta/sync");
           const { clearHubSpotCache } = await import("@/lib/hubspot/client");
           const rows = await db.select().from(accounts).all();
-          console.log(`[auto-sync] starting — ${rows.length} accounts`);
+          console.log(`[auto-sync] starting, ${rows.length} accounts`);
           for (const account of rows) {
             if (account.tokenExpiresAt < Date.now()) {
               console.warn(`[auto-sync] skipping ${account.id} (token expired)`);

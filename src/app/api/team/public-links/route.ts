@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const label = String(body.label || "").trim().slice(0, 80) || null;
 
-  // 16 bytes = 32 hex chars — longer than share_tokens since this is totally open.
+  // 16 bytes = 32 hex chars, longer than share_tokens since this is totally open.
   const token = randomBytes(16).toString("hex");
   const createdBy = (session as any).email || null;
 

@@ -21,7 +21,7 @@ function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T>
   return promise;
 }
 
-/** Invalidate all HubSpot funnel cache — call from Refresh / after sync. */
+/** Invalidate all HubSpot funnel cache, call from Refresh / after sync. */
 export function clearHubSpotCache() {
   _hsCache.clear();
 }
@@ -108,7 +108,7 @@ async function getApiKey(): Promise<string> {
 
 async function hubspotFetch(path: string, options?: RequestInit): Promise<any> {
   const apiKey = await getApiKey();
-  // Retry on 5xx + 429 — HubSpot rate-limits bursts, and parallel slice
+  // Retry on 5xx + 429, HubSpot rate-limits bursts, and parallel slice
   // queries easily trip that. Without retry, one 429 loses a whole month.
   let lastErr: any = null;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -132,7 +132,7 @@ async function hubspotFetch(path: string, options?: RequestInit): Promise<any> {
   throw lastErr || new Error("HubSpot API retry limit exceeded");
 }
 
-/** HS returns company date properties as "YYYY-MM-DD" strings OR millisecond timestamps — handle both. */
+/** HS returns company date properties as "YYYY-MM-DD" strings OR millisecond timestamps, handle both. */
 function parseCompanyDate(val: string | null | undefined): string {
   if (!val) return "";
   if (val.includes("-")) return val.slice(0, 10);
@@ -150,7 +150,7 @@ const COMPANY_LEAD_SOURCE_PROP = "lead_source__cloned_"; // label: "Lead Source 
 const COMPANY_TIER_PROP = "tier";
 const COMPANY_TIER_ALLOWLIST = ["SMB", "Mid-Market", "Enterprise"];
 
-// Deal-level filters for SQL count — mirrors native "SQLs Monthly (No rejects)" report.
+// Deal-level filters for SQL count, mirrors native "SQLs Monthly (No rejects)" report.
 // Pipeline ID + property name verified via /api/hubspot/sql-debug on 2026-04-20.
 const SQL_PIPELINE_ID = "1704584404";               // "Obol Sales Funnel (NEW)"
 const SQL_REJECT_PROP = "demo_accept_reject";
@@ -219,9 +219,9 @@ async function getSQLDealsInRange(fromTs: number, toTs: number): Promise<Array<{
 }
 
 /**
- * Lightweight variant — only returns daily ATM + SQL deal counts (no contacts, no MQL).
+ * Lightweight variant, only returns daily ATM + SQL deal counts (no contacts, no MQL).
  * Used by Executive View which doesn't need per-contact attribution.
- * Drops contact-association lookups and MQL query — typically 5-10x faster than full getLeadsFunnel.
+ * Drops contact-association lookups and MQL query, typically 5-10x faster than full getLeadsFunnel.
  */
 export async function getLeadsFunnelLite(
   fromDate: string,
@@ -300,14 +300,14 @@ async function _getLeadsFunnelLiteUncached(
 }
 
 // Closed-won stage IDs across ALL Obol pipelines. Orly's call (2026-04-20):
-// include PLG Live + Upsell Completed — "at end of the day we should include
+// include PLG Live + Upsell Completed, "at end of the day we should include
 // data". PLG Lost is the only explicit exclusion.
 const CLOSED_WON_STAGE_IDS = [
   "270845155",  // Closed Won (Obol Sales Pipeline LEGACY)
   "1735129325", // Closed Won (Micro SMB Sales Pipeline)
   "2626624699", // Closed Won (Upsell Pipeline)
   "4704358635", // Upsell Completed (PLG)
-  "4666719467", // Live (PLG) — treated as revenue-generating
+  "4666719467", // Live (PLG), treated as revenue-generating
 ];
 // Stages explicitly NOT counted as revenue.
 const CLOSED_WON_EXCLUDE = new Set<string>(["4562277596"]); // PLG Lost
@@ -453,7 +453,7 @@ async function _getClosedWonRevenueUncached(fromDate: string, toDate: string) {
  *
  * NOTE: Orly's HubSpot does NOT have `utm_campaign` as a contact property
  * (confirmed via schema inspection 2026-04-20). HS stores the Meta campaign
- * name on `hs_analytics_source_data_2` for PAID_SOCIAL contacts — usually
+ * name on `hs_analytics_source_data_2` for PAID_SOCIAL contacts, usually
  * lowercased but otherwise matching the Meta campaign name verbatim.
  * Fallbacks: hs_analytics_last_touch_converting_campaign → first_touch.
  *
@@ -473,7 +473,7 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
 
-  // Pull ATM contacts directly — single search, no association fan-out.
+  // Pull ATM contacts directly, single search, no association fan-out.
   // Requested properties must all exist in HS or the whole search 400s.
   const contactSearchBody = {
     filterGroups: [{
@@ -503,7 +503,7 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
     after = r.paging?.next?.after;
   } while (after);
 
-  // Dedupe by company — pick one contact per company (earliest ATM date wins).
+  // Dedupe by company, pick one contact per company (earliest ATM date wins).
   const byCompany = new Map<string, { contactId: string; campaign: string; atm: number }>();
   for (const c of contacts) {
     const companyId = c.properties.associatedcompanyid || c.id;
@@ -651,7 +651,7 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
 
   // For each matching company, fetch associated contacts for attribution (UTMs, ad, source)
   // and lifecycle/lead status (to classify SQL vs ATM).
-  // Query SQL deals in the same range — native "SQLs Monthly" is a Deals-primary report.
+  // Query SQL deals in the same range, native "SQLs Monthly" is a Deals-primary report.
   // Build a set of company IDs that have at least one SQL deal, and the total deal count.
   const sqlDeals = await getSQLDealsInRange(fromTs, toTs);
   const sqlCompanyIds = new Set(sqlDeals.map(d => d.companyId).filter(Boolean) as string[]);
@@ -713,7 +713,7 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
     console.error("Company → contacts lookup failed (attribution data will be partial):", err);
   }
 
-  // Query 2: MQLs (optional — non-fatal)
+  // Query 2: MQLs (optional, non-fatal)
   let mqlContacts: HubSpotContact[] = [];
   try {
     const mqlFilters: any[] = [
@@ -740,7 +740,7 @@ async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
 
   // Filter MQLs: exclude contacts already attached to an ATM company, contacts
   // with their own ATM date, and any duplicate contact IDs (HS can return the
-  // same contact across multiple filter-group matches — e.g. lifecycle = lead
+  // same contact across multiple filter-group matches, e.g. lifecycle = lead
   // AND lifecycle = marketingqualifiedlead would double count the same person).
   const seenMqlIds = new Set<string>();
   const pureMQLs = mqlContacts.filter(c => {

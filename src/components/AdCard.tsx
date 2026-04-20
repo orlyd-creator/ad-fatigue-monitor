@@ -61,7 +61,7 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
             className="w-full h-36 object-cover rounded-t-2xl bg-gray-100"
           />
         ) : (
-          // Gradient placeholder when image is missing or 404'd — avoids
+          // Gradient placeholder when image is missing or 404'd, avoids
           // the ugly broken-image icon + alt text fallback.
           <div className="w-full h-36 rounded-t-2xl bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center">
             <svg className="w-10 h-10 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>

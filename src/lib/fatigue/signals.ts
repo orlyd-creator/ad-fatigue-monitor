@@ -1,7 +1,7 @@
 import type { DailyMetric } from "@/lib/db/schema";
 import type { SignalResult } from "./types";
 
-/** Exponential moving average for smoothing — recent-weighted */
+/** Exponential moving average for smoothing, recent-weighted */
 function ema(values: number[], alpha = 0.5): number {
   if (values.length === 0) return 0;
   let result = values[0];
@@ -30,7 +30,7 @@ function stddev(values: number[]): number {
   return Math.sqrt(variance);
 }
 
-/** Trimmed baseline that ignores outliers — uses trimmed mean (drop top/bottom 15%) */
+/** Trimmed baseline that ignores outliers, uses trimmed mean (drop top/bottom 15%) */
 function trimmedMean(values: number[], trimPct = 0.15): number {
   if (values.length < 4) return mean(values);
   const sorted = [...values].sort((a, b) => a - b);
@@ -49,7 +49,7 @@ function consecutiveDecliningDays(values: number[]): number {
   return count;
 }
 
-/** Linear regression slope — change per day */
+/** Linear regression slope, change per day */
 function linearSlope(values: number[]): number {
   if (values.length < 2) return 0;
   const n = values.length;
@@ -69,7 +69,7 @@ function linearScore(pctChange: number, threshold: number): number {
   return (pctChange / threshold) * 100;
 }
 
-/** Sigmoid score — smoother than linear, with a steeper kick near the threshold */
+/** Sigmoid score, smoother than linear, with a steeper kick near the threshold */
 function sigmoidScore(pctChange: number, midpoint: number, steepness = 10): number {
   if (pctChange <= 0) return 0;
   const x = (pctChange - midpoint) * steepness;
@@ -106,7 +106,7 @@ export function calcCtrSignal(
     score = Math.min(100, score + 10);
   }
 
-  // Variance check: if CTR is unusually volatile, less confident — reduce score slightly
+  // Variance check: if CTR is unusually volatile, less confident, reduce score slightly
   const recentStd = stddev(recent.map((m) => m.ctr));
   const cv = recentCtr > 0 ? recentStd / recentCtr : 0; // coefficient of variation
   if (cv > 0.5) score = score * 0.9;
@@ -260,7 +260,7 @@ export function calcCostPerResultSignal(
   const pctChange = (recentCpa - baselineCpa) / baselineCpa;
   let score = sigmoidScore(pctChange, 0.35, 6);
 
-  // If recent had zero conversions, boost — spend with zero results is acute waste
+  // If recent had zero conversions, boost, spend with zero results is acute waste
   const recentActions = recent.reduce((s, m) => s + m.actions, 0);
   const recentSpend = recent.reduce((s, m) => s + m.spend, 0);
   if (recentActions === 0 && recentSpend > 0) score = Math.max(score, 70);

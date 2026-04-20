@@ -210,7 +210,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
   const [searchQuery, setSearchQuery] = useState("");
 
   // statusFiltered = base dataset for all stats (active only by default)
-  // searchFiltered = further narrowed for the ad grid only — does NOT affect stats/counts/insights
+  // searchFiltered = further narrowed for the ad grid only, does NOT affect stats/counts/insights
   const statusFiltered = showActiveOnly ? ads.filter((a) => a.status === "ACTIVE") : ads;
   const searchFiltered = searchQuery.trim()
     ? statusFiltered.filter((a) =>
@@ -247,7 +247,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
     if (statusFiltered.length === 0) return [];
     const items: Array<{ color: string; text: string; adId?: string; filterToFatigued?: boolean }> = [];
 
-    // 1. Wasted spend — filter dashboard to show all fatigued ads (plural)
+    // 1. Wasted spend, filter dashboard to show all fatigued ads (plural)
     const fatiguedAdsFiltered = statusFiltered.filter(a => a.fatigue.fatigueScore >= 50);
     if (spendData.wastedSpend > 0 && fatiguedAdsFiltered.length > 0) {
       const worstFatigued = fatiguedAdsFiltered.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore)[0];
@@ -258,7 +258,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
       });
     }
 
-    // 2. Fastest declining ad — the one losing CTR the quickest
+    // 2. Fastest declining ad, the one losing CTR the quickest
     const decliningAds = statusFiltered.filter(a => {
       if (a.recentMetrics.length < 4) return false;
       const recent = a.recentMetrics.slice(-2);
@@ -276,7 +276,7 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
       });
     }
 
-    // 3. Predicted fatigue — ads about to fatigue soon
+    // 3. Predicted fatigue, ads about to fatigue soon
     const aboutToFatigue = statusFiltered.filter(a =>
       a.fatigue.predictedDaysToFatigue != null && a.fatigue.predictedDaysToFatigue > 0 && a.fatigue.predictedDaysToFatigue <= 5 && a.fatigue.fatigueScore < 75
     ).sort((a, b) => (a.fatigue.predictedDaysToFatigue ?? 99) - (b.fatigue.predictedDaysToFatigue ?? 99));
@@ -289,13 +289,13 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
       });
     }
 
-    // 4. Budget reallocation — link to both ads
+    // 4. Budget reallocation, link to both ads
     const topAd = statusFiltered.find(a => a.adName === spendData.topAdName);
     const bottomAd = statusFiltered.find(a => a.adName === spendData.bottomAdName);
     if (topAd && bottomAd && spendData.topAdCTR > spendData.bottomAdCTR * 1.5) {
       items.push({
         color: "#22c55e",
-        text: `Move budget from "${bottomAd.adName}" (${spendData.bottomAdCTR.toFixed(2)}% CTR) to "${topAd.adName}" (${spendData.topAdCTR.toFixed(2)}% CTR) — ${((spendData.topAdCTR / Math.max(spendData.bottomAdCTR, 0.01)) * 100 - 100).toFixed(0)}% more efficient.`,
+        text: `Move budget from "${bottomAd.adName}" (${spendData.bottomAdCTR.toFixed(2)}% CTR) to "${topAd.adName}" (${spendData.topAdCTR.toFixed(2)}% CTR), ${((spendData.topAdCTR / Math.max(spendData.bottomAdCTR, 0.01)) * 100 - 100).toFixed(0)}% more efficient.`,
         adId: topAd.id,
       });
     }
@@ -314,19 +314,19 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
       const freq = worstFreq.recentMetrics[worstFreq.recentMetrics.length - 1]?.frequency ?? 0;
       items.push({
         color: "#f59e0b",
-        text: `"${worstFreq.adName}" hit ${freq.toFixed(1)}x frequency — your audience is seeing it too many times. Expand targeting or swap the creative.`,
+        text: `"${worstFreq.adName}" hit ${freq.toFixed(1)}x frequency, your audience is seeing it too many times. Expand targeting or swap the creative.`,
         adId: worstFreq.id,
       });
     }
 
-    // 6. Accelerating fatigue — ads getting worse fast
+    // 6. Accelerating fatigue, ads getting worse fast
     const accelerating = statusFiltered.filter(a => a.fatigue.trendDirection === "accelerating" && a.fatigue.fatigueScore > 30)
       .sort((a, b) => (b.fatigue.fatigueVelocity ?? 0) - (a.fatigue.fatigueVelocity ?? 0));
     if (accelerating.length > 0 && items.length < 6) {
       const worst = accelerating[0];
       items.push({
         color: "#ea384c",
-        text: `"${worst.adName}" fatigue is accelerating at +${worst.fatigue.fatigueVelocity?.toFixed(1)}/day. This ad is declining fast — act before it wastes more budget.`,
+        text: `"${worst.adName}" fatigue is accelerating at +${worst.fatigue.fatigueVelocity?.toFixed(1)}/day. This ad is declining fast, act before it wastes more budget.`,
         adId: worst.id,
       });
     }
@@ -335,12 +335,12 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
     if (spendData.ctrChange < -10) {
       items.push({
         color: "#ea384c",
-        text: `Account CTR dropped ${Math.abs(spendData.ctrChange).toFixed(0)}% vs last period. Your ads are losing relevance — time for fresh creative across the board.`,
+        text: `Account CTR dropped ${Math.abs(spendData.ctrChange).toFixed(0)}% vs last period. Your ads are losing relevance, time for fresh creative across the board.`,
       });
     } else if (spendData.ctrChange > 10 && items.length < 6) {
       items.push({
         color: "#22c55e",
-        text: `Account CTR is up ${spendData.ctrChange.toFixed(0)}% vs last period. Creative is resonating — consider scaling spend while momentum is strong.`,
+        text: `Account CTR is up ${spendData.ctrChange.toFixed(0)}% vs last period. Creative is resonating, consider scaling spend while momentum is strong.`,
       });
     }
 
@@ -405,11 +405,11 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               {ads.length > 0
                 ? urgentCount > 0
                   ? `${urgentCount} active ad${urgentCount > 1 ? "s" : ""} need${urgentCount === 1 ? "s" : ""} your attention right now`
-                  : `${activeCount} active ads — everything is looking healthy`
+                  : `${activeCount} active ads, everything is looking healthy`
                 : "Hit 'Refresh Data' to pull your ads in"}
             </p>
           </div>
-          {/* Date Range — inline custom picker */}
+          {/* Date Range, inline custom picker */}
           <div className="flex items-center gap-2 flex-shrink-0 glass rounded-xl px-3 py-2 shadow-sm">
             <svg className="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />

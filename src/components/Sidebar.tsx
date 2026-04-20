@@ -98,7 +98,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   // Refresh uses a plain fetch to /api/sync (not a server action) so the
   // transport can't be killed by navigation / Next.js action-stream quirks.
-  // The AbortController is intentionally NOT tied to navigation — the sync
+  // The AbortController is intentionally NOT tied to navigation, the sync
   // keeps running even if the user leaves the page.
   const handleSync = () => {
     setSyncError(null);
@@ -115,7 +115,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         if (!res.ok) {
           // 401 = token expired or not logged in
           if (res.status === 401 || body?.error?.match?.(/token|expired|reconnect/i)) {
-            setSyncError("Meta token expired — reconnect");
+            setSyncError("Meta token expired, reconnect");
             setTimeout(() => setSyncError(null), 10000);
             return;
           }
@@ -138,7 +138,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           router.refresh();
         }, 1500);
       } catch (err: any) {
-        // Network error, timeout, or stream drop. Peek at lastSyncedAt — if a
+        // Network error, timeout, or stream drop. Peek at lastSyncedAt, if a
         // sync completed in the background we treat it as success.
         try {
           const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
@@ -165,7 +165,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <>
-      {/* Sync lock overlay — covers the page (but not the sidebar) while a
+      {/* Sync lock overlay, covers the page (but not the sidebar) while a
           sync is running so clicks can't cancel the long-running action. */}
       {isPending && !syncDone && (
         <div
@@ -192,7 +192,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   Refreshing your data…
                 </div>
                 <div className="text-[12px] text-gray-500 mt-0.5">
-                  Takes 30–60 seconds. Please wait — don't click around or the
+                  Takes 30–60 seconds. Please wait, don't click around or the
                   sync will cancel.
                 </div>
               </div>

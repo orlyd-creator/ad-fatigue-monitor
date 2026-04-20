@@ -10,7 +10,7 @@ function validEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/** "@obol.app" — domain-wide invite, matches any email at that domain. */
+/** "@obol.app", domain-wide invite, matches any email at that domain. */
 function validDomain(value: string) {
   return /^@[^\s@]+\.[^\s@]+$/.test(value);
 }

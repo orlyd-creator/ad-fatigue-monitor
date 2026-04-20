@@ -39,7 +39,7 @@ async function runSync(accountIds: string[]) {
   }> = [];
   const allErrors: string[] = [];
 
-  // Process accounts in parallel — isolated try/catch per account so a single
+  // Process accounts in parallel, isolated try/catch per account so a single
   // broken account doesn't kill the whole refresh.
   await Promise.all(
     allAccounts.map(async (account) => {
@@ -53,7 +53,7 @@ async function runSync(accountIds: string[]) {
       perAccount.push(entry);
 
       if (account.tokenExpiresAt < Date.now()) {
-        entry.errors.push("Meta token expired — reconnect on login page.");
+        entry.errors.push("Meta token expired, reconnect on login page.");
         Object.assign(entry, { tokenExpired: true });
         return;
       }
@@ -99,7 +99,7 @@ async function runSync(accountIds: string[]) {
   } as const;
 }
 
-// Cron entrypoint (GET with CRON_SECRET) — syncs ALL connected accounts.
+// Cron entrypoint (GET with CRON_SECRET), syncs ALL connected accounts.
 // Can also be hit by Railway cron / GitHub Actions / cron-job.org.
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ...result, source: "cron" });
   }
 
-  // Otherwise require a user session — sync all THEIR accounts.
+  // Otherwise require a user session, sync all THEIR accounts.
   const session = await auth();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

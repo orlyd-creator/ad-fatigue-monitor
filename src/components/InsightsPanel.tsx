@@ -228,7 +228,7 @@ export default function InsightsPanel() {
             </svg>
           </div>
           <p className="text-[14px] font-medium text-foreground">
-            All clear — no issues detected
+            All clear, no issues detected
           </p>
           <p className="text-[12px] text-muted-foreground mt-1">
             Your ads are running smoothly. Check back later for new insights.

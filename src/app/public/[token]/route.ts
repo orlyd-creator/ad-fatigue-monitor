@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Every subsequent page load reads the cookie via getSessionOrPublic() and grants
  * read-only access to the whole platform using the owner's ad accounts.
  *
- * Revoking the token invalidates the cookie immediately — next request to any
+ * Revoking the token invalidates the cookie immediately, next request to any
  * protected page returns a "link unavailable" state via the session helper.
  */
 export async function GET(

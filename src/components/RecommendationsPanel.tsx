@@ -4,11 +4,11 @@ import { useState } from "react";
 import type { Recommendation, RecommendationSeverity, RecommendationAction } from "@/lib/strategy/recommendations";
 
 /**
- * Recommendations panel — renders the output of generateCampaignRecommendations.
+ * Recommendations panel, renders the output of generateCampaignRecommendations.
  * Each card has: severity stripe, title, body, numeric action_copy, confidence,
  * and an expand for supporting metrics.
  *
- * Palette: keeps the OD gradient accents (purple/pink/blue) — no calmer pivots.
+ * Palette: keeps the OD gradient accents (purple/pink/blue), no calmer pivots.
  */
 
 interface Props {
@@ -182,7 +182,7 @@ export default function RecommendationsPanel({ recommendations, rangeLabel }: Pr
                             <span className="font-mono text-foreground">
                               {typeof v === "number"
                                 ? (v % 1 === 0 ? v.toString() : v.toFixed(2))
-                                : v ?? "—"}
+                                : v ?? "-"}
                             </span>
                           </div>
                         ))}

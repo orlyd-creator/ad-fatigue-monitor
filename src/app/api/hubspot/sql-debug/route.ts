@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     searchError = err.message;
   }
 
-  // De-duplicate (a deal matching both filter groups would show twice — shouldn't happen
+  // De-duplicate (a deal matching both filter groups would show twice, shouldn't happen
   // with NEQ + NOT_HAS_PROPERTY but safe to guard against).
   const uniqueDeals = Array.from(new Map(deals.map(d => [d.id, d])).values());
 

@@ -107,7 +107,7 @@ export const shareTokens = sqliteTable("share_tokens", {
   usesCount: integer("uses_count").notNull().default(0),
 });
 
-// Anonymous public view-only links — no login required.
+// Anonymous public view-only links, no login required.
 export const publicLinks = sqliteTable("public_links", {
   token: text("token").primaryKey(),
   label: text("label"),
