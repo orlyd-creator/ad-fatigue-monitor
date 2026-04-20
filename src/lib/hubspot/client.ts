@@ -159,6 +159,9 @@ export async function getLeadsFunnel(
   // The Company "tier" property (SMB/Mid-Market/Enterprise) is the real filter,
   // not employee count — micro SMBs get re-tiered to SMB when qualified
   const companyTierMap = new Map<string, string>();
+  // Persistent contact → company ID map so we can dedupe by company at the end
+  // (HubSpot native "Inbound Leads By Tier" report counts UNIQUE companies, not contacts)
+  const contactToCompanyGlobal = new Map<string, string>();
   try {
     // Batch fetch company associations + tier for contacts
     const contactIds = atmContacts.map(c => c.id);
@@ -179,6 +182,7 @@ export async function getLeadsFunnel(
         const companyId = result.to?.[0]?.toObjectId;
         if (contactId && companyId) {
           contactToCompany.set(String(contactId), String(companyId));
+          contactToCompanyGlobal.set(String(contactId), String(companyId));
           companyIds.add(String(companyId));
         }
       }
@@ -231,26 +235,41 @@ export async function getLeadsFunnel(
   // STRICT allowlist matching HubSpot's native "Inbound Leads By Tier" report exactly:
   // Only count contacts whose associated company tier is SMB, Mid-Market, or Enterprise.
   // Re-tiered Micro SMB contacts (now SQL / customer / opportunity) are still kept.
-  const filteredATM = atmContacts.filter(c => {
+  const tierFilteredATM = atmContacts.filter(c => {
     const tier = companyTierMap.get(c.id) || "";
     const normalized = normalizeTier(tier);
     const stage = c.properties.lifecyclestage || "";
     const leadStatus = c.properties.hs_lead_status || "";
     const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
 
-    // Allowlist match — keep
     if (validTiers.has(normalized)) return true;
-
-    // Re-tiered carve-out — always keep regardless of company tier
     if (isReTiered) return true;
-
-    // Tier API call totally failed — fall back to keep all so we don't zero the funnel
     if (companyTierMap.size === 0) return true;
-
-    // Everything else: no tier / Micro SMB / unknown label → exclude (matches native report)
     return false;
   });
-  console.log(`[hubspot] ATM after tier filter: ${filteredATM.length}`);
+  console.log(`[hubspot] ATM after tier filter: ${tierFilteredATM.length}`);
+
+  // Dedupe by company — HubSpot native report counts unique companies, not contacts.
+  // When multiple contacts at the same company have ATM dates in range, count once (earliest).
+  const companyToEarliest = new Map<string, HubSpotContact>();
+  const contactsWithoutCompany: HubSpotContact[] = [];
+  for (const c of tierFilteredATM) {
+    const companyId = contactToCompanyGlobal.get(c.id);
+    if (!companyId) {
+      contactsWithoutCompany.push(c); // no company association — keep as-is
+      continue;
+    }
+    const existing = companyToEarliest.get(companyId);
+    const curDate = parseInt(c.properties[config.atmProperty] || "0", 10);
+    if (!existing) {
+      companyToEarliest.set(companyId, c);
+    } else {
+      const existingDate = parseInt(existing.properties[config.atmProperty] || "0", 10);
+      if (curDate < existingDate) companyToEarliest.set(companyId, c);
+    }
+  }
+  const filteredATM = [...companyToEarliest.values(), ...contactsWithoutCompany];
+  console.log(`[hubspot] ATM after company dedupe: ${filteredATM.length} (${companyToEarliest.size} unique companies + ${contactsWithoutCompany.length} contacts w/o company)`);
 
   // Query 2: MQLs (optional — non-fatal)
   let mqlContacts: HubSpotContact[] = [];
