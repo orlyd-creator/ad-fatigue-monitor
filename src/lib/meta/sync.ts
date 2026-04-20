@@ -112,23 +112,11 @@ export async function syncTodayOnly(accountId: string): Promise<{
   ].join(",");
 
   try {
-    // Refresh ad statuses first so "paused in Meta" reflects in our DB
-    // within 2 min (the micro-sync interval). Small payload, fast fetch.
+    // Refresh ad statuses through the retry-capable helper so transient 429s
+    // don't leave paused ads stuck as ACTIVE until the next full sync.
     try {
-      const statusRows = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,status,effective_status",
-        effective_status: JSON.stringify([
-          "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
-          "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
-          "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
-        ]),
-      });
-      const { sql } = await import("drizzle-orm");
-      for (const row of statusRows) {
-        const s = row.effective_status || row.status;
-        if (!row.id || !s) continue;
-        await db.run(sql`UPDATE ads SET status = ${s}, last_synced_at = ${Date.now()} WHERE id = ${row.id}`);
-      }
+      const { refreshAdStatusesForAccounts } = await import("./statusRefresh");
+      await refreshAdStatusesForAccounts([accountId]);
     } catch (err: any) {
       console.warn(`[today-sync] status refresh failed (non-fatal):`, err?.message || err);
     }
@@ -469,19 +457,29 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     const chunks = chunkDateRange(since, until, 30);
     const chunkResults = await Promise.all(
       chunks.map(async ([cSince, cUntil]) => {
-        try {
-          const chunkInsights = await paginateAll(`/${actId}/insights`, token, {
-            fields: insightFields,
-            time_range: JSON.stringify({ since: cSince, until: cUntil }),
-            time_increment: "1",
-            level: "ad",
-          });
-          console.log(`[sync] Insights chunk ${cSince}→${cUntil}: ${chunkInsights.length} rows`);
-          return chunkInsights;
-        } catch (e: any) {
-          result.errors.push(`Insights fetch failed for ${cSince}→${cUntil}: ${e.message}`);
-          return [];
+        // Retry each chunk once on failure before giving up. A single 429
+        // during a 6-month sync shouldn't zero out that month in Executive.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const chunkInsights = await paginateAll(`/${actId}/insights`, token, {
+              fields: insightFields,
+              time_range: JSON.stringify({ since: cSince, until: cUntil }),
+              time_increment: "1",
+              level: "ad",
+            });
+            console.log(`[sync] Insights chunk ${cSince}→${cUntil}: ${chunkInsights.length} rows${attempt > 0 ? " (after retry)" : ""}`);
+            return chunkInsights;
+          } catch (e: any) {
+            if (attempt === 0) {
+              console.warn(`[sync] Insights chunk ${cSince}→${cUntil} failed, retrying in 1s:`, e.message);
+              await new Promise(r => setTimeout(r, 1000));
+              continue;
+            }
+            result.errors.push(`Insights fetch failed for ${cSince}→${cUntil}: ${e.message}`);
+            return [];
+          }
         }
+        return [];
       }),
     );
     for (const r of chunkResults) insights.push(...r);

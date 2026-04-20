@@ -4,7 +4,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 
-export default function SidebarLayout({ children }: { children: React.ReactNode }) {
+export default function SidebarLayout({
+  children,
+  isPublic = false,
+}: {
+  children: React.ReactNode;
+  isPublic?: boolean;
+}) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login" || pathname === "/";
   const [collapsed, setCollapsed] = useState(false);
@@ -15,6 +21,16 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  // Close drawer on Escape, a11y nicety.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   if (isLoginPage) {
     return <>{children}</>;
@@ -52,6 +68,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
           collapsed={collapsed}
           onToggle={() => setCollapsed(!collapsed)}
           onMobileClose={() => setMobileOpen(false)}
+          isPublic={isPublic}
         />
       </div>
 

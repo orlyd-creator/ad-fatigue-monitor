@@ -20,12 +20,34 @@ const MIN_INTERVAL_MS = 30 * 1000;          // at most once per 30s per account
 const lastRunByAccount = new Map<string, number>();
 const inFlight = new Map<string, Promise<void>>();
 
+// Fetch with retry on 429/5xx. Transient Meta failures used to silently
+// break out of pagination, leaving later-page ads stuck on their stale
+// status. Retry with exponential backoff, give up after 3 attempts.
+async function fetchWithRetry(url: string, attempts = 3): Promise<Response | null> {
+  let lastStatus = 0;
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetch(url).catch(() => null);
+    if (!res) { lastStatus = 0; }
+    else if (res.ok) return res;
+    else {
+      lastStatus = res.status;
+      // Only retry on transient failures (429 rate limit, 5xx).
+      if (res.status !== 429 && res.status < 500) return res;
+    }
+    if (i < attempts - 1) {
+      await new Promise(r => setTimeout(r, 300 * Math.pow(2, i)));
+    }
+  }
+  console.warn(`[statusRefresh] giving up after ${attempts} attempts (last status ${lastStatus})`);
+  return null;
+}
+
 async function refreshOneAccount(accountId: string, token: string): Promise<void> {
   const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
   try {
-    // Paginate through ALL ads in the account. limit=500 truncates large
-    // accounts silently and that's exactly how paused-ad-stays-ACTIVE bugs
-    // sneak in. Follow the `paging.next` cursor until no more data.
+    // Paginate through ALL ads in the account. Cap raised to 100 pages at
+    // limit=200 (20k ads) to match paginateAll() in sync.ts, so a paused ad
+    // past the first 5k can't stay ACTIVE forever.
     const all: Array<{ id: string; status?: string; effective_status?: string }> = [];
     let url: string | null =
       `https://graph.facebook.com/v21.0/${actId}/ads?fields=id,status,effective_status&effective_status=${encodeURIComponent(
@@ -36,8 +58,12 @@ async function refreshOneAccount(accountId: string, token: string): Promise<void
         ]),
       )}&limit=200&access_token=${token}`;
     let pages = 0;
-    while (url && pages < 25) {
-      const res: Response = await fetch(url);
+    while (url && pages < 100) {
+      const res = await fetchWithRetry(url);
+      if (!res) {
+        console.warn(`[statusRefresh] ${accountId} stopped at page ${pages} (transient failure, retries exhausted)`);
+        break;
+      }
       if (!res.ok) {
         console.warn(`[statusRefresh] ${accountId} page ${pages} HTTP ${res.status}`);
         break;
@@ -46,6 +72,9 @@ async function refreshOneAccount(accountId: string, token: string): Promise<void
       for (const row of body.data || []) all.push(row);
       url = body.paging?.next || null;
       pages++;
+    }
+    if (url) {
+      console.warn(`[statusRefresh] ${accountId} truncated at page cap (>20k ads, increase cap if this account ever reaches it)`);
     }
 
     // Unconditional update: always write status + lastSyncedAt so even

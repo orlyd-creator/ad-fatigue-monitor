@@ -270,7 +270,17 @@ export function buildStrategicForecast(input: {
   const forwardSpend = forwardDaily * daysRemaining;
   const projectedATM = Math.round(mtdATM + leadsPerDollar * forwardSpend);
   const projectedSQLs = Math.round(mtdSQLs + sqlsPerDollar * forwardSpend);
-  const projectedCPL = projectedATM > 0 ? Math.round((projectedSpend / projectedATM) * 100) / 100 : null;
+  let projectedCPL = projectedATM > 0 ? Math.round((projectedSpend / projectedATM) * 100) / 100 : null;
+  // Sanity ceiling: low-data days (e.g. 1 ATM off $500 spend) previously
+  // produced $500 CPL forecasts that had never occurred in this account.
+  // Cap the projection at 2x the historical last-month CPL when we have
+  // little enough data that the math is noisy. Below 3 ATMs, explicitly
+  // return null so the UI shows a "not enough data yet" badge instead.
+  const hasEnoughData = mtdATM >= 3;
+  if (!hasEnoughData) projectedCPL = null;
+  else if (projectedCPL !== null && lastCPL !== null) {
+    projectedCPL = Math.min(projectedCPL, Math.round(lastCPL * 2 * 100) / 100);
+  }
 
   const deltaSpendVsLast = Math.round((projectedSpend - lastMonthSpend) * 100) / 100;
   const deltaATMVsLast = projectedATM - lastMonthATM;

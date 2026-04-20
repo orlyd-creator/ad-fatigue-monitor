@@ -131,10 +131,22 @@ export async function GET(
     db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
   ]);
 
+  // Dedupe (adId, date) rows picking max spend per pair, matching Dashboard /
+  // Executive / Strategy. Legacy Turso duplicates can otherwise double-count
+  // per-ad CPL on this detail page while Dashboard shows a different number.
+  const acctAdIds = new Set(allAcctAds.map(a => a.id));
+  const adDetailDedupe = new Map<string, typeof allAcctAdsMetrics[number]>();
+  for (const m of allAcctAdsMetrics) {
+    if (m.date > rangeEnd) continue;
+    if (!acctAdIds.has(m.adId)) continue;
+    const key = `${m.adId}:${m.date}`;
+    const existing = adDetailDedupe.get(key);
+    if (!existing || (m.spend ?? 0) > (existing.spend ?? 0)) adDetailDedupe.set(key, m);
+  }
+  const dedupedAcctMetrics = Array.from(adDetailDedupe.values());
+
   // Account CPL = total spend / total ATM for this month
-  const accountSpend = allAcctAdsMetrics
-    .filter(m => m.date <= rangeEnd && allAcctAds.some(a => a.id === m.adId))
-    .reduce((s, m) => s + (m.spend ?? 0), 0);
+  const accountSpend = dedupedAcctMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
   const accountCPL = funnel && funnel.totalATM > 0 ? accountSpend / funnel.totalATM : null;
 
   // This-ad range-scoped totals
@@ -164,9 +176,10 @@ export async function GET(
   const campaignRevenue = matchedRev?.revenue || 0;
 
   // Pro-rate campaign-level leads/revenue to THIS ad by spend share within
-  // the campaign. Rough but the best we can do without per-ad utm.
-  const campaignSpendTotal = allAcctAdsMetrics
-    .filter(m => m.date >= rangeStart && m.date <= rangeEnd)
+  // the campaign. Uses the deduped set so Turso duplicates can't inflate the
+  // denominator and starve this ad's share.
+  const campaignSpendTotal = dedupedAcctMetrics
+    .filter(m => m.date >= rangeStart)
     .filter(m => {
       const a = allAcctAds.find(x => x.id === m.adId);
       return a && a.campaignName === ad.campaignName;

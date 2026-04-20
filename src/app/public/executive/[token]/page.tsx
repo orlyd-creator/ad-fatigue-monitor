@@ -52,9 +52,19 @@ export default async function PublicExecutivePage({
     .where(eq(publicLinks.token, token))
     .run();
 
-  // Owner's Meta accounts, public viewer sees everything across every connected ad account.
-  const allAccountRows = await db.select({ id: accounts.id }).from(accounts).all();
-  const allAccountIds = allAccountRows.map(r => r.id);
+  // Scope to the accounts belonging to the user who CREATED the link.
+  // Without this, if a second user connects a Meta account, public viewers
+  // get a mashup. Deterministic order so the primary account never flips.
+  const ownerId = link.createdBy;
+  const allAccountRows = await db
+    .select({ id: accounts.id, userId: accounts.userId })
+    .from(accounts)
+    .orderBy(accounts.id)
+    .all();
+  const scopedRows = ownerId
+    ? allAccountRows.filter(r => r.userId === ownerId)
+    : allAccountRows;
+  const allAccountIds = scopedRows.map(r => r.id);
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
@@ -83,7 +93,18 @@ export default async function PublicExecutivePage({
   const adAccountSet = new Set(allAccountIds);
   const allAdsForAccount = allAds.filter(a => adAccountSet.has(a.accountId));
   const allAdIds = new Set(allAdsForAccount.map(a => a.id));
-  const metrics = metricsRaw.filter(m => m.date <= rangeToStr && allAdIds.has(m.adId));
+  // Dedupe (adId, date) picking max spend per pair. Matches the exact logic
+  // used on the authenticated Executive page so public viewers never see a
+  // different spend total than the owner does (legacy Turso duplicate rows).
+  const pubExecDedupe = new Map<string, typeof metricsRaw[number]>();
+  for (const m of metricsRaw) {
+    if (m.date > rangeToStr) continue;
+    if (!allAdIds.has(m.adId)) continue;
+    const key = `${m.adId}:${m.date}`;
+    const existing = pubExecDedupe.get(key);
+    if (!existing || (m.spend ?? 0) > (existing.spend ?? 0)) pubExecDedupe.set(key, m);
+  }
+  const metrics = Array.from(pubExecDedupe.values());
 
   type MonthBucket = {
     key: string;

@@ -48,7 +48,19 @@ export async function getSessionOrPublic(): Promise<SessionLike | null> {
     .get();
   if (!link || link.revokedAt) return null;
 
-  const accountRows = await db.select().from(accounts).all();
+  // Scope public view to the accounts that belong to the user who CREATED
+  // the link. Without this, if a second user ever connects a Meta account,
+  // public viewers would see a mashup of both. Deterministic order so the
+  // "primary" account doesn't flip between requests.
+  const ownerId = link.createdBy;
+  const allRows = await db
+    .select()
+    .from(accounts)
+    .orderBy(accounts.id)
+    .all();
+  const accountRows = ownerId
+    ? allRows.filter((r) => r.userId === ownerId)
+    : allRows;
   if (accountRows.length === 0) return null;
 
   // Best-effort: bump view counter. Non-blocking.

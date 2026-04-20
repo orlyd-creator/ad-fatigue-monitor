@@ -195,7 +195,7 @@ export default function ForecastClient({ forecast, atRisk, rising, budgetBreakdo
               <div className="text-right">
                 <div className="text-[10px] uppercase tracking-wider text-gray-500">Projected EOM CPL</div>
                 <div className="text-[20px] font-semibold tabular-nums leading-none" style={{ color: pace.projectedCPL !== null ? "#7E69AB" : "#9CA3AF" }}>
-                  {pace.projectedCPL !== null ? `$${pace.projectedCPL.toFixed(0)}` : "—"}
+                  {pace.projectedCPL !== null ? `$${pace.projectedCPL.toFixed(0)}` : "Not enough data yet"}
                 </div>
                 {lastMonth.cpl !== null && pace.projectedCPL !== null && (
                   <div className="text-[10px] mt-0.5" style={{ color: pace.projectedCPL < lastMonth.cpl ? "#059669" : pace.projectedCPL > lastMonth.cpl ? "#dc2626" : "#7E69AB" }}>

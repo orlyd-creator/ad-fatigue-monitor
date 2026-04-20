@@ -89,11 +89,12 @@ export default function AdDetailPage() {
           <span className="text-foreground font-medium">{ad.adName}</span>
         </div>
 
-        {/* Header */}
-        <div className="flex items-start justify-between gap-8 mb-8">
+        {/* Header, matches the unified eyebrow + display-heading + subtitle pattern */}
+        <div className="flex items-start justify-between gap-8 mb-8 animate-fade-in">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">{ad.adName}</h1>
-            <p className="text-[14px] text-muted-foreground mt-1.5">{ad.campaignName} &middot; {ad.adsetName}</p>
+            <div className="display-label mb-1.5">Ad detail</div>
+            <h1 className="display-heading mb-1.5">{ad.adName}</h1>
+            <p className="text-[13.5px] text-muted-foreground">{ad.campaignName} · {ad.adsetName}</p>
             <span className={`inline-block mt-3 text-[11px] font-semibold px-3 py-1 rounded-full uppercase tracking-wider ${
               ad.status === "ACTIVE" ? "bg-green-50 text-green-600" : "bg-surface text-muted"}`}>
               {ad.status}

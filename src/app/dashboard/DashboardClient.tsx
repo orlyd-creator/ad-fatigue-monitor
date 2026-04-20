@@ -585,14 +585,36 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
               </div>
               <div className="text-[12px] font-semibold text-foreground">Top Performer</div>
             </div>
-            {spendData.topAdName ? (
-              <>
-                <div className="text-[14px] font-bold text-foreground truncate mb-1">{spendData.topAdName}</div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  <span className="text-green-600 font-semibold">{spendData.topAdCTR.toFixed(2)}% CTR</span>. Scale this ad&apos;s budget while it&apos;s winning.
-                </p>
-              </>
-            ) : (
+            {spendData.topAdName ? (() => {
+              // Show fatigue-stage chip so users aren't confused when the top
+              // CTR ad also shows up as "fatiguing" on Alerts. Both signals
+              // can be true at once: highest CTR in account AND CTR dropping
+              // vs its own baseline.
+              const topAdFull = ads.find(a => a.id === spendData.topAdId);
+              const stage = topAdFull?.fatigue.stage ?? null;
+              const stageInfo: Record<string, { label: string; cls: string }> = {
+                healthy: { label: "healthy", cls: "bg-emerald-50 text-emerald-600" },
+                early_warning: { label: "early warning", cls: "bg-amber-50 text-amber-700" },
+                fatiguing: { label: "fatiguing", cls: "bg-orange-50 text-orange-700" },
+                fatigued: { label: "fatigued", cls: "bg-rose-50 text-rose-700" },
+              };
+              const chip = stage ? stageInfo[stage] : null;
+              return (
+                <>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="text-[14px] font-bold text-foreground truncate">{spendData.topAdName}</div>
+                    {chip && (
+                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${chip.cls}`}>
+                        {chip.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    <span className="text-green-600 font-semibold">{spendData.topAdCTR.toFixed(2)}% CTR</span>. Scale this ad&apos;s budget while it&apos;s winning.
+                  </p>
+                </>
+              );
+            })() : (
               <p className="text-[11px] text-muted-foreground">Not enough data yet</p>
             )}
           </div>

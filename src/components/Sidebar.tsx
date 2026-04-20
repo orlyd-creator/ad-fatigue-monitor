@@ -68,9 +68,10 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   onMobileClose?: () => void;
+  isPublic?: boolean;
 }
 
-export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -318,8 +319,8 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
           </div>
         )}
 
-        {/* Refresh */}
-        <button
+        {/* Refresh, hidden for public viewers (they'd get 401 on sync anyway) */}
+        {!isPublic && <button
           onClick={handleSync}
           disabled={isPending}
           title={collapsed ? (isPending ? "Syncing..." : "Refresh") : undefined}
@@ -348,10 +349,10 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
           {!collapsed && (
             syncDone ? "Synced" : isPending ? "Syncing..." : syncError ? "Retry" : "Refresh"
           )}
-        </button>
+        </button>}
 
-        {/* Share workspace */}
-        <button
+        {/* Share workspace, hidden for public viewers */}
+        {!isPublic && <button
           onClick={() => handleNav("/team")}
           title={collapsed ? "Share workspace" : undefined}
           className={clsx(
@@ -363,7 +364,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72M18 18.72v-.094c0-1.34-.296-2.61-.826-3.748M18 18.72v.002A12 12 0 0112 21a12 12 0 01-6-1.278v-.002m0 0a3 3 0 00-4.681-2.72 9.094 9.094 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M6 18.719a5.971 5.971 0 01.94-3.197m5.06-1.523a3 3 0 11-6 0 3 3 0 016 0zm6-3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
           {!collapsed && "Share workspace"}
-        </button>
+        </button>}
 
         {/* Collapse toggle */}
         <button
@@ -384,8 +385,8 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
           {!collapsed && "Collapse"}
         </button>
 
-        {/* Logout */}
-        <div className="pt-1 border-t border-gray-100">
+        {/* Logout, hidden for public viewers (they don't have an account) */}
+        {!isPublic && <div className="pt-1 border-t border-gray-100">
           <form action={signOutUser}>
             <button
               type="submit"
@@ -401,7 +402,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
               {!collapsed && "Switch Account"}
             </button>
           </form>
-        </div>
+        </div>}
       </div>
     </aside>
     </>
