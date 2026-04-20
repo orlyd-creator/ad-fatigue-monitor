@@ -25,6 +25,15 @@ const VALID_TIERS = new Set(["smb", "midmarket", "enterprise"]);
 
 const normalizeTier = (t: string) => t.toLowerCase().replace(/[_\s-]/g, "");
 
+/** HS returns date properties as "YYYY-MM-DD" strings OR millisecond timestamps — handle both. */
+function parseAtmDate(val: string | null | undefined): string {
+  if (!val) return "";
+  if (val.includes("-")) return val.slice(0, 10);
+  const n = parseInt(val, 10);
+  if (!n || isNaN(n)) return "";
+  return new Date(n).toISOString().split("T")[0];
+}
+
 async function hubspotFetch(path: string, apiKey: string, options?: RequestInit) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -91,6 +100,10 @@ export async function GET(req: NextRequest) {
       "firstname", "lastname", "email", "lifecyclestage",
       ATM_PROPERTY, "hs_lead_status", "company",
       "hs_analytics_source",
+      // Contact-level attribution fields — native report may filter on one of these
+      "lead_source", "inbound_outbound", "qualified_lead",
+      "hs_latest_source", "hs_analytics_source_data_1",
+      "createdate",
     ],
   });
 
@@ -167,12 +180,18 @@ export async function GET(req: NextRequest) {
       email: c.properties.email || "",
       tier,
       companyLeadSource: co?.leadSource || "",
+      // Contact-level lead_source + related attribution fields (native report may use one of these)
+      contactLeadSource: c.properties.lead_source || "",
+      inboundOutbound: c.properties.inbound_outbound || "",
+      qualifiedLead: c.properties.qualified_lead || "",
+      latestSource: c.properties.hs_latest_source || "",
+      analyticsSource: c.properties.hs_analytics_source || "",
+      analyticsSourceData1: c.properties.hs_analytics_source_data_1 || "",
       lifecycle: stage,
       leadStatus,
       wasReTiered,
-      atmDate: c.properties[ATM_PROPERTY]
-        ? new Date(parseInt(c.properties[ATM_PROPERTY] || "0", 10)).toISOString().split("T")[0]
-        : "",
+      atmDate: parseAtmDate(c.properties[ATM_PROPERTY]),
+      createdate: parseAtmDate(c.properties.createdate),
       keep,
       dropReason,
     };
