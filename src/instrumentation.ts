@@ -36,6 +36,19 @@ export async function register() {
         uses_count INTEGER NOT NULL DEFAULT 0
       )
     `);
+    // public_links: anonymous view-only links to executive dashboard.
+    // No login required — anyone with the URL sees the live executive view.
+    // Added 2026-04-20.
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS public_links (
+        token TEXT PRIMARY KEY,
+        label TEXT,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+        created_by TEXT,
+        revoked_at INTEGER,
+        views_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
     console.log("[instrumentation] Schema ensured");
   } catch (err) {
     // Don't crash the app — log and continue. The app still boots without this.

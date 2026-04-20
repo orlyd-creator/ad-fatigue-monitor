@@ -87,6 +87,41 @@ export default function LeadsClient({
   const costPerClick = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const hasHubSpot = (hubspotATM && hubspotATM.length > 0) || (hubspotMQLs && hubspotMQLs.length > 0);
 
+  // Week-over-week ATM — bucket daily ATM counts into ISO weeks (Mon → Sun)
+  const weeklyATM = (() => {
+    if (!hubspotATM || hubspotATM.length === 0) return [] as { weekStart: string; atm: number; sqls: number; label: string }[];
+    const getMonday = (d: Date) => {
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      monday.setHours(0, 0, 0, 0);
+      return monday;
+    };
+    const weekMap = new Map<string, { weekStart: string; atm: number; sqls: number }>();
+    for (const row of hubspotATM) {
+      const d = new Date(row.date + "T00:00:00");
+      if (isNaN(d.getTime())) continue;
+      const monday = getMonday(d);
+      const key = format(monday, "yyyy-MM-dd");
+      const entry = weekMap.get(key) || { weekStart: key, atm: 0, sqls: 0 };
+      entry.atm += row.atm;
+      entry.sqls += row.sqls;
+      weekMap.set(key, entry);
+    }
+    return Array.from(weekMap.values())
+      .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+      .map(w => {
+        const start = new Date(w.weekStart + "T00:00:00");
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        return {
+          ...w,
+          label: `${start.getMonth() + 1}/${start.getDate()}–${end.getMonth() + 1}/${end.getDate()}`,
+        };
+      });
+  })();
+
   // Drill-down filtered contacts
   const drillContacts = leadContacts?.filter(c => {
     if (drillDown === "atm") return c.type === "atm" || c.type === "sql";

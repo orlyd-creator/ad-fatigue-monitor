@@ -35,6 +35,7 @@ type MonthRow = {
 type TrendRow = MonthRow & { sqlRate: number };
 
 type Props = {
+  basePath?: string;
   monthLabel: string;
   rangeLabel: string;
   rangeFrom: string;
@@ -126,6 +127,7 @@ function TopAdCard({ title, ad, metric }: { title: string; ad: TopAd; metric: "s
 }
 
 export default function ExecutiveClient({
+  basePath = "/executive",
   monthLabel, rangeLabel, rangeFrom, rangeTo, preset, presets,
   thisMonth, lastMonthLabel, deltas, rangeTotals,
   trend, monthlyTable, topCampaigns,
@@ -137,11 +139,11 @@ export default function ExecutiveClient({
   const applyPreset = (key: string) => {
     const p = presets[key];
     if (!p) return;
-    router.push(`/executive?preset=${key}&from=${p.from}&to=${p.to}`);
+    router.push(`${basePath}?preset=${key}&from=${p.from}&to=${p.to}`);
   };
   const applyCustom = (from: string, to: string) => {
     if (!from || !to) return;
-    router.push(`/executive?preset=custom&from=${from}&to=${to}`);
+    router.push(`${basePath}?preset=custom&from=${from}&to=${to}`);
   };
 
   const presetButtons: Array<{ key: string; label: string }> = [

@@ -1,63 +1,85 @@
 import { db } from "@/lib/db";
-import { ads, dailyMetrics } from "@/lib/db/schema";
-import { inArray, gte } from "drizzle-orm";
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { accounts, ads, dailyMetrics, publicLinks } from "@/lib/db/schema";
+import { eq, gte, sql } from "drizzle-orm";
 import {
   format, startOfMonth, endOfMonth, subMonths, addMonths, isBefore,
   isAfter, startOfYear,
 } from "date-fns";
 import { getLeadsFunnelLite } from "@/lib/hubspot/client";
-import ExecutiveClient from "./ExecutiveClient";
+import ExecutiveClient from "@/app/executive/ExecutiveClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// Up to 6 parallel HubSpot queries run below; allow enough headroom.
-// Historical ranges (6m, 12m, ytd) need more than the default 60s.
 export const maxDuration = 300;
 
 /**
- * Executive View — CEO-friendly dashboard with:
- * - Date range selector (query-driven so links + PDFs are shareable)
- * - KPI cards with month-over-month deltas
- * - Trend lines, CPL trend, campaign breakdown, monthly summary table
- * - Top ad cards
- * - One-click PDF export
+ * Public view-only executive dashboard. No login required.
+ * Anyone with a valid, non-revoked token can view the live data.
+ * URL: /public/executive/<token>
  */
-export default async function ExecutivePage({
+export default async function PublicExecutivePage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ token: string }>;
   searchParams: Promise<{ from?: string; to?: string; preset?: string }>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
-  if (!accountId) redirect("/login");
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const { token } = await params;
+
+  // Validate token
+  const link = await db
+    .select()
+    .from(publicLinks)
+    .where(eq(publicLinks.token, token))
+    .get();
+
+  if (!link || link.revokedAt) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Link unavailable</h1>
+          <p className="text-[14px] text-muted-foreground">
+            This view-only link has been revoked or doesn't exist. Ask the person who shared it for a new one.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // Bump view counter (best-effort, non-blocking)
+  db.update(publicLinks)
+    .set({ viewsCount: sql`${publicLinks.viewsCount} + 1` })
+    .where(eq(publicLinks.token, token))
+    .run();
+
+  // Owner's Meta accounts — public viewer sees everything across every connected ad account.
+  const allAccountRows = await db.select({ id: accounts.id }).from(accounts).all();
+  const allAccountIds = allAccountRows.map(r => r.id);
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
   const defaultFrom = startOfMonth(subMonths(now, 5));
 
-  const params = await searchParams;
-  const preset = params.preset || "6m";
-  const fromDate = params.from ? new Date(params.from + "T00:00:00") : defaultFrom;
-  const toDate = params.to ? new Date(params.to + "T23:59:59") : now;
+  const sp = await searchParams;
+  const preset = sp.preset || "6m";
+  const fromDate = sp.from ? new Date(sp.from + "T00:00:00") : defaultFrom;
+  const toDate = sp.to ? new Date(sp.to + "T23:59:59") : now;
   const rangeFromStr = format(fromDate, "yyyy-MM-dd");
   const rangeToStr = format(toDate, "yyyy-MM-dd");
 
   const [allAds, metricsRaw, hubspotResult] = await Promise.all([
-    db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
+    db.select().from(ads).all(),
     db.select().from(dailyMetrics).where(gte(dailyMetrics.date, rangeFromStr)).all(),
     getLeadsFunnelLite(rangeFromStr, rangeToStr).catch(err => {
-      console.error("[executive] HubSpot fetch failed:", err);
+      console.error("[public-executive] HubSpot fetch failed:", err);
       return null;
     }),
   ]);
-  const allAdIds = new Set(allAds.map(a => a.id));
+  const adAccountSet = new Set(allAccountIds);
+  const allAdsForAccount = allAds.filter(a => adAccountSet.has(a.accountId));
+  const allAdIds = new Set(allAdsForAccount.map(a => a.id));
   const metrics = metricsRaw.filter(m => m.date <= rangeToStr && allAdIds.has(m.adId));
 
-  // Month buckets covering the selected range
   type MonthBucket = {
     key: string;
     label: string;
@@ -83,14 +105,12 @@ export default async function ExecutivePage({
     cursor = addMonths(cursor, 1);
   }
 
-  // Meta spend by month
   for (const m of metrics) {
     const d = new Date(m.date + "T00:00:00");
     const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
     if (bucket) bucket.spend += m.spend ?? 0;
   }
 
-  // HubSpot ATM by month (from ATM companies)
   if (hubspotResult) {
     for (const day of hubspotResult.dailyATM) {
       const d = new Date(day.date + "T00:00:00");
@@ -105,7 +125,6 @@ export default async function ExecutivePage({
   }
   for (const b of buckets) b.spend = Math.round(b.spend * 100) / 100;
 
-  // Current vs previous month (for top cards)
   const lastMonthStart = startOfMonth(subMonths(now, 1));
   const thisMonthKey = format(thisMonthStart, "yyyy-MM");
   const lastMonthKey = format(lastMonthStart, "yyyy-MM");
@@ -132,7 +151,6 @@ export default async function ExecutivePage({
     cpl: lastCPL && thisCPL ? pctDelta(thisCPL, lastCPL) : null,
   };
 
-  // Range-wide totals (for the header stat line + export context)
   const rangeTotals = buckets.reduce(
     (acc, b) => ({
       spend: acc.spend + b.spend,
@@ -144,7 +162,6 @@ export default async function ExecutivePage({
   const rangeCPL = rangeTotals.atm > 0 ? Math.round((rangeTotals.spend / rangeTotals.atm) * 100) / 100 : null;
   const rangeCostPerSQL = rangeTotals.sqls > 0 ? Math.round((rangeTotals.spend / rangeTotals.sqls) * 100) / 100 : null;
 
-  // Top ad this month
   const adStatsMap = new Map<string, { spend: number; conversions: number }>();
   for (const m of metrics) {
     const d = new Date(m.date + "T00:00:00");
@@ -155,7 +172,7 @@ export default async function ExecutivePage({
     adStatsMap.set(m.adId, cur);
   }
   const adRanks = Array.from(adStatsMap.entries()).map(([adId, stats]) => {
-    const ad = allAds.find(a => a.id === adId);
+    const ad = allAdsForAccount.find(a => a.id === adId);
     return {
       adId,
       adName: ad?.adName || "Unknown",
@@ -171,10 +188,9 @@ export default async function ExecutivePage({
     .sort((a, b) => b.conversions - a.conversions)[0] || null;
   const topAdBySpend = adRanks.slice().sort((a, b) => b.spend - a.spend)[0] || null;
 
-  // Top 5 campaigns across the selected range
   const campaignMap = new Map<string, { spend: number; conversions: number }>();
   for (const m of metrics) {
-    const ad = allAds.find(a => a.id === m.adId);
+    const ad = allAdsForAccount.find(a => a.id === m.adId);
     if (!ad) continue;
     const key = ad.campaignName || "(unknown)";
     const cur = campaignMap.get(key) ?? { spend: 0, conversions: 0 };
@@ -192,7 +208,6 @@ export default async function ExecutivePage({
     .sort((a, b) => b.spend - a.spend)
     .slice(0, 5);
 
-  // Presets the selector renders (values stored in URL as ?preset=XXX)
   const presets = {
     "this-month": { from: format(thisMonthStart, "yyyy-MM-dd"), to: format(now, "yyyy-MM-dd") },
     "last-month": { from: format(lastMonthStart, "yyyy-MM-dd"), to: format(endOfMonth(lastMonthStart), "yyyy-MM-dd") },
@@ -204,7 +219,17 @@ export default async function ExecutivePage({
 
   return (
     <div className="min-h-screen">
+      {/* Tiny banner so viewer knows this is a shared view */}
+      <div className="bg-gradient-to-r from-[#6B93D8]/10 via-[#9B7ED0]/10 to-[#D06AB8]/10 border-b border-border exec-no-print">
+        <div className="max-w-6xl mx-auto px-6 py-2 text-[12px] text-muted-foreground flex items-center justify-between">
+          <span>
+            {link.label ? <>Shared view — <span className="font-medium text-foreground">{link.label}</span></> : "Shared view"}
+          </span>
+          <span className="text-[11px]">View-only · live data</span>
+        </div>
+      </div>
       <ExecutiveClient
+        basePath={`/public/executive/${token}`}
         monthLabel={format(now, "MMMM yyyy")}
         rangeLabel={
           buckets.length === 1

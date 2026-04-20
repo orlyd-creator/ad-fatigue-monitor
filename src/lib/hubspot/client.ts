@@ -187,6 +187,105 @@ async function getSQLDealsInRange(fromTs: number, toTs: number): Promise<Array<{
 }
 
 /**
+ * Lightweight variant — only returns daily ATM + SQL deal counts (no contacts, no MQL).
+ * Used by Executive View which doesn't need per-contact attribution.
+ * Drops contact-association lookups and MQL query — typically 5-10x faster than full getLeadsFunnel.
+ */
+export async function getLeadsFunnelLite(
+  fromDate: string,
+  toDate: string,
+): Promise<{
+  dailyATM: { date: string; atm: number }[];
+  dailySQLDeals: { date: string; sqlDeals: number }[];
+  totalATM: number;
+  totalSQLs: number;
+}> {
+  const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
+  const toTs = new Date(toDate + "T23:59:59Z").getTime();
+
+  const companySearchBody = {
+    filterGroups: [{
+      filters: [
+        { propertyName: COMPANY_ATM_PROP, operator: "GTE", value: String(fromTs) },
+        { propertyName: COMPANY_ATM_PROP, operator: "LTE", value: String(toTs) },
+        { propertyName: COMPANY_LEAD_SOURCE_PROP, operator: "EQ", value: "Inbound" },
+        { propertyName: COMPANY_TIER_PROP, operator: "IN", values: COMPANY_TIER_ALLOWLIST },
+      ],
+    }],
+    properties: [COMPANY_ATM_PROP],
+    limit: 100,
+  };
+
+  // Run ATM companies + SQL deals in parallel — both are independent queries
+  const [atmDates, sqlDates] = await Promise.all([
+    (async () => {
+      const dates: string[] = [];
+      let after: string | undefined;
+      do {
+        const r = await hubspotFetch("/crm/v3/objects/companies/search", {
+          method: "POST",
+          body: JSON.stringify({ ...companySearchBody, ...(after ? { after } : {}) }),
+        });
+        for (const c of (r.results || [])) {
+          const raw = c.properties?.[COMPANY_ATM_PROP];
+          const d = parseCompanyDate(raw);
+          if (d) dates.push(d);
+        }
+        after = r.paging?.next?.after;
+      } while (after);
+      return dates;
+    })(),
+    (async () => {
+      const baseFilters = [
+        { propertyName: "pipeline", operator: "EQ", value: SQL_PIPELINE_ID },
+        { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
+        { propertyName: "createdate", operator: "LTE", value: String(toTs) },
+      ];
+      const searchBody = {
+        filterGroups: [
+          { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NEQ", value: SQL_REJECT_VALUE }] },
+          { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NOT_HAS_PROPERTY" }] },
+        ],
+        properties: ["createdate"],
+        limit: 100,
+      };
+      const raw: any[] = [];
+      let after: string | undefined;
+      do {
+        const r = await hubspotFetch("/crm/v3/objects/deals/search", {
+          method: "POST",
+          body: JSON.stringify({ ...searchBody, ...(after ? { after } : {}) }),
+        });
+        raw.push(...(r.results || []));
+        after = r.paging?.next?.after;
+      } while (after);
+      // Dedupe across the two filter groups
+      return Array.from(new Map(raw.map(d => [d.id, (d.properties?.createdate || "").slice(0, 10)])).values())
+        .filter(Boolean);
+    })(),
+  ]);
+
+  const atmMap = new Map<string, number>();
+  for (const d of atmDates) atmMap.set(d, (atmMap.get(d) || 0) + 1);
+  const dailyATM = Array.from(atmMap.entries())
+    .map(([date, atm]) => ({ date, atm }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const sqlMap = new Map<string, number>();
+  for (const d of sqlDates) sqlMap.set(d, (sqlMap.get(d) || 0) + 1);
+  const dailySQLDeals = Array.from(sqlMap.entries())
+    .map(([date, sqlDeals]) => ({ date, sqlDeals }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    dailyATM,
+    dailySQLDeals,
+    totalATM: atmDates.length,
+    totalSQLs: sqlDates.length,
+  };
+}
+
+/**
  * Config-driven lead funnel. Matches HubSpot's native "Inbounds YTD Monthly Leads By Tier"
  * report exactly by querying Companies (primary) with the same 3 filters:
  *   - Company.willing_to_meet (ATM date) in [from, to]

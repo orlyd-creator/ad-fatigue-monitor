@@ -207,7 +207,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
       // Prefer the highest-resolution image URL available. Meta's creative.image_url
       // is often a tiny (~100px) thumbnail; asset_feed_spec and object_story_spec
-      // frequently have much larger source URLs. Fall through in priority order.
+      // frequently have much larger source URLs. Broad campaigns (static images
+      // authored via the Ads Manager image uploader) commonly only expose the
+      // big URL via thumbnail_url.width(1080).height(1080) — which we request above.
+      // Fall through in priority order, and critically: prefer the 1080-sized
+      // thumbnail_url over creative.image_url.
       const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
       const storyPictureLink = creative.object_story_spec?.link_data?.picture;
       const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
@@ -215,7 +219,8 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         assetFeedImage ||
         storyPictureLink ||
         storyPicturePhoto ||
-        creative.image_url ||
+        creative.thumbnail_url ||   // 1080x1080 because we requested it as such
+        creative.image_url ||       // last-resort small (~100px) fallback
         null;
 
       await db.insert(ads)

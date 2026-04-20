@@ -19,6 +19,15 @@ type ShareToken = {
   usesCount: number;
 };
 
+type PublicLink = {
+  token: string;
+  label: string | null;
+  createdAt: number;
+  createdBy: string | null;
+  revokedAt: number | null;
+  viewsCount: number;
+};
+
 function formatDate(ts: number | null) {
   if (!ts) return "";
   return new Date(ts).toLocaleDateString(undefined, {
@@ -31,14 +40,17 @@ function formatDate(ts: number | null) {
 export default function TeamClient({
   initialInvites,
   initialTokens,
+  initialPublicLinks,
   origin,
 }: {
   initialInvites: Invite[];
   initialTokens: ShareToken[];
+  initialPublicLinks: PublicLink[];
   origin: string;
 }) {
   const [invites, setInvites] = useState<Invite[]>(initialInvites);
   const [tokens, setTokens] = useState<ShareToken[]>(initialTokens);
+  const [publicLinks, setPublicLinks] = useState<PublicLink[]>(initialPublicLinks);
   const [email, setEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +59,10 @@ export default function TeamClient({
   const [linkLabel, setLinkLabel] = useState("");
   const [creatingLink, setCreatingLink] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+
+  const [publicLabel, setPublicLabel] = useState("");
+  const [creatingPublic, setCreatingPublic] = useState(false);
+  const [copiedPublic, setCopiedPublic] = useState<string | null>(null);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -124,7 +140,46 @@ export default function TeamClient({
     setTimeout(() => setCopied(null), 1800);
   }
 
+  async function handleCreatePublic(e: React.FormEvent) {
+    e.preventDefault();
+    setCreatingPublic(true);
+    try {
+      const res = await fetch("/api/team/public-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: publicLabel.trim() || null }),
+      });
+      if (!res.ok) throw new Error("Couldn't create public link");
+      const listRes = await fetch("/api/team/public-links");
+      const listData = await listRes.json();
+      setPublicLinks(listData.tokens || []);
+      setPublicLabel("");
+    } catch (err: any) {
+      alert(err?.message || "Error creating public link");
+    } finally {
+      setCreatingPublic(false);
+    }
+  }
+
+  async function handleRevokePublic(token: string) {
+    if (!confirm("Revoke this public link? Anyone with the URL will get an error.")) return;
+    const res = await fetch(`/api/team/public-links?token=${encodeURIComponent(token)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setPublicLinks(prev => prev.map(t => t.token === token ? { ...t, revokedAt: Date.now() } : t));
+    }
+  }
+
+  function copyPublic(token: string) {
+    const url = `${origin}/public/executive/${token}`;
+    navigator.clipboard.writeText(url);
+    setCopiedPublic(token);
+    setTimeout(() => setCopiedPublic(null), 1800);
+  }
+
   const activeTokens = tokens.filter(t => !t.revokedAt);
+  const activePublic = publicLinks.filter(t => !t.revokedAt);
 
   return (
     <main className="max-w-2xl mx-auto px-6 py-8">
@@ -133,6 +188,73 @@ export default function TeamClient({
         <p className="text-[14px] text-muted-foreground mt-1">
           Share your exact view with your team. No setup required on their side.
         </p>
+      </div>
+
+      {/* Public view-only link (no login required) */}
+      <div className="lv-card p-6 mb-6 border-2 border-[#D06AB8]/30 bg-gradient-to-br from-[#6B93D8]/5 via-[#9B7ED0]/5 to-[#D06AB8]/5">
+        <div className="flex items-center gap-2 mb-1">
+          <svg className="w-4 h-4 text-[#D06AB8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <h2 className="text-[15px] font-semibold text-foreground">Public view-only link</h2>
+          <span className="text-[11px] font-medium text-[#D06AB8] bg-[#D06AB8]/10 px-2 py-0.5 rounded-full">No login</span>
+        </div>
+        <p className="text-[13px] text-muted-foreground mb-4">
+          Create a link that goes straight to your Executive dashboard — anyone with the URL can view it, no sign-in, no Facebook.
+          Live data, view-only. Revoke anytime.
+        </p>
+        <form onSubmit={handleCreatePublic} className="flex gap-2">
+          <input
+            type="text"
+            value={publicLabel}
+            onChange={(e) => setPublicLabel(e.target.value)}
+            placeholder="Label (optional): e.g. Board, Investors, CEO"
+            maxLength={80}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white/50 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#D06AB8]/40"
+            disabled={creatingPublic}
+          />
+          <button
+            type="submit"
+            disabled={creatingPublic}
+            className="px-5 py-2.5 rounded-xl text-[14px] font-medium text-white
+              bg-gradient-to-r from-[#9B7ED0] to-[#D06AB8]
+              shadow-md shadow-pink-100 hover:shadow-lg disabled:opacity-40 transition-all"
+          >
+            {creatingPublic ? "Creating..." : "Create public link"}
+          </button>
+        </form>
+
+        {activePublic.length > 0 && (
+          <ul className="mt-5 space-y-2">
+            {activePublic.map(t => {
+              const url = `${origin}/public/executive/${t.token}`;
+              return (
+                <li key={t.token} className="flex items-center gap-2 p-3 rounded-xl bg-white/70 border border-border">
+                  <div className="flex-1 min-w-0">
+                    {t.label && <div className="text-[13px] font-medium text-foreground">{t.label}</div>}
+                    <div className="text-[12px] font-mono text-muted-foreground truncate" title={url}>{url}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Created {formatDate(t.createdAt)} · Viewed {t.viewsCount}×
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => copyPublic(t.token)}
+                    className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-[#D06AB8] text-white hover:bg-[#B858A0] transition-colors"
+                  >
+                    {copiedPublic === t.token ? "Copied!" : "Copy"}
+                  </button>
+                  <button
+                    onClick={() => handleRevokePublic(t.token)}
+                    className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Revoke
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       {/* Share link section (primary CTA) */}

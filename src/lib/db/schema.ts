@@ -107,6 +107,16 @@ export const shareTokens = sqliteTable("share_tokens", {
   usesCount: integer("uses_count").notNull().default(0),
 });
 
+// Anonymous public view-only links — no login required.
+export const publicLinks = sqliteTable("public_links", {
+  token: text("token").primaryKey(),
+  label: text("label"),
+  createdAt: integer("created_at").notNull().$defaultFn(() => Date.now()),
+  createdBy: text("created_by"),
+  revokedAt: integer("revoked_at"),
+  viewsCount: integer("views_count").notNull().default(0),
+});
+
 // Type exports
 export type Account = typeof accounts.$inferSelect;
 export type Ad = typeof ads.$inferSelect;
@@ -116,3 +126,4 @@ export type Settings = typeof settings.$inferSelect;
 export type HubSpotConfig = typeof hubspotConfig.$inferSelect;
 export type TeamInvite = typeof teamInvites.$inferSelect;
 export type ShareToken = typeof shareTokens.$inferSelect;
+export type PublicLink = typeof publicLinks.$inferSelect;

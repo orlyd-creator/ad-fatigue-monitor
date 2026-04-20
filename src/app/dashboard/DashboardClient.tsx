@@ -245,16 +245,16 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
 
   const insights = useMemo(() => {
     if (statusFiltered.length === 0) return [];
-    const items: Array<{ color: string; text: string; adId?: string; adIds?: string[] }> = [];
+    const items: Array<{ color: string; text: string; adId?: string; filterToFatigued?: boolean }> = [];
 
-    // 1. Wasted spend — link to fatigued ads
+    // 1. Wasted spend — filter dashboard to show all fatigued ads (plural)
     const fatiguedAdsFiltered = statusFiltered.filter(a => a.fatigue.fatigueScore >= 50);
     if (spendData.wastedSpend > 0 && fatiguedAdsFiltered.length > 0) {
       const worstFatigued = fatiguedAdsFiltered.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore)[0];
       items.push({
         color: "#ea384c",
-        text: `You're burning $${spendData.wastedSpend.toLocaleString("en-US", {maximumFractionDigits: 0})} on ${spendData.fatigueAdCount} fatigued ads (${spendData.wastedPct.toFixed(0)}% of spend). Worst offender: "${worstFatigued.adName}" at score ${worstFatigued.fatigue.fatigueScore}.`,
-        adId: worstFatigued.id,
+        text: `You're burning $${spendData.wastedSpend.toLocaleString("en-US", {maximumFractionDigits: 0})} on ${spendData.fatigueAdCount} fatigued ad${spendData.fatigueAdCount === 1 ? "" : "s"} (${spendData.wastedPct.toFixed(0)}% of spend). Worst offender: "${worstFatigued.adName}" at score ${worstFatigued.fatigue.fatigueScore}.`,
+        filterToFatigued: true,
       });
     }
 
