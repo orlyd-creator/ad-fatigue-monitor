@@ -84,6 +84,99 @@ async function paginateAll(url: string, token: string, params: Record<string, st
   return all;
 }
 
+/**
+ * Fast micro-sync: pulls TODAY's ad-level insights only and upserts them.
+ * ~2-5 seconds vs ~15-60s for full sync. Run every 2 min to keep today's
+ * numbers as close to live as Meta will allow (Meta itself has 6-12h lag
+ * on same-day spend, so tighter than 2 min is waste).
+ *
+ * Doesn't touch: ad metadata, creatives, historical metrics, fatigue alerts.
+ * Just today's daily_metrics rows + ads.lastSyncedAt.
+ */
+export async function syncTodayOnly(accountId: string): Promise<{
+  rowsUpdated: number;
+  errors: string[];
+}> {
+  const out = { rowsUpdated: 0, errors: [] as string[] };
+  const account = await db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  if (!account) { out.errors.push("account not found"); return out; }
+  if (account.tokenExpiresAt < Date.now()) { out.errors.push("token expired"); return out; }
+  const token = account.accessToken;
+  const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const insightFields = [
+    "ad_id", "impressions", "reach", "clicks", "spend",
+    "frequency", "ctr", "cpm", "cpc", "actions", "cost_per_action_type",
+    "inline_post_engagement",
+  ].join(",");
+
+  try {
+    const insights = await paginateAll(`/${actId}/insights`, token, {
+      fields: insightFields,
+      time_range: JSON.stringify({ since: today, until: today }),
+      time_increment: "1",
+      level: "ad",
+    });
+
+    for (const insight of insights) {
+      const adId = insight.ad_id;
+      if (!adId) continue;
+      const totalActions = insight.actions?.reduce(
+        (sum: number, a: any) => sum + parseInt(a.value, 10), 0,
+      ) ?? 0;
+      const clicks = parseInt(insight.clicks || "0", 10);
+      const costPerAction =
+        insight.cost_per_action_type?.find(
+          (a: any) => a.action_type === "link_click" || a.action_type === "offsite_conversion",
+        )?.value ?? insight.cost_per_action_type?.[0]?.value ?? "0";
+
+      const row = {
+        adId,
+        date: insight.date_start,
+        impressions: parseInt(insight.impressions || "0", 10),
+        reach: parseInt(insight.reach || "0", 10),
+        clicks,
+        spend: parseFloat(insight.spend || "0"),
+        frequency: parseFloat(insight.frequency || "0"),
+        ctr: parseFloat(insight.ctr || "0"),
+        cpm: parseFloat(insight.cpm || "0"),
+        cpc: parseFloat(insight.cpc || "0"),
+        actions: totalActions,
+        costPerAction: parseFloat(costPerAction),
+        conversionRate: clicks > 0 ? totalActions / clicks : 0,
+        inlinePostEngagement: parseInt(insight.inline_post_engagement || "0", 10),
+        postReactions: 0,
+        postComments: 0,
+        postShares: 0,
+      };
+      await db
+        .insert(dailyMetrics)
+        .values(row)
+        .onConflictDoUpdate({ target: [dailyMetrics.adId, dailyMetrics.date], set: row })
+        .run();
+      out.rowsUpdated++;
+    }
+
+    // Also bump lastSyncedAt on ads touched so freshness pills reflect reality.
+    const adsTouched = new Set<string>(
+      insights.map((i: any) => i.ad_id).filter(Boolean) as string[],
+    );
+    if (adsTouched.size > 0) {
+      const { sql } = await import("drizzle-orm");
+      const ids = Array.from(adsTouched);
+      // Chunked update to avoid giant IN() clauses.
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        await db.run(sql`UPDATE ads SET last_synced_at = ${Date.now()} WHERE id IN (${sql.join(chunk.map(id => sql`${id}`), sql`, `)})`);
+      }
+    }
+  } catch (e: any) {
+    out.errors.push(e?.message || String(e));
+  }
+  return out;
+}
+
 export async function syncAccount(accountId: string): Promise<SyncResult> {
   const result: SyncResult = { adsFound: 0, metricsUpserted: 0, alertsGenerated: 0, errors: [] };
 

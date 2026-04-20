@@ -55,22 +55,25 @@ export async function register() {
     console.error("[instrumentation] Schema bootstrap failed:", err);
   }
 
-  // ── 10-minute auto-sync ──
-  // Railway doesn't read vercel.json crons, so this in-process interval keeps
-  // Meta data close to live. Orly asked for ~live numbers, 10 min is the
-  // sweet spot between freshness and API rate limits (Meta's insights have
-  // 6-12h lag for same-day spend anyway, so tighter than 10 min doesn't help).
+  // ── Two-tier auto-sync ──
+  // Tier 1 (every 2 min): syncTodayOnly, pulls TODAY's insights only, ~3s
+  //   per account. Keeps today's spend / CTR / CPM as close to live as Meta
+  //   allows (Meta itself has 6-12h same-day lag on spend, so tighter than
+  //   2 min is pointless).
+  // Tier 2 (every 10 min): syncAccount, full 180-day window + ad metadata
+  //   + fatigue scoring. Catches historical corrections Meta publishes
+  //   after the fact.
   // Guarded on a global to survive Next.js hot-reload in dev.
   try {
-    const SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 min (was 1 hour)
+    const FULL_SYNC_MS = 10 * 60 * 1000;    // 10 min
+    const TODAY_SYNC_MS = 2 * 60 * 1000;    // 2 min
     const g = globalThis as any;
     if (!g.__metaAutoSyncStarted) {
       g.__metaAutoSyncStarted = true;
-      // First run 60s after boot so we don't fight deploy warm-up, then every
-      // SYNC_INTERVAL_MS.
+      // First full run 60s after boot so we don't fight deploy warm-up.
       let firstRun = true;
       const schedule = () => {
-        setTimeout(runAutoSync, firstRun ? 60000 : SYNC_INTERVAL_MS);
+        setTimeout(runAutoSync, firstRun ? 60000 : FULL_SYNC_MS);
         firstRun = false;
       };
       const runAutoSync = async () => {
@@ -101,7 +104,36 @@ export async function register() {
         }
       };
       schedule();
-      console.log("[instrumentation] 10-min auto-sync registered");
+      console.log("[instrumentation] 10-min full auto-sync registered");
+
+      // Tier 2: today-only micro-sync every 2 min.
+      const scheduleToday = () => setTimeout(runTodaySync, TODAY_SYNC_MS);
+      const runTodaySync = async () => {
+        try {
+          const { db } = await import("@/lib/db");
+          const { accounts } = await import("@/lib/db/schema");
+          const { syncTodayOnly } = await import("@/lib/meta/sync");
+          const rows = await db.select().from(accounts).all();
+          for (const account of rows) {
+            if (account.tokenExpiresAt < Date.now()) continue;
+            try {
+              const res = await syncTodayOnly(account.id);
+              if (res.rowsUpdated > 0) {
+                console.log(`[today-sync] ${account.id}: ${res.rowsUpdated} rows`);
+              }
+            } catch (err: any) {
+              console.error(`[today-sync] ${account.id} failed:`, err?.message || err);
+            }
+          }
+        } catch (err: any) {
+          console.error("[today-sync] tick failed:", err?.message || err);
+        } finally {
+          scheduleToday();
+        }
+      };
+      // First today-sync 90s after boot (after the full-sync warmup).
+      setTimeout(runTodaySync, 90000);
+      console.log("[instrumentation] 2-min today-only auto-sync registered");
     }
   } catch (err) {
     console.error("[instrumentation] Auto-sync registration failed:", err);
