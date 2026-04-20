@@ -122,19 +122,79 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           router.refresh();
         }, 1500);
       } catch {
-        setSyncError("Something went wrong");
+        // The server action transport can fail (Railway stream timeout, user
+        // navigation during the long sync, etc.) even when the backend wrote
+        // the data fine. Verify by pinging a recent-syncedAt signal before
+        // showing the scary "something went wrong" banner.
+        try {
+          const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
+          if (check.ok) {
+            const data = await check.json();
+            const mostRecent = Array.isArray(data?.ads)
+              ? data.ads.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0)
+              : 0;
+            if (Date.now() - mostRecent < 120000) {
+              setSyncDone(true);
+              setTimeout(() => {
+                setSyncDone(false);
+                router.refresh();
+              }, 1500);
+              return;
+            }
+          }
+        } catch { /* fall through to error */ }
+        setSyncError("Sync didn't finish. Try again or reload.");
         setTimeout(() => setSyncError(null), 5000);
       }
     });
   };
 
   return (
-    <aside
-      className={clsx(
-        "h-screen sticky top-0 flex flex-col border-r border-gray-100 z-50 bg-[#FAFAFA] overflow-hidden",
-        collapsed ? "w-[52px] min-w-[52px]" : "w-[200px] min-w-[200px]"
+    <>
+      {/* Sync lock overlay — covers the page (but not the sidebar) while a
+          sync is running so clicks can't cancel the long-running action. */}
+      {isPending && !syncDone && (
+        <div
+          className="fixed inset-0 z-[55] bg-white/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-white/95 rounded-2xl shadow-xl border border-gray-100 px-6 py-5 max-w-sm mx-4">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div
+                  className="w-8 h-8 rounded-full"
+                  style={{
+                    background:
+                      "conic-gradient(from 0deg, #6B93D8, #9B7ED0, #D06AB8, #F04E80, #6B93D8)",
+                    animation: "spin 1.2s linear infinite",
+                    mask: "radial-gradient(closest-side, transparent 55%, black 56%)",
+                    WebkitMask:
+                      "radial-gradient(closest-side, transparent 55%, black 56%)",
+                  }}
+                />
+              </div>
+              <div>
+                <div className="text-[14px] font-semibold text-foreground">
+                  Refreshing your data…
+                </div>
+                <div className="text-[12px] text-gray-500 mt-0.5">
+                  Takes 30–60 seconds. Please wait — don't click around or the
+                  sync will cancel.
+                </div>
+              </div>
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes spin { to { transform: rotate(360deg); } }
+          `}</style>
+        </div>
       )}
-    >
+      <aside
+        className={clsx(
+          "h-screen sticky top-0 flex flex-col border-r border-gray-100 z-[60] bg-[#FAFAFA] overflow-hidden",
+          collapsed ? "w-[52px] min-w-[52px]" : "w-[200px] min-w-[200px]"
+        )}
+      >
       {/* Logo */}
       <div className={clsx("flex items-center gap-2 pt-5 pb-4", collapsed ? "px-2 justify-center" : "px-4")}>
         <button onClick={() => handleNav("/dashboard")} className="flex items-center gap-2 cursor-pointer">
@@ -278,5 +338,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </>
   );
 }

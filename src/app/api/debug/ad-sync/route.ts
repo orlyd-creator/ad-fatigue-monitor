@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ads, accounts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
+import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -88,6 +89,22 @@ export async function GET(req: NextRequest) {
     }
     const dbStatus = match.status;
     const liveStatus = body.effective_status || body.status;
+    // If ?force=1, write the live Meta status to the DB NOW. Unblocks drift
+    // without waiting on the full account sync.
+    const force = req.nextUrl.searchParams.get("force") === "1";
+    let forcedWrite: { before: string; after: string } | undefined;
+    if (force && dbStatus !== liveStatus && liveStatus) {
+      await db
+        .update(ads)
+        .set({ status: liveStatus, lastSyncedAt: Date.now() })
+        .where(eq(ads.id, match.id));
+      forcedWrite = { before: dbStatus, after: liveStatus };
+      revalidatePath("/dashboard");
+      revalidatePath("/strategy");
+      revalidatePath("/alerts");
+      revalidatePath("/executive");
+    }
+
     return NextResponse.json({
       ...base,
       live: {
@@ -98,15 +115,17 @@ export async function GET(req: NextRequest) {
         updatedTime: body.updated_time,
       },
       match: {
-        inSync: dbStatus === liveStatus,
+        inSync: force ? true : dbStatus === liveStatus,
         dbSaysActive: dbStatus === "ACTIVE",
         metaSaysActive:
           liveStatus === "ACTIVE" || body.effective_status === "ACTIVE",
-        diagnosis:
-          dbStatus === liveStatus
+        diagnosis: force && forcedWrite
+          ? `FORCED WRITE: DB was '${forcedWrite.before}', now '${forcedWrite.after}'. Refresh the page.`
+          : dbStatus === liveStatus
             ? "OK — DB matches Meta"
-            : `DRIFT — DB='${dbStatus}' but Meta='${liveStatus}'. Click Refresh in sidebar to resync.`,
+            : `DRIFT — DB='${dbStatus}' but Meta='${liveStatus}'. Append &force=1 to this URL to fix it now, or click Refresh.`,
       },
+      ...(forcedWrite ? { forcedWrite } : {}),
     });
   } catch (err: any) {
     return NextResponse.json({ ...base, live: { error: err.message } });
