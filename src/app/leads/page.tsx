@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { format, startOfMonth } from "date-fns";
 import { getLeadsFunnel } from "@/lib/hubspot/client";
 import LeadsClient from "./LeadsClient";
+import FreshnessGuard from "@/components/FreshnessGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -154,8 +155,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     });
   }
 
+  const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
+
   return (
     <div className="min-h-screen">
+      <div className="px-8 pt-6">
+        <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
+      </div>
       <LeadsClient
         totalSpend={Math.round(totalSpend * 100) / 100}
         totalClicks={totalClicks}

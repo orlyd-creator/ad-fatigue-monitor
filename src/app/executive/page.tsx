@@ -9,6 +9,7 @@ import {
 } from "date-fns";
 import { getLeadsFunnelLite } from "@/lib/hubspot/client";
 import ExecutiveClient from "./ExecutiveClient";
+import FreshnessGuard from "@/components/FreshnessGuard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -241,8 +242,13 @@ export default async function ExecutivePage({
     "12m": { from: format(startOfMonth(subMonths(now, 11)), "yyyy-MM-dd"), to: format(now, "yyyy-MM-dd") },
   };
 
+  const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
+
   return (
     <div className="min-h-screen">
+      <div className="px-8 pt-6">
+        <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
+      </div>
       <ExecutiveClient
         monthLabel={format(now, "MMMM yyyy")}
         rangeLabel={

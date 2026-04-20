@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { getLeadsFunnelLite } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
+import FreshnessGuard from "@/components/FreshnessGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -202,8 +203,13 @@ export default async function StrategyPage() {
     ctr: b.impressions > 0 ? Math.round((b.clicks / b.impressions) * 10000) / 100 : 0,
   }));
 
+  const lastSyncedAt = allAdsRaw.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
+
   return (
     <div className="min-h-screen">
+      <div className="px-8 pt-6">
+        <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
+      </div>
       <StrategyClient
         ads={adSummaries}
         dailySpendByAd={dailySpendByAd}
