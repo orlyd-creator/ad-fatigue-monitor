@@ -91,7 +91,7 @@ export default function AdDetailPage() {
                 <img
                   src={ad.imageUrl || ad.thumbnailUrl || ""}
                   alt={`${ad.adName} creative`}
-                  className="w-64 h-auto max-h-64 object-cover rounded-xl bg-gray-100 flex-shrink-0"
+                  className="w-72 max-h-80 object-contain rounded-xl bg-gray-50 flex-shrink-0"
                 />
               )}
               <div className="flex-1 min-w-0">

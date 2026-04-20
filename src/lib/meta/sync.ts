@@ -132,7 +132,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     try {
       allAdsFetch = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url,image_url,body,title,link_url,object_story_spec}",
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url.width(1080).height(1080),image_url,body,title,link_url,object_story_spec,asset_feed_spec}",
         effective_status: JSON.stringify([
           "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
           "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
@@ -194,8 +194,20 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       // Extract body text from creative or object_story_spec
       const adBody = creative.body || creative.object_story_spec?.link_data?.message || creative.object_story_spec?.video_data?.message || null;
       const adHeadline = creative.title || creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null;
-      const imageUrl = creative.image_url || null;
       const adLinkUrl = creative.link_url || creative.object_story_spec?.link_data?.link || null;
+
+      // Prefer the highest-resolution image URL available. Meta's creative.image_url
+      // is often a tiny (~100px) thumbnail; asset_feed_spec and object_story_spec
+      // frequently have much larger source URLs. Fall through in priority order.
+      const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
+      const storyPictureLink = creative.object_story_spec?.link_data?.picture;
+      const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
+      const imageUrl =
+        assetFeedImage ||
+        storyPictureLink ||
+        storyPicturePhoto ||
+        creative.image_url ||
+        null;
 
       await db.insert(ads)
         .values({
