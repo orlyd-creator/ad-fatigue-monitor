@@ -34,11 +34,16 @@ export default async function ComparePage({
     params.from || format(subDays(now, rangeDays), "yyyy-MM-dd");
   const rangeTo = params.to || format(now, "yyyy-MM-dd");
 
-  const [allAds, metricsRaw] = await Promise.all([
+  const [allAdsRaw, metricsRaw] = await Promise.all([
     db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
     db.select().from(dailyMetrics).where(gte(dailyMetrics.date, rangeFrom)).all(),
   ]);
-  const metrics = metricsRaw.filter((m) => m.date <= rangeTo);
+  // Exclude synthetic __unattributed_* reconciliation rows — they are the sync's
+  // gap-filler for account-level vs ad-level drift, not real ads, and should
+  // never appear in Winners/Losers.
+  const allAds = allAdsRaw.filter((a) => !a.id.startsWith("__unattributed_"));
+  const realAdIds = new Set(allAds.map((a) => a.id));
+  const metrics = metricsRaw.filter((m) => m.date <= rangeTo && realAdIds.has(m.adId));
 
   // Aggregate per-ad stats
   type AdStat = {

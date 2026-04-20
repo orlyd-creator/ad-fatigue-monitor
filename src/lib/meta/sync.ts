@@ -163,7 +163,7 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
 
     try {
       allAdsFetch = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url.width(1080).height(1080),image_url,body,title,link_url,object_story_spec,asset_feed_spec}",
+        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url.width(1080).height(1080),image_url,image_hash,body,title,link_url,object_story_spec,asset_feed_spec,effective_object_story_id}",
         effective_status: JSON.stringify([
           "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
           "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
@@ -216,6 +216,37 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       return result;
     }
 
+    // Resolve image_hash → permanent_url for ads that only expose image_hash
+    // (common for broad/awareness static image ads where asset_feed_spec is
+    // empty and creative.image_url is a tiny thumbnail).
+    const hashesToResolve = new Set<string>();
+    for (const ad of allAds) {
+      const h = ad.creative?.image_hash;
+      const hasGoodUrl =
+        ad.creative?.asset_feed_spec?.images?.[0]?.url ||
+        ad.creative?.object_story_spec?.link_data?.picture ||
+        ad.creative?.object_story_spec?.photo_data?.picture;
+      if (h && !hasGoodUrl) hashesToResolve.add(h);
+    }
+    const hashToUrl = new Map<string, string>();
+    if (hashesToResolve.size > 0) {
+      try {
+        const hashArr = Array.from(hashesToResolve);
+        // adimages endpoint accepts a JSON array of hashes
+        const imgRes = await metaFetch(`/${actId}/adimages`, token, {
+          hashes: JSON.stringify(hashArr),
+          fields: "hash,permalink_url,url,url_128",
+        });
+        for (const img of imgRes.data || []) {
+          const stable = img.permalink_url || img.url;
+          if (img.hash && stable) hashToUrl.set(img.hash, stable);
+        }
+        console.log(`[sync] Resolved ${hashToUrl.size}/${hashesToResolve.size} image_hash lookups for sharper thumbnails`);
+      } catch (e: any) {
+        console.error(`[sync] adimages hash lookup failed (non-fatal): ${e.message}`);
+      }
+    }
+
     // Save ad records
     console.log(`[sync] Saving ${allAds.length} ads to database...`);
     for (const ad of allAds) {
@@ -235,10 +266,13 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
       const storyPictureLink = creative.object_story_spec?.link_data?.picture;
       const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
+      // Resolved stable URL from the image_hash → adimages lookup above.
+      const hashResolved = creative.image_hash ? hashToUrl.get(creative.image_hash) : null;
       const imageUrl =
         assetFeedImage ||
         storyPictureLink ||
         storyPicturePhoto ||
+        hashResolved ||
         creative.image_url ||
         null;
       // thumbnailUrl is ONLY used if imageUrl is missing. It's signed/expiring,
