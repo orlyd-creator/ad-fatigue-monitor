@@ -422,9 +422,16 @@ export default async function StrategyPage({
     return row;
   });
 
-  // Daily CPL + Cost-per-SQL, merges daily spend with daily ATM & SQL counts.
+  // Daily CPL + Cost-per-SQL, merges daily spend with daily ATM & deal-based
+  // SQL counts. SQLs come from hs.dailySQLDeals (deal-based, matches the
+  // native 'SQLs Monthly' HS report exactly) — NOT from contact-level
+  // lifecycle classification, which was drifting away from the headline
+  // totalSQLs number in the top card.
   const atmByDate = new Map(hubspotATM.map((d) => [d.date, d.atm]));
-  const sqlsByDate = new Map(hubspotATM.map((d) => [d.date, d.sqls]));
+  const sqlsByDate = new Map<string, number>();
+  for (const d of hs?.dailySQLDeals ?? []) {
+    sqlsByDate.set(d.date, (sqlsByDate.get(d.date) || 0) + d.sqlDeals);
+  }
   const dailyCPL = dailyData.map((day) => {
     const atm = atmByDate.get(day.date) || 0;
     const sqls = sqlsByDate.get(day.date) || 0;
