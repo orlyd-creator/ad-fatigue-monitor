@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { getLeadsFunnel, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
+import { getLeadsFunnelLite, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
 import LeadsClient from "../leads/LeadsClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
@@ -216,11 +216,15 @@ export default async function StrategyPage({
     ? Math.round(100 - adSummaries.reduce((s, a) => s + a.fatigueScore, 0) / adSummaries.length)
     : 100;
 
-  // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
-  // Meta-driven cost-per-demo and cost-per-SQL, the numbers that actually
-  // matter for growth decisions.
+  // HUBSPOT: use the LITE variant for the main funnel so date preset clicks
+  // are fast. getLeadsFunnel (full) fans out a contact-association fetch per
+  // company which makes every preset click take 5-10s on Strategy page.
+  // Lite returns daily ATM + daily deal-based SQLs, enough for all the
+  // numbers + charts on this page. Contact drilldown on LeadsClient is a
+  // secondary feature that's rarely used; we pass an empty contacts array
+  // rather than blocking the page render on it.
   const [hs, utmLeads, won] = await Promise.all([
-    getLeadsFunnel(rangeStart, rangeEnd).catch((err) => {
+    getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
       console.error("[strategy] HubSpot fetch failed:", err);
       return null;
     }),
@@ -235,14 +239,12 @@ export default async function StrategyPage({
   ]);
   const totalATM = hs?.totalATM ?? 0;
   const totalSQLs = hs?.totalSQLs ?? 0;
-  const totalMQLs = hs?.totalMQLs ?? 0;
-  const hubspotATM = hs?.dailyATM.map(d => ({ date: d.date, atm: d.atm, sqls: d.sqls })) ?? [];
-  const hubspotMQLs = hs?.dailyMQLs.map(d => ({ date: d.date, mqls: d.mqls })) ?? [];
+  const totalMQLs = 0;
+  // Daily ATM from lite (no per-day sqls — that's derived from dailySQLDeals
+  // below, matching the headline deal-based total).
+  const hubspotATM = hs?.dailyATM.map(d => ({ date: d.date, atm: d.atm, sqls: 0 })) ?? [];
+  const hubspotMQLs: Array<{ date: string; mqls: number }> = [];
   const allLeadContacts: Array<any> = [];
-  if (hs) {
-    for (const d of hs.dailyATM) allLeadContacts.push(...d.contacts);
-    for (const d of hs.dailyMQLs) allLeadContacts.push(...d.contacts);
-  }
   const costPerDemo = totalATM > 0 ? totalSpend / totalATM : null;
   const costPerSQL = totalSQLs > 0 ? totalSpend / totalSQLs : null;
   const demoToSQLRate = totalATM > 0 ? (totalSQLs / totalATM) * 100 : null;
