@@ -118,6 +118,74 @@ const COMPANY_LEAD_SOURCE_PROP = "lead_source__cloned_"; // label: "Lead Source 
 const COMPANY_TIER_PROP = "tier";
 const COMPANY_TIER_ALLOWLIST = ["SMB", "Mid-Market", "Enterprise"];
 
+// Deal-level filters for SQL count — mirrors native "SQLs Monthly (No rejects)" report.
+// Pipeline ID + property name verified via /api/hubspot/sql-debug on 2026-04-20.
+const SQL_PIPELINE_ID = "1704584404";               // "Obol Sales Funnel (NEW)"
+const SQL_REJECT_PROP = "demo_accept_reject";
+const SQL_REJECT_VALUE = "Reject (Unqualified)";
+
+/** Query deals matching the native "SQLs Monthly (No rejects)" report filter set. */
+async function getSQLDealsInRange(fromTs: number, toTs: number): Promise<Array<{
+  id: string;
+  name: string;
+  createdate: string;
+  stage: string;
+  companyId?: string;
+}>> {
+  const baseFilters = [
+    { propertyName: "pipeline", operator: "EQ", value: SQL_PIPELINE_ID },
+    { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
+    { propertyName: "createdate", operator: "LTE", value: String(toTs) },
+  ];
+  const searchBody = {
+    filterGroups: [
+      { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NEQ", value: SQL_REJECT_VALUE }] },
+      { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NOT_HAS_PROPERTY" }] },
+    ],
+    properties: ["dealname", "createdate", "pipeline", "dealstage"],
+    limit: 100,
+  };
+  const rawDeals: any[] = [];
+  let after: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/deals/search", {
+      method: "POST",
+      body: JSON.stringify({ ...searchBody, ...(after ? { after } : {}) }),
+    });
+    rawDeals.push(...(r.results || []));
+    after = r.paging?.next?.after;
+  } while (after);
+  // Dedupe (a deal could theoretically match both filter groups)
+  const unique = Array.from(new Map(rawDeals.map(d => [d.id, d])).values());
+
+  // Fetch deal→company associations
+  const dealToCompany = new Map<string, string>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const batch = unique.slice(i, i + 100);
+    try {
+      const assoc = await hubspotFetch("/crm/v4/associations/deals/companies/batch/read", {
+        method: "POST",
+        body: JSON.stringify({ inputs: batch.map(d => ({ id: d.id })) }),
+      });
+      for (const r of (assoc.results || [])) {
+        const dId = String(r.from?.id || "");
+        const cId = String(r.to?.[0]?.toObjectId || "");
+        if (dId && cId) dealToCompany.set(dId, cId);
+      }
+    } catch (err) {
+      console.error("Deal→company assoc lookup failed (non-fatal):", err);
+    }
+  }
+
+  return unique.map(d => ({
+    id: String(d.id),
+    name: d.properties?.dealname || "",
+    createdate: (d.properties?.createdate || "").slice(0, 10),
+    stage: d.properties?.dealstage || "",
+    companyId: dealToCompany.get(String(d.id)),
+  }));
+}
+
 /**
  * Config-driven lead funnel. Matches HubSpot's native "Inbounds YTD Monthly Leads By Tier"
  * report exactly by querying Companies (primary) with the same 3 filters:
@@ -171,6 +239,12 @@ export async function getLeadsFunnel(
 
   // For each matching company, fetch associated contacts for attribution (UTMs, ad, source)
   // and lifecycle/lead status (to classify SQL vs ATM).
+  // Query SQL deals in the same range — native "SQLs Monthly" is a Deals-primary report.
+  // Build a set of company IDs that have at least one SQL deal, and the total deal count.
+  const sqlDeals = await getSQLDealsInRange(fromTs, toTs);
+  const sqlCompanyIds = new Set(sqlDeals.map(d => d.companyId).filter(Boolean) as string[]);
+  console.log(`[hubspot] SQL deals matching native report (${fromDate}→${toDate}): ${sqlDeals.length}`);
+
   const companyToContacts = new Map<string, HubSpotContact[]>();
   const contactDetails = new Map<string, HubSpotContact>();
   try {
@@ -269,19 +343,9 @@ export async function getLeadsFunnel(
       return aT - bT;
     })[0];
 
-    // Company is SQL if EITHER:
-    //   (a) company's own lifecycle/status qualifies, OR
-    //   (b) any associated contact has SQL lifecycle/status.
-    // Native HS reports typically use the company's lifecycle stage directly.
-    const companyStage = company.properties.lifecyclestage || "";
-    const companyLeadStatus = company.properties.hs_lead_status || "";
-    const companyIsSQL = config.sqlStatuses.includes(companyLeadStatus) || config.sqlStages.includes(companyStage);
-    const contactIsSQL = contacts.some(c => {
-      const stage = c.properties.lifecyclestage || "";
-      const leadStatus = c.properties.hs_lead_status || "";
-      return config.sqlStatuses.includes(leadStatus) || config.sqlStages.includes(stage);
-    });
-    const isSQL = companyIsSQL || contactIsSQL;
+    // SQL = company has at least one deal in "Obol Sales Funnel (NEW)" pipeline
+    // created in range that isn't rejected. Matches native "SQLs Monthly (No rejects)" report.
+    const isSQL = sqlCompanyIds.has(company.id);
 
     const tier = company.properties[COMPANY_TIER_PROP] || "";
     const leadSource = company.properties[COMPANY_LEAD_SOURCE_PROP] || "";
@@ -356,7 +420,10 @@ export async function getLeadsFunnel(
   return {
     dailyATM, dailyMQLs,
     totalATM: dailyATM.reduce((s, d) => s + d.atm, 0),
-    totalSQLs: dailyATM.reduce((s, d) => s + d.sqls, 0),
+    // totalSQLs = count of deals in "Obol Sales Funnel (NEW)" pipeline created in range
+    // (matches native "SQLs Monthly (No rejects)" report). Not derived from dailyATM because
+    // SQL deals can exist without a matching ATM company in the same period and vice versa.
+    totalSQLs: sqlDeals.length,
     totalMQLs: dailyMQLs.reduce((s, d) => s + d.mqls, 0),
   };
 }
