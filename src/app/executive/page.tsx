@@ -37,10 +37,12 @@ export default async function ExecutivePage({
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
-  const defaultFrom = startOfMonth(subMonths(now, 5));
+  // Default to this month — it's the most actionable view on page load.
+  // Users can switch to 3m/6m/YTD via the preset buttons.
+  const defaultFrom = thisMonthStart;
 
   const params = await searchParams;
-  const preset = params.preset || "6m";
+  const preset = params.preset || "this-month";
   const fromDate = params.from ? new Date(params.from + "T00:00:00") : defaultFrom;
   const toDate = params.to ? new Date(params.to + "T23:59:59") : now;
   const rangeFromStr = format(fromDate, "yyyy-MM-dd");

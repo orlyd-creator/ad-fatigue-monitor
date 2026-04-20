@@ -58,10 +58,10 @@ export default async function PublicExecutivePage({
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
-  const defaultFrom = startOfMonth(subMonths(now, 5));
+  const defaultFrom = thisMonthStart;
 
   const sp = await searchParams;
-  const preset = sp.preset || "6m";
+  const preset = sp.preset || "this-month";
   const fromDate = sp.from ? new Date(sp.from + "T00:00:00") : defaultFrom;
   const toDate = sp.to ? new Date(sp.to + "T23:59:59") : now;
   const rangeFromStr = format(fromDate, "yyyy-MM-dd");
