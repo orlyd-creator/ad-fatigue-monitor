@@ -228,17 +228,27 @@ export async function getLeadsFunnel(
   console.log(`[hubspot] Tier distribution across ${companyTierMap.size} contacts:`, Object.fromEntries(tierDistribution));
   console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}, tier lookup hit: ${companyTierMap.size}`);
 
-  // Only EXCLUDE explicit Micro SMB. Everyone else (any tier, no tier, unknown tier) kept.
-  // This matches the user's actual business rule: exclude micro SMBs that haven't been re-tiered.
-  // Missing-tier contacts are kept to match the native HubSpot Inbound Leads report count.
+  // STRICT allowlist matching HubSpot's native "Inbound Leads By Tier" report exactly:
+  // Only count contacts whose associated company tier is SMB, Mid-Market, or Enterprise.
+  // Re-tiered Micro SMB contacts (now SQL / customer / opportunity) are still kept.
   const filteredATM = atmContacts.filter(c => {
     const tier = companyTierMap.get(c.id) || "";
-    if (!isMicroSmb(tier)) return true; // keep everyone except explicit Micro SMB
-
-    // Micro SMB — keep only if re-tiered (SQL status or customer/opportunity stage)
+    const normalized = normalizeTier(tier);
     const stage = c.properties.lifecyclestage || "";
     const leadStatus = c.properties.hs_lead_status || "";
-    return config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
+    const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
+
+    // Allowlist match — keep
+    if (validTiers.has(normalized)) return true;
+
+    // Re-tiered carve-out — always keep regardless of company tier
+    if (isReTiered) return true;
+
+    // Tier API call totally failed — fall back to keep all so we don't zero the funnel
+    if (companyTierMap.size === 0) return true;
+
+    // Everything else: no tier / Micro SMB / unknown label → exclude (matches native report)
+    return false;
   });
   console.log(`[hubspot] ATM after tier filter: ${filteredATM.length}`);
 
