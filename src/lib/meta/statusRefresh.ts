@@ -10,11 +10,11 @@
  * hammer Meta.
  */
 import { db } from "@/lib/db";
-import { accounts, ads } from "@/lib/db/schema";
+import { accounts } from "@/lib/db/schema";
 import { inArray, sql } from "drizzle-orm";
 
-const MAX_AGE_MS = 5 * 60 * 1000;           // 5 min freshness ceiling
-const MIN_INTERVAL_MS = 60 * 1000;          // at most once per minute per account
+const MAX_AGE_MS = 90 * 1000;               // 90 sec freshness ceiling
+const MIN_INTERVAL_MS = 30 * 1000;          // at most once per 30s per account
 
 // in-process dedupe
 const lastRunByAccount = new Map<string, number>();
@@ -50,33 +50,15 @@ export async function refreshAdStatusesForAccounts(accountIds: string[]): Promis
   if (accountIds.length === 0) return;
   const now = Date.now();
 
-  // Filter to accounts we haven't hit in the last MIN_INTERVAL_MS
+  // Dedupe window: per account, at most once every MIN_INTERVAL_MS regardless
+  // of how fresh the DB looks. This keeps the refresh firing on every page
+  // view up to the cap, even if a sync just ran.
   const toRefresh = accountIds.filter(
     (id) => !lastRunByAccount.has(id) || now - (lastRunByAccount.get(id) || 0) > MIN_INTERVAL_MS,
   );
   if (toRefresh.length === 0) return;
 
-  // Also skip if the freshest ad in this account is younger than MAX_AGE_MS.
-  // Cheap single SELECT MAX.
-  const rows = await db
-    .select({ id: ads.accountId, maxAt: sql<number>`MAX(${ads.lastSyncedAt})` })
-    .from(ads)
-    .where(inArray(ads.accountId, toRefresh))
-    .groupBy(ads.accountId)
-    .all();
-  const maxByAccount = new Map(rows.map((r) => [r.id, r.maxAt || 0]));
-
-  const actuallyStale = toRefresh.filter((id) => {
-    const last = maxByAccount.get(id) || 0;
-    return now - last > MAX_AGE_MS;
-  });
-  if (actuallyStale.length === 0) {
-    // Mark even fresh ones so we don't re-check for a minute
-    for (const id of toRefresh) lastRunByAccount.set(id, now);
-    return;
-  }
-
-  const acctRows = await db.select().from(accounts).where(inArray(accounts.id, actuallyStale)).all();
+  const acctRows = await db.select().from(accounts).where(inArray(accounts.id, toRefresh)).all();
   await Promise.all(acctRows.map(async (a) => {
     if (a.tokenExpiresAt < now) return;
     const existing = inFlight.get(a.id);

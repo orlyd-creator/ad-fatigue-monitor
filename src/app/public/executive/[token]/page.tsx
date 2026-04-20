@@ -67,6 +67,11 @@ export default async function PublicExecutivePage({
   const rangeFromStr = format(fromDate, "yyyy-MM-dd");
   const rangeToStr = format(toDate, "yyyy-MM-dd");
 
+  // Refresh any stale ad statuses from Meta so paused ads don't show as
+  // ACTIVE to public viewers. Runs at most once per account per minute.
+  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await refreshAdStatusesForAccounts(allAccountIds);
+
   const [allAds, metricsRaw, hubspotResult] = await Promise.all([
     db.select().from(ads).all(),
     db.select().from(dailyMetrics).where(gte(dailyMetrics.date, rangeFromStr)).all(),
