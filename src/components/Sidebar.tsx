@@ -222,33 +222,59 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           Share workspace / Switch Account. Guides them back to the owner. */}
       {showPermPrompt && (
         <div
-          className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-[2px] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[4px] flex items-center justify-center p-5"
           onClick={() => setShowPermPrompt(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-sm w-full p-6"
+            className="relative bg-white rounded-3xl shadow-2xl max-w-[380px] w-[calc(100vw-40px)] overflow-hidden animate-fade-in"
             onClick={(e) => e.stopPropagation()}
+            style={{ animation: "permFade 200ms ease-out" }}
           >
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-[#7E69AB]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-[15px] font-semibold text-foreground">Sorry, you can't access this</h3>
-                <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
-                  You're on a view-only link. Request permissions from the person who shared it with you if you need this action.
-                </p>
-              </div>
-            </div>
+            {/* Close button top-right */}
             <button
               onClick={() => setShowPermPrompt(false)}
-              className="w-full py-2.5 rounded-lg bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[13px] font-semibold hover:opacity-90 transition"
+              aria-label="Close"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition"
             >
-              Got it
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
+
+            {/* Icon + gradient halo, centered at top */}
+            <div className="pt-8 pb-5 flex flex-col items-center px-8">
+              <div className="relative mb-5">
+                <div className="absolute inset-0 rounded-full blur-2xl opacity-40 bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8]" />
+                <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-[#6B93D8]/15 via-[#9B7ED0]/15 to-[#D06AB8]/15 ring-1 ring-[#9B7ED0]/25 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-[#7E69AB]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-[18px] font-bold text-foreground tracking-tight text-center leading-tight">
+                This is view-only
+              </h3>
+              <p className="text-[13.5px] text-muted-foreground mt-2 leading-relaxed text-center max-w-[300px]">
+                You're viewing a shared link. Ask the person who sent it if you need this action.
+              </p>
+            </div>
+
+            {/* Action button */}
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => setShowPermPrompt(false)}
+                className="w-full py-3 rounded-xl bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[14px] font-semibold shadow-sm hover:shadow-md active:scale-[0.98] transition"
+              >
+                Got it
+              </button>
+            </div>
           </div>
+          <style jsx>{`
+            @keyframes permFade {
+              from { opacity: 0; transform: scale(0.96) translateY(4px); }
+              to { opacity: 1; transform: scale(1) translateY(0); }
+            }
+          `}</style>
         </div>
       )}
 
