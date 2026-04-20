@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { getLeadsFunnelLite } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
 
 export const dynamic = "force-dynamic";
@@ -166,6 +167,40 @@ export default async function StrategyPage() {
   const totalSpend = rangeScopedAll.reduce((s, m) => s + (m.spend ?? 0), 0);
   const totalReach = rangeScopedAll.reduce((s, m) => s + (m.reach ?? 0), 0);
   const totalClicks = rangeScopedAll.reduce((s, m) => s + (m.clicks ?? 0), 0);
+  const totalImpressionsAll = rangeScopedAll.reduce((s, m) => s + (m.impressions ?? 0), 0);
+
+  // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
+  // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
+  // matter for growth decisions.
+  const hs = await getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
+    console.error("[strategy] HubSpot fetch failed:", err);
+    return null;
+  });
+  const totalATM = hs?.totalATM ?? 0;
+  const totalSQLs = hs?.totalSQLs ?? 0;
+  const costPerDemo = totalATM > 0 ? totalSpend / totalATM : null;
+  const costPerSQL = totalSQLs > 0 ? totalSpend / totalSQLs : null;
+  const demoToSQLRate = totalATM > 0 ? (totalSQLs / totalATM) * 100 : null;
+  const clickToLeadRate = totalClicks > 0 ? (totalATM / totalClicks) * 100 : null;
+
+  // DAY-OF-WEEK PERFORMANCE: aggregate spend + clicks + CTR by weekday to
+  // expose when campaigns are most efficient.
+  const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dowBuckets: Array<{ day: string; spend: number; clicks: number; impressions: number }> =
+    DAY_LABELS.map((day) => ({ day, spend: 0, clicks: 0, impressions: 0 }));
+  for (const m of rangeScopedAll) {
+    const d = new Date(m.date + "T00:00:00");
+    const b = dowBuckets[d.getDay()];
+    b.spend += m.spend ?? 0;
+    b.clicks += m.clicks ?? 0;
+    b.impressions += m.impressions ?? 0;
+  }
+  const dayOfWeek = dowBuckets.map((b) => ({
+    day: b.day,
+    spend: Math.round(b.spend * 100) / 100,
+    clicks: b.clicks,
+    ctr: b.impressions > 0 ? Math.round((b.clicks / b.impressions) * 10000) / 100 : 0,
+  }));
 
   return (
     <div className="min-h-screen">
@@ -177,6 +212,15 @@ export default async function StrategyPage() {
         totalSpend={Math.round(totalSpend * 100) / 100}
         totalReach={totalReach}
         totalClicks={totalClicks}
+        totalImpressions={totalImpressionsAll}
+        totalATM={totalATM}
+        totalSQLs={totalSQLs}
+        costPerDemo={costPerDemo !== null ? Math.round(costPerDemo * 100) / 100 : null}
+        costPerSQL={costPerSQL !== null ? Math.round(costPerSQL * 100) / 100 : null}
+        demoToSQLRate={demoToSQLRate !== null ? Math.round(demoToSQLRate * 10) / 10 : null}
+        clickToLeadRate={clickToLeadRate !== null ? Math.round(clickToLeadRate * 100) / 100 : null}
+        dayOfWeek={dayOfWeek}
+        rangeLabel={`${format(startOfMonth(now), "MMM d")} – ${format(now, "MMM d, yyyy")}`}
       />
     </div>
   );

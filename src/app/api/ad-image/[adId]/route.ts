@@ -34,8 +34,10 @@ async function resolveImageUrl(adId: string, token: string): Promise<string | nu
   if (hit && Date.now() - hit.fetchedAt < URL_CACHE_TTL) return hit.url;
 
   try {
+    // Request the largest thumbnail Meta will serve. 1440 keeps cards crisp
+    // on retina displays without going oversize.
     const fields =
-      "creative{thumbnail_url.width(1200).height(1200),image_url,image_hash,asset_feed_spec,object_story_spec}";
+      "creative{thumbnail_url.width(1440).height(1440),image_url,image_hash,asset_feed_spec,object_story_spec}";
     const res = await fetch(
       `https://graph.facebook.com/v21.0/${adId}?fields=${encodeURIComponent(fields)}&access_token=${token}`,
     );

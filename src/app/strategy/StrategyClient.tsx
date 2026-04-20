@@ -46,6 +46,15 @@ interface StrategyClientProps {
   totalSpend: number;
   totalReach: number;
   totalClicks: number;
+  totalImpressions: number;
+  totalATM: number;
+  totalSQLs: number;
+  costPerDemo: number | null;
+  costPerSQL: number | null;
+  demoToSQLRate: number | null;
+  clickToLeadRate: number | null;
+  dayOfWeek: Array<{ day: string; spend: number; clicks: number; ctr: number }>;
+  rangeLabel: string;
 }
 
 const COLORS = ["#6B93D8", "#D06AB8", "#F04E80", "#22c55e", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316", "#14b8a6"];
@@ -70,7 +79,12 @@ function formatNum(n: number): string {
 
 type Tab = "overview" | "efficiency" | "spend";
 
-export default function StrategyClient({ ads, dailySpendByAd, campaignSpend, accountHealth, totalSpend, totalReach, totalClicks }: StrategyClientProps) {
+export default function StrategyClient({
+  ads, dailySpendByAd, campaignSpend, accountHealth,
+  totalSpend, totalReach, totalClicks, totalImpressions,
+  totalATM, totalSQLs, costPerDemo, costPerSQL, demoToSQLRate, clickToLeadRate,
+  dayOfWeek, rangeLabel,
+}: StrategyClientProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -134,6 +148,80 @@ export default function StrategyClient({ ads, dailySpendByAd, campaignSpend, acc
         <div className="lv-card p-4 text-center">
           <div className="text-2xl font-bold" style={{ color: healthColor }}>{accountHealth}</div>
           <div className="text-[12px] text-gray-500 mt-1">Account Health</div>
+        </div>
+      </div>
+
+      {/* FUNNEL: Spend → Clicks → Demos → SQLs (Meta × HubSpot) */}
+      <div className="lv-card p-6 mb-6 bg-gradient-to-br from-[#6B93D8]/5 via-[#9B7ED0]/5 to-[#D06AB8]/5">
+        <div className="mb-4">
+          <h2 className="text-[15px] font-semibold text-foreground">Funnel — {rangeLabel}</h2>
+          <p className="text-[12px] text-muted-foreground">Ad spend through to qualified deals.</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="rounded-xl bg-white/70 p-4 text-center">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Spend</div>
+            <div className="text-[22px] font-bold text-foreground tabular-nums">{formatCurrency(totalSpend)}</div>
+          </div>
+          <div className="rounded-xl bg-white/70 p-4 text-center">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Clicks</div>
+            <div className="text-[22px] font-bold text-foreground tabular-nums">{formatNum(totalClicks)}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              CTR {totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0"}%
+            </div>
+          </div>
+          <div className="rounded-xl bg-white/70 p-4 text-center">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Demos Booked</div>
+            <div className="text-[22px] font-bold text-[#9B7ED0] tabular-nums">{totalATM}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {clickToLeadRate !== null ? `${clickToLeadRate.toFixed(2)}% of clicks` : "—"}
+            </div>
+          </div>
+          <div className="rounded-xl bg-white/70 p-4 text-center">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">SQLs</div>
+            <div className="text-[22px] font-bold text-[#D06AB8] tabular-nums">{totalSQLs}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {demoToSQLRate !== null ? `${demoToSQLRate.toFixed(1)}% of demos` : "—"}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-xl bg-gradient-to-r from-[#6B93D8]/10 to-[#9B7ED0]/10 p-4">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per Demo</div>
+            <div className="text-[24px] font-bold text-foreground tabular-nums">
+              {costPerDemo !== null ? formatCurrency(costPerDemo) : "—"}
+            </div>
+          </div>
+          <div className="rounded-xl bg-gradient-to-r from-[#9B7ED0]/10 to-[#D06AB8]/10 p-4">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per SQL</div>
+            <div className="text-[24px] font-bold text-foreground tabular-nums">
+              {costPerSQL !== null ? formatCurrency(costPerSQL) : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* DAY-OF-WEEK */}
+      <div className="lv-card p-6 mb-6">
+        <div className="mb-4">
+          <h2 className="text-[15px] font-semibold text-foreground">Day-of-week performance</h2>
+          <p className="text-[12px] text-muted-foreground">Spend + CTR by weekday — spot your best + worst days.</p>
+        </div>
+        <div style={{ width: "100%", height: 220 }}>
+          <ResponsiveContainer>
+            <BarChart data={dayOfWeek} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${Math.round(v)}`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+              <Tooltip
+                contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                formatter={(value: any, name: any) => name === "Spend" ? [formatCurrency(Number(value)), "Spend"] : [`${Number(value).toFixed(2)}%`, "CTR"]}
+              />
+              <Legend wrapperStyle={{ fontSize: "12px" }} />
+              <Bar yAxisId="left" dataKey="spend" name="Spend" fill="#6B93D8" radius={[6, 6, 0, 0]} />
+              <Bar yAxisId="right" dataKey="ctr" name="CTR" fill="#D06AB8" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
