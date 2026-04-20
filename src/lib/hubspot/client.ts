@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: HubSpotFilterConfig = {
   excludeSegmentProperty: "number_of_employees__segmented_",
   excludeSegmentValues: ["1-10"],
   sqlStatuses: ["SQL", "OPEN_DEAL"],
-  sqlStages: ["opportunity", "customer"],
+  sqlStages: ["salesqualifiedlead", "opportunity", "customer"],
   mqlProperty: "mql",
   mqlValue: "true",
 };
@@ -153,7 +153,7 @@ export async function getLeadsFunnel(
         { propertyName: COMPANY_TIER_PROP, operator: "IN", values: COMPANY_TIER_ALLOWLIST },
       ],
     }],
-    properties: ["name", COMPANY_TIER_PROP, COMPANY_LEAD_SOURCE_PROP, COMPANY_ATM_PROP, "domain"],
+    properties: ["name", COMPANY_TIER_PROP, COMPANY_LEAD_SOURCE_PROP, COMPANY_ATM_PROP, "domain", "lifecyclestage", "hs_lead_status"],
     limit: 100,
   };
 
@@ -269,12 +269,19 @@ export async function getLeadsFunnel(
       return aT - bT;
     })[0];
 
-    // Company is SQL if any associated contact is in an SQL stage/status
-    const isSQL = contacts.some(c => {
+    // Company is SQL if EITHER:
+    //   (a) company's own lifecycle/status qualifies, OR
+    //   (b) any associated contact has SQL lifecycle/status.
+    // Native HS reports typically use the company's lifecycle stage directly.
+    const companyStage = company.properties.lifecyclestage || "";
+    const companyLeadStatus = company.properties.hs_lead_status || "";
+    const companyIsSQL = config.sqlStatuses.includes(companyLeadStatus) || config.sqlStages.includes(companyStage);
+    const contactIsSQL = contacts.some(c => {
       const stage = c.properties.lifecyclestage || "";
       const leadStatus = c.properties.hs_lead_status || "";
       return config.sqlStatuses.includes(leadStatus) || config.sqlStages.includes(stage);
     });
+    const isSQL = companyIsSQL || contactIsSQL;
 
     const tier = company.properties[COMPANY_TIER_PROP] || "";
     const leadSource = company.properties[COMPANY_LEAD_SOURCE_PROP] || "";
