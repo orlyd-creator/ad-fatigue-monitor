@@ -299,18 +299,18 @@ async function _getLeadsFunnelLiteUncached(
   };
 }
 
-// Closed-won stage IDs across Obol pipelines — strictly the revenue-generating
-// Closed Won stages (legacy, micro-SMB, upsell). PLG stages (Live, Upsell
-// Completed, Lost) are excluded from ROAS because "Live" can include free
-// trials that haven't converted to paid, which would inflate revenue.
-// If a new revenue-bearing pipeline is added, add its Closed Won ID here.
+// Closed-won stage IDs across ALL Obol pipelines. Orly's call (2026-04-20):
+// include PLG Live + Upsell Completed — "at end of the day we should include
+// data". PLG Lost is the only explicit exclusion.
 const CLOSED_WON_STAGE_IDS = [
   "270845155",  // Closed Won (Obol Sales Pipeline LEGACY)
   "1735129325", // Closed Won (Micro SMB Sales Pipeline)
   "2626624699", // Closed Won (Upsell Pipeline)
+  "4704358635", // Upsell Completed (PLG)
+  "4666719467", // Live (PLG) — treated as revenue-generating
 ];
-// Unused now (kept for future gating of borderline stages).
-const CLOSED_WON_EXCLUDE = new Set<string>();
+// Stages explicitly NOT counted as revenue.
+const CLOSED_WON_EXCLUDE = new Set<string>(["4562277596"]); // PLG Lost
 
 /**
  * ROAS data: pulls closed-won deals whose close date is in the range and
