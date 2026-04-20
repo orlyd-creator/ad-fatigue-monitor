@@ -2,7 +2,7 @@ import { signInWithFacebook, signInWithGoogle } from "./actions";
 import { auth, isGoogleEnabled } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ fresh?: string; share?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ fresh?: string; share?: string; reason?: string }> }) {
   const params = await searchParams;
   if (!params.fresh) {
     const session = await auth();
@@ -11,6 +11,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     }
   }
   const shareState = params.share || null;
+  const shareReason = params.reason || null;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-white/80 via-[#C5D9F5]/40 via-[#9B7ED0]/30 to-[#D06AB8]/20 px-4 py-12">
@@ -33,7 +34,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         )}
         {shareState === "invalid" && (
           <div className="mb-5 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-[13px] text-red-800">
-            This share link is expired or has been revoked. Ask the person who sent it for a new one.
+            {shareReason === "not_found" && "This share link doesn't exist or was never created. Ask the person who sent it for a new one."}
+            {shareReason === "revoked" && "This share link has been revoked. Ask the person who sent it for a new one."}
+            {shareReason === "expired" && "This share link has expired. Ask the person who sent it for a new one."}
+            {shareReason === "error" && "Something went wrong validating this link. Please try again in a moment."}
+            {!shareReason && "This share link is expired or has been revoked. Ask the person who sent it for a new one."}
           </div>
         )}
 

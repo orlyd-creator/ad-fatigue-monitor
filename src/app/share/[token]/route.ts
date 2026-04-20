@@ -35,15 +35,20 @@ export async function GET(
       .where(eq(shareTokens.token, token))
       .get();
 
-    const isValid =
-      !!record &&
-      record.revokedAt === null &&
-      (record.expiresAt == null || record.expiresAt > Date.now());
-
-    if (!isValid) {
-      return NextResponse.redirect(new URL("/login?share=invalid", origin));
+    if (!record) {
+      console.warn(`[share-link] token not found: ${token}`);
+      return NextResponse.redirect(new URL("/login?share=invalid&reason=not_found", origin));
+    }
+    if (record.revokedAt !== null) {
+      console.warn(`[share-link] token revoked: ${token}`);
+      return NextResponse.redirect(new URL("/login?share=invalid&reason=revoked", origin));
+    }
+    if (record.expiresAt != null && record.expiresAt <= Date.now()) {
+      console.warn(`[share-link] token expired: ${token}`);
+      return NextResponse.redirect(new URL("/login?share=invalid&reason=expired", origin));
     }
 
+    console.log(`[share-link] token accepted: ${token}`);
     const res = NextResponse.redirect(new URL("/login?share=pending", origin));
     res.cookies.set("share_token", token, {
       httpOnly: true,
@@ -54,7 +59,7 @@ export async function GET(
     });
     return res;
   } catch (err) {
-    console.error("[share-link] validation failed:", err);
-    return NextResponse.redirect(new URL("/login?share=invalid", origin));
+    console.error("[share-link] validation threw:", err);
+    return NextResponse.redirect(new URL("/login?share=invalid&reason=error", origin));
   }
 }
