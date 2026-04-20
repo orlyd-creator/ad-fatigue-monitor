@@ -138,15 +138,29 @@ export default function ExecutiveClient({
   const hasTrendData = trend.some(t => t.spend > 0 || t.atm > 0);
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-8">
-      <div className="mb-8">
-        <div className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
-          Executive view
+    <main className="exec-root max-w-5xl mx-auto px-6 py-8">
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
+            Executive view
+          </div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">{monthLabel}</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            Your ad spend, demos booked, and qualified pipeline at a glance.
+          </p>
         </div>
-        <h1 className="text-3xl font-bold text-foreground tracking-tight">{monthLabel}</h1>
-        <p className="text-[14px] text-muted-foreground mt-1">
-          Your ad spend, demos booked, and qualified pipeline at a glance.
-        </p>
+        <button
+          onClick={() => window.print()}
+          className="exec-no-print flex-shrink-0 px-4 py-2.5 rounded-xl text-[13px] font-medium text-white
+            bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8]
+            shadow-md shadow-purple-100 hover:shadow-lg transition-all flex items-center gap-2"
+          title="Export a PDF you can share with your CEO or attach to an email"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          Export PDF
+        </button>
       </div>
 
       {/* Top 4 stat cards */}

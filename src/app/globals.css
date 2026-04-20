@@ -166,3 +166,36 @@ input[type="range"]::-webkit-slider-thumb {
 .gradient-bg-soft {
   background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE);
 }
+
+/* Print styles — drives the "Export PDF" button on /executive */
+@media print {
+  /* Kill chrome: sidebar, chat bubble, any explicitly-excluded element */
+  aside, nav, .sidebar, #chat-bot-root, .exec-no-print, [data-exec-no-print] {
+    display: none !important;
+  }
+  /* Pure white background for readability when printed on paper */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Let the Executive content use the full page width */
+  .exec-root {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0.5in !important;
+  }
+  /* Preserve card backgrounds + shadows Chrome strips by default */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Avoid awkward page breaks inside cards / chart blocks */
+  .lv-card, .recharts-wrapper {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+@page {
+  size: Letter;
+  margin: 0.5in;
+}
