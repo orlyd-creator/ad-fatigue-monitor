@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface Insight {
   id: string;
@@ -9,6 +10,7 @@ interface Insight {
   body: string;
   action: string;
   adName?: string;
+  adId?: string;
   campaignName?: string;
   impact?: string;
 }
@@ -107,6 +109,7 @@ function SkeletonCard() {
 }
 
 export default function InsightsPanel() {
+  const router = useRouter();
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -237,10 +240,12 @@ export default function InsightsPanel() {
         <div className="space-y-3">
           {insights.map((insight) => {
             const config = TYPE_CONFIG[insight.type];
+            const clickable = !!insight.adId;
             return (
               <div
                 key={insight.id}
-                className={`lv-card p-5 border-l-4 ${config.borderColor}`}
+                onClick={clickable ? () => router.push(`/ad/${insight.adId}`) : undefined}
+                className={`lv-card p-5 border-l-4 ${config.borderColor} ${clickable ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
               >
                 <div className="flex gap-4">
                   <InsightIcon type={insight.type} />

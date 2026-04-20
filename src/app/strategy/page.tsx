@@ -6,7 +6,7 @@ import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
-import { format, startOfMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import StrategyClient from "./StrategyClient";
 
 export const dynamic = "force-dynamic";
@@ -34,14 +34,19 @@ export default async function StrategyPage() {
       }
     : DEFAULT_SETTINGS;
 
-  // Get only ACTIVE ads
+  // Fetch ALL ads (needed for range-scoped spend totals that include paused /
+  // archived / unattributed rows — matches Dashboard accuracy).
   const allAdsRaw = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
-  const allAds = allAdsRaw.filter(a => a.status === "ACTIVE");
+  // ACTIVE-only ad summaries for the per-ad detail cards.
+  const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
 
-  // Last 30 days for daily trends
-  const rangeStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
+  // This month is the default range — matches the Executive + Dashboard defaults.
+  const now = new Date();
+  const rangeStart = format(startOfMonth(now), "yyyy-MM-dd");
+  const rangeEnd = format(endOfMonth(now), "yyyy-MM-dd");
 
-  // Process each ad
+  // Process each ACTIVE ad — summaries use ALL-TIME metrics for fatigue scoring
+  // (fatigue needs history) but display numbers are range-scoped to this month.
   const adSummaries = await Promise.all(
     allAds.map(async (ad) => {
       const allMetrics = await db
@@ -53,15 +58,17 @@ export default async function StrategyPage() {
 
       const fatigue = calculateFatigueScore(allMetrics, scoringSettings);
 
-      const totalSpend = allMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
-      const totalReach = allMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
-      const totalImpressions = allMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
-      const totalClicks = allMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
-      const avgCTR = allMetrics.length > 0 ? allMetrics.reduce((s, m) => s + m.ctr, 0) / allMetrics.length : 0;
-      const avgCPM = allMetrics.length > 0 ? allMetrics.reduce((s, m) => s + m.cpm, 0) / allMetrics.length : 0;
-      const avgFrequency = allMetrics.length > 0 ? allMetrics.reduce((s, m) => s + m.frequency, 0) / allMetrics.length : 0;
-      const avgCPC = allMetrics.length > 0 ? allMetrics.reduce((s, m) => s + m.cpc, 0) / allMetrics.length : 0;
-      const costPerResult = allMetrics.length > 0 ? allMetrics.reduce((s, m) => s + m.costPerAction, 0) / allMetrics.length : 0;
+      // Range-scoped totals so the numbers match Dashboard's this-month view.
+      const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
+      const totalSpend = rangeMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
+      const totalReach = rangeMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
+      const totalImpressions = rangeMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
+      const totalClicks = rangeMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
+      const avgCTR = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.ctr, 0) / rangeMetrics.length : 0;
+      const avgCPM = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpm, 0) / rangeMetrics.length : 0;
+      const avgFrequency = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.frequency, 0) / rangeMetrics.length : 0;
+      const avgCPC = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpc, 0) / rangeMetrics.length : 0;
+      const costPerResult = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.costPerAction, 0) / rangeMetrics.length : 0;
 
       return {
         id: ad.id,
@@ -145,9 +152,20 @@ export default async function StrategyPage() {
     ? Math.round(100 - adSummaries.reduce((s, a) => s + a.fatigueScore, 0) / adSummaries.length)
     : 100;
 
-  const totalSpend = adSummaries.reduce((s, a) => s + a.totalSpend, 0);
-  const totalReach = adSummaries.reduce((s, a) => s + a.totalReach, 0);
-  const totalClicks = adSummaries.reduce((s, a) => s + a.totalClicks, 0);
+  // TOP-LINE TOTALS: sum from ALL ads in range (including paused/archived/
+  // unattributed) so the numbers match Dashboard's Performance card exactly.
+  const allAdIdsFull = new Set(allAdsRaw.map(a => a.id));
+  const rangeMetricsAll = await db
+    .select()
+    .from(dailyMetrics)
+    .where(gte(dailyMetrics.date, rangeStart))
+    .all();
+  const rangeScopedAll = rangeMetricsAll.filter(
+    m => m.date <= rangeEnd && allAdIdsFull.has(m.adId),
+  );
+  const totalSpend = rangeScopedAll.reduce((s, m) => s + (m.spend ?? 0), 0);
+  const totalReach = rangeScopedAll.reduce((s, m) => s + (m.reach ?? 0), 0);
+  const totalClicks = rangeScopedAll.reduce((s, m) => s + (m.clicks ?? 0), 0);
 
   return (
     <div className="min-h-screen">

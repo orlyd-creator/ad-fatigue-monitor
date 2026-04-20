@@ -16,9 +16,11 @@ interface Insight {
   adName?: string;
   campaignName?: string;
   impact?: string;
+  adId?: string;
 }
 
 interface AdData {
+  adId: string;
   adName: string;
   campaignName: string;
   adsetName: string;
@@ -113,6 +115,7 @@ async function loadAdDataForInsights(accountIds: string[]): Promise<AdData[]> {
       const recentCTRs = metrics.slice(-5).map((m) => m.ctr);
 
       return {
+        adId: ad.id,
         adName: ad.adName,
         campaignName: ad.campaignName,
         adsetName: ad.adsetName,
@@ -165,6 +168,7 @@ function generateInsights(adData: AdData[]): Insight[] {
       title: `🚨 ${severelyFatigued.length} Ad${severelyFatigued.length > 1 ? "s" : ""} Severely Fatigued`,
       body: `"${worst.adName}" is scoring ${worst.fatigueScore}/100 (${worst.fatigueStage}) — CTR ${worst.recentAvgCTR}%, freq ${worst.recentAvgFrequency}x. You're burning ~$${wastedDaily.toFixed(0)}/day on dead creative.`,
       action: `Pause ${severelyFatigued.slice(0, 3).map((a) => `"${a.adName}"`).join(", ")} immediately. Move budget to winners.`,
+      adId: worst.adId,
       adName: worst.adName,
       campaignName: worst.campaignName,
       impact: `Save $${wastedDaily.toFixed(0)}/day`,
@@ -195,6 +199,7 @@ function generateInsights(adData: AdData[]): Insight[] {
         title: "Creative Refresh Needed",
         body: `Ad "${ad.adName}" has been running for ${ad.totalDays} days with frequency above ${ad.recentAvgFrequency.toFixed(1)}x. Time for new creative.`,
         action: `Create a fresh variant of "${ad.adName}" with a new hook, visual, or format (if video, try static or carousel).`,
+        adId: ad.adId,
         adName: ad.adName,
         campaignName: ad.campaignName,
       });
@@ -213,6 +218,7 @@ function generateInsights(adData: AdData[]): Insight[] {
         title: "Winning Ad — Scale Opportunity",
         body: `Ad "${ad.adName}" has ${ad.recentAvgCTR}% CTR and low fatigue (score ${ad.fatigueScore}) — increase budget 15-20%.`,
         action: `Increase daily budget on "${ad.adName}" by 15-20%. Avoid more than 30% to stay in Meta's learning phase.`,
+        adId: ad.adId,
         adName: ad.adName,
         campaignName: ad.campaignName,
         impact: `Grow conversions at $${ad.recentAvgCPC.toFixed(2)} CPC`,
