@@ -79,15 +79,16 @@ export default function TeamClient({ initialInvites }: { initialInvites: Invite[
       <div className="lv-card p-6 mb-6">
         <h2 className="text-[15px] font-semibold text-foreground mb-1">Invite a teammate</h2>
         <p className="text-[13px] text-muted-foreground mb-4">
-          Enter their work email. When they log in with Facebook, they'll get instant access.
+          Enter a specific email (<span className="font-mono text-foreground">aviv@obol.app</span>) or a whole domain
+          (<span className="font-mono text-foreground">@obol.app</span>) to let anyone at that company in. Best with Google login.
         </p>
         <form onSubmit={handleInvite} className="flex gap-2">
           <input
-            type="email"
+            type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="teammate@company.com"
-            autoComplete="email"
+            placeholder="aviv@obol.app  or  @obol.app"
+            autoComplete="off"
             className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white/50 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9b87f5]/40"
             disabled={inviting}
           />
@@ -144,8 +145,13 @@ export default function TeamClient({ initialInvites }: { initialInvites: Invite[
         )}
       </div>
 
-      <div className="mt-6 text-[12px] text-muted-foreground">
-        Teammates see the same Meta Ads and HubSpot data you see. They don't need to connect anything.
+      <div className="mt-6 text-[12px] text-muted-foreground leading-relaxed">
+        <p className="mb-1">
+          <strong className="text-foreground">Teammates see your exact view</strong> — same Meta Ads, same HubSpot, no integrations required on their side.
+        </p>
+        <p>
+          <strong className="text-foreground">Tip:</strong> For @obol.app emails, Google login is more reliable than Facebook since your work email might not match your personal FB email.
+        </p>
       </div>
     </main>
   );

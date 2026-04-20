@@ -10,6 +10,11 @@ function validEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+/** "@obol.app" — domain-wide invite, matches any email at that domain. */
+function validDomain(value: string) {
+  return /^@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 /** GET: list team invites */
 export async function GET() {
   const session = await auth();
@@ -31,8 +36,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").toLowerCase().trim();
 
-  if (!validEmail(email)) {
-    return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+  if (!validEmail(email) && !validDomain(email)) {
+    return NextResponse.json(
+      { error: "Enter an email (teammate@obol.app) or a whole domain (@obol.app)" },
+      { status: 400 }
+    );
   }
 
   const inviterEmail = (session as any).email || null;

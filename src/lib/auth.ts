@@ -57,22 +57,41 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         : [];
       const isOwner = existingOwnerAccounts.length > 0;
 
-      // Check if this user was invited.
+      // Check if this user was invited — either by specific email OR by domain.
+      // Domain invites look like "@obol.app" and match any email ending in that domain.
       let isInvitedTeammate = false;
       if (email) {
-        const invite = await db
+        // Specific email invite
+        const specific = await db
           .select()
           .from(teamInvites)
           .where(eq(teamInvites.email, email))
           .get();
-        if (invite) {
+        if (specific) {
           isInvitedTeammate = true;
-          // Mark that they've logged in
           await db
             .update(teamInvites)
             .set({ lastSeenAt: Date.now() })
             .where(eq(teamInvites.email, email))
             .run();
+        } else {
+          // Domain invite — check all "@domain" entries
+          const domain = email.includes("@") ? `@${email.split("@")[1]}` : "";
+          if (domain) {
+            const domainInvite = await db
+              .select()
+              .from(teamInvites)
+              .where(eq(teamInvites.email, domain))
+              .get();
+            if (domainInvite) {
+              isInvitedTeammate = true;
+              await db
+                .update(teamInvites)
+                .set({ lastSeenAt: Date.now() })
+                .where(eq(teamInvites.email, domain))
+                .run();
+            }
+          }
         }
       }
 
