@@ -61,13 +61,14 @@ export async function GET(req: NextRequest) {
     })
     .map((p: any) => ({ name: p.name, label: p.label, type: p.type, fieldType: p.fieldType }));
 
-  // Guess the most likely internal names
-  const atmProp = candidateProps.find((p: any) => /agreed.?to.?meet/i.test(p.label))?.name
-               || "agreed_to_meet_date";
-  const leadSourceProp = candidateProps.find((p: any) => p.label?.toLowerCase() === "lead source")?.name
-                      || "lead_source";
-  const tierProp = candidateProps.find((p: any) => p.label?.toLowerCase() === "tier")?.name
-                || "tier";
+  // Known property internal names for Obol's HubSpot portal (confirmed 2026-04-20):
+  //   "Agreed to Meet Date" (company) → willing_to_meet  (yes, the label is "Agreed to Meet Date"
+  //     even though the internal name is willing_to_meet — HS lets you rename labels)
+  //   "Lead Source " (company, note trailing space in label) → lead_source__cloned_
+  //   "Tier" (company) → tier
+  const atmProp = "willing_to_meet";
+  const leadSourceProp = "lead_source__cloned_";
+  const tierProp = "tier";
 
   // Step 2: query companies with the three filters
   const searchBody = {
