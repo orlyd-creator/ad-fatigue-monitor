@@ -252,10 +252,30 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       result.adsFound++;
       const adStatus = ad.effective_status || ad.status || "UNKNOWN";
       const creative = ad.creative || {};
-      // Extract body text from creative or object_story_spec
-      const adBody = creative.body || creative.object_story_spec?.link_data?.message || creative.object_story_spec?.video_data?.message || null;
-      const adHeadline = creative.title || creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null;
-      const adLinkUrl = creative.link_url || creative.object_story_spec?.link_data?.link || null;
+      // Extract copy. Dynamic Creative ads store their bodies/titles/links in
+      // asset_feed_spec arrays (one entry per variation); classic ads store
+      // them at the creative root or in object_story_spec.
+      const assetBody = creative.asset_feed_spec?.bodies?.[0]?.text;
+      const assetTitle = creative.asset_feed_spec?.titles?.[0]?.text;
+      const assetLink = creative.asset_feed_spec?.link_urls?.[0]?.website_url
+        || creative.asset_feed_spec?.link_urls?.[0]?.display_url;
+      const adBody =
+        creative.body ||
+        creative.object_story_spec?.link_data?.message ||
+        creative.object_story_spec?.video_data?.message ||
+        assetBody ||
+        null;
+      const adHeadline =
+        creative.title ||
+        creative.object_story_spec?.link_data?.name ||
+        creative.object_story_spec?.video_data?.title ||
+        assetTitle ||
+        null;
+      const adLinkUrl =
+        creative.link_url ||
+        creative.object_story_spec?.link_data?.link ||
+        assetLink ||
+        null;
 
       // Image URL priority — balance SHARPNESS vs EXPIRY:
       //   1-3. Stable CDN URLs (asset_feed, story_picture, story_photo) —
