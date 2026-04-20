@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
-import { syncAccount } from "@/lib/meta/sync";
+import { syncAccount, syncTodayOnly } from "@/lib/meta/sync";
 import { auth } from "@/lib/auth";
 import { clearHubSpotCache } from "@/lib/hubspot/client";
 import { revalidatePath } from "next/cache";
@@ -17,19 +17,19 @@ export const maxDuration = 300;
 // row-lock contention in Turso when user mashes Refresh + auto-sync fires.
 const activeSyncs = new Map<string, Promise<any>>();
 
-async function runSync(accountIds: string[]) {
-  const lockKey = accountIds.slice().sort().join(",");
+async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
+  const lockKey = `${mode}:${accountIds.slice().sort().join(",")}`;
   const existing = activeSyncs.get(lockKey);
   if (existing) {
-    console.log(`[sync] Joining in-flight sync for ${lockKey}`);
+    console.log(`[sync] Joining in-flight ${mode} sync for ${lockKey}`);
     return existing;
   }
-  const p = _runSyncInner(accountIds).finally(() => activeSyncs.delete(lockKey));
+  const p = _runSyncInner(accountIds, mode).finally(() => activeSyncs.delete(lockKey));
   activeSyncs.set(lockKey, p);
   return p;
 }
 
-async function _runSyncInner(accountIds: string[]) {
+async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "full") {
   const allAccounts = await db
     .select()
     .from(accounts)
@@ -76,6 +76,20 @@ async function _runSyncInner(accountIds: string[]) {
       }
 
       try {
+        // "quick" mode: only pull today's insights + refresh ad statuses.
+        // Takes ~3-5s vs 30-60s for the full 180-day sync. The 10-min
+        // auto-sync in instrumentation.ts keeps the historical window fresh.
+        if (mode === "quick") {
+          const result = await syncTodayOnly(account.id);
+          entry.metricsUpserted = result.rowsUpdated;
+          totalMetrics += result.rowsUpdated;
+          const realErrors = (result.errors || []).filter(
+            (e) => !/no campaigns|no ads found|make sure you have active campaigns/i.test(e),
+          );
+          entry.errors.push(...realErrors);
+          allErrors.push(...realErrors.map((e) => `${account.name}: ${e}`));
+          return;
+        }
         const result = await syncAccount(account.id);
         entry.adsFound = result.adsFound;
         entry.metricsUpserted = result.metricsUpserted;
@@ -125,7 +139,7 @@ export async function GET(req: NextRequest) {
   if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
     const allAccounts = await db.select().from(accounts).all();
     const accountIds = allAccounts.map((a) => a.id);
-    const result = await runSync(accountIds);
+    const result = await runSync(accountIds, "full");
     return NextResponse.json({ ...result, source: "cron" });
   }
 
@@ -144,8 +158,22 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await runSync(allAccountIds);
-  return NextResponse.json(result);
+  // Default mode for user-triggered Refresh = "quick" (today-only, ~5s).
+  // Full 180-day sync still runs automatically every 10 min via
+  // instrumentation.ts, so historical data stays fresh without making the
+  // user wait a minute on every manual click.
+  const url = new URL(req.url);
+  const modeParam = url.searchParams.get("mode");
+  const mode: "full" | "quick" = modeParam === "full" ? "full" : "quick";
+
+  const result = await runSync(allAccountIds, mode);
+  // Kick off a full sync in the background after a quick refresh so the
+  // next page load has fresh historical data too. Fire-and-forget, doesn't
+  // block the response.
+  if (mode === "quick") {
+    runSync(allAccountIds, "full").catch(() => {});
+  }
+  return NextResponse.json({ ...result, mode });
 }
 
 export async function POST(req: NextRequest) {
