@@ -108,19 +108,28 @@ async function getApiKey(): Promise<string> {
 
 async function hubspotFetch(path: string, options?: RequestInit): Promise<any> {
   const apiKey = await getApiKey();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
+  // Retry on 5xx + 429 — HubSpot rate-limits bursts, and parallel slice
+  // queries easily trip that. Without retry, one 429 loses a whole month.
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        ...options?.headers,
+      },
+    });
+    if (res.ok) return res.json();
     const body = await res.text();
+    if (res.status >= 500 || res.status === 429) {
+      lastErr = new Error(`HubSpot API error ${res.status}: ${body}`);
+      await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+      continue;
+    }
     throw new Error(`HubSpot API error ${res.status}: ${body}`);
   }
-  return res.json();
+  throw lastErr || new Error("HubSpot API retry limit exceeded");
 }
 
 /** HS returns company date properties as "YYYY-MM-DD" strings OR millisecond timestamps — handle both. */
@@ -251,18 +260,23 @@ async function _getLeadsFunnelLiteUncached(
     cur = nextMonth;
   }
 
+  // Run each half (ATM companies + SQL deals) as its own independent promise
+  // per slice, so a failure on one side doesn't lose the other month's data.
   const allAtmDates: string[] = [];
   const allSqlDates: string[] = [];
   await Promise.all(
-    slices.map(async ([sliceFrom, sliceTo]) => {
-      try {
-        const r = await _fetchLiteSlice(sliceFrom, sliceTo);
-        allAtmDates.push(...r.atmDates);
-        allSqlDates.push(...r.sqlDates);
-      } catch (err) {
-        console.error(`[hubspot-lite] slice ${sliceFrom}→${sliceTo} failed:`, err);
-      }
-    }),
+    slices.flatMap(([sliceFrom, sliceTo]) => [
+      _fetchLiteATM(sliceFrom, sliceTo)
+        .then((d) => { allAtmDates.push(...d); })
+        .catch((err) => {
+          console.error(`[hubspot-lite] ATM slice ${sliceFrom}→${sliceTo} failed:`, err);
+        }),
+      _fetchLiteSQL(sliceFrom, sliceTo)
+        .then((d) => { allSqlDates.push(...d); })
+        .catch((err) => {
+          console.error(`[hubspot-lite] SQL slice ${sliceFrom}→${sliceTo} failed:`, err);
+        }),
+    ]),
   );
 
   const atmMap = new Map<string, number>();
@@ -285,10 +299,9 @@ async function _getLeadsFunnelLiteUncached(
   };
 }
 
-async function _fetchLiteSlice(fromDate: string, toDate: string) {
+async function _fetchLiteATM(fromDate: string, toDate: string): Promise<string[]> {
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
-
   const companySearchBody = {
     filterGroups: [{
       filters: [
@@ -301,56 +314,51 @@ async function _fetchLiteSlice(fromDate: string, toDate: string) {
     properties: [COMPANY_ATM_PROP],
     limit: 100,
   };
+  const dates: string[] = [];
+  let after: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/companies/search", {
+      method: "POST",
+      body: JSON.stringify({ ...companySearchBody, ...(after ? { after } : {}) }),
+    });
+    for (const c of (r.results || [])) {
+      const raw = c.properties?.[COMPANY_ATM_PROP];
+      const d = parseCompanyDate(raw);
+      if (d) dates.push(d);
+    }
+    after = r.paging?.next?.after;
+  } while (after);
+  return dates;
+}
 
-  const [atmDates, sqlDates] = await Promise.all([
-    (async () => {
-      const dates: string[] = [];
-      let after: string | undefined;
-      do {
-        const r = await hubspotFetch("/crm/v3/objects/companies/search", {
-          method: "POST",
-          body: JSON.stringify({ ...companySearchBody, ...(after ? { after } : {}) }),
-        });
-        for (const c of (r.results || [])) {
-          const raw = c.properties?.[COMPANY_ATM_PROP];
-          const d = parseCompanyDate(raw);
-          if (d) dates.push(d);
-        }
-        after = r.paging?.next?.after;
-      } while (after);
-      return dates;
-    })(),
-    (async () => {
-      const baseFilters = [
-        { propertyName: "pipeline", operator: "EQ", value: SQL_PIPELINE_ID },
-        { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
-        { propertyName: "createdate", operator: "LTE", value: String(toTs) },
-      ];
-      const searchBody = {
-        filterGroups: [
-          { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NEQ", value: SQL_REJECT_VALUE }] },
-          { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NOT_HAS_PROPERTY" }] },
-        ],
-        properties: ["createdate"],
-        limit: 100,
-      };
-      const raw: any[] = [];
-      let after: string | undefined;
-      do {
-        const r = await hubspotFetch("/crm/v3/objects/deals/search", {
-          method: "POST",
-          body: JSON.stringify({ ...searchBody, ...(after ? { after } : {}) }),
-        });
-        raw.push(...(r.results || []));
-        after = r.paging?.next?.after;
-      } while (after);
-      // Dedupe across the two filter groups
-      return Array.from(new Map(raw.map(d => [d.id, (d.properties?.createdate || "").slice(0, 10)])).values())
-        .filter(Boolean);
-    })(),
-  ]);
-
-  return { atmDates, sqlDates };
+async function _fetchLiteSQL(fromDate: string, toDate: string): Promise<string[]> {
+  const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
+  const toTs = new Date(toDate + "T23:59:59Z").getTime();
+  const baseFilters = [
+    { propertyName: "pipeline", operator: "EQ", value: SQL_PIPELINE_ID },
+    { propertyName: "createdate", operator: "GTE", value: String(fromTs) },
+    { propertyName: "createdate", operator: "LTE", value: String(toTs) },
+  ];
+  const searchBody = {
+    filterGroups: [
+      { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NEQ", value: SQL_REJECT_VALUE }] },
+      { filters: [...baseFilters, { propertyName: SQL_REJECT_PROP, operator: "NOT_HAS_PROPERTY" }] },
+    ],
+    properties: ["createdate"],
+    limit: 100,
+  };
+  const raw: any[] = [];
+  let after: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/deals/search", {
+      method: "POST",
+      body: JSON.stringify({ ...searchBody, ...(after ? { after } : {}) }),
+    });
+    raw.push(...(r.results || []));
+    after = r.paging?.next?.after;
+  } while (after);
+  return Array.from(new Map(raw.map(d => [d.id, (d.properties?.createdate || "").slice(0, 10)])).values())
+    .filter(Boolean);
 }
 
 /**
