@@ -100,14 +100,34 @@ async function hubspotFetch(path: string, options?: RequestInit): Promise<any> {
   return res.json();
 }
 
+/** HS returns company date properties as "YYYY-MM-DD" strings OR millisecond timestamps — handle both. */
+function parseCompanyDate(val: string | null | undefined): string {
+  if (!val) return "";
+  if (val.includes("-")) return val.slice(0, 10);
+  const n = parseInt(val, 10);
+  if (!n || isNaN(n)) return "";
+  return new Date(n).toISOString().split("T")[0];
+}
+
+// Company-level property internal names for Obol's HS portal (verified 2026-04-20).
+// These drive the native "Inbounds YTD Monthly Leads By Tier" report and are the
+// source of truth for ATM counts. Do NOT change without re-verifying property names
+// against /crm/v3/properties/companies.
+const COMPANY_ATM_PROP = "willing_to_meet";            // label: "Agreed to Meet Date"
+const COMPANY_LEAD_SOURCE_PROP = "lead_source__cloned_"; // label: "Lead Source " (trailing space)
+const COMPANY_TIER_PROP = "tier";
+const COMPANY_TIER_ALLOWLIST = ["SMB", "Mid-Market", "Enterprise"];
+
 /**
- * Config-driven lead funnel. Reads filter rules from DB so any business can customize.
+ * Config-driven lead funnel. Matches HubSpot's native "Inbounds YTD Monthly Leads By Tier"
+ * report exactly by querying Companies (primary) with the same 3 filters:
+ *   - Company.willing_to_meet (ATM date) in [from, to]
+ *   - Company.lead_source__cloned_ = Inbound
+ *   - Company.tier ∈ {SMB, Mid-Market, Enterprise}
  *
- * Filters applied:
- *   - ATM property in date range
- *   - Lead source = configured value (e.g. "Inbound")
- *   - Exclude configured segments (e.g. micro SMB "1-10" employees)
- *   - SQL = configured lead statuses + lifecycle stages
+ * For each matching company, the earliest associated contact supplies
+ * attribution (UTMs, source, ad). SQL/MQL classifications come from contact-level
+ * lifecycle and lead status.
  */
 export async function getLeadsFunnel(
   fromDate: string,
@@ -123,170 +143,82 @@ export async function getLeadsFunnel(
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
 
-  // Properties to fetch — includes all filter-relevant fields
-  const atmProps = [
-    "firstname", "lastname", "email", "lifecyclestage",
-    config.atmProperty, "hs_lead_status", "company",
-    "hs_predictivescoringtier", config.leadSourceProperty,
-    config.excludeSegmentProperty, config.mqlProperty,
-    "hs_analytics_source", "hs_analytics_source_data_1",
-    "hs_analytics_source_data_2", "inbound_outbound",
-    "qualified_lead",
-    // Paid ad attribution
-    "hs_latest_source", "hs_latest_source_data_1", "hs_latest_source_data_2",
-    "hs_analytics_first_url", "hs_analytics_first_referrer",
-    "utm_campaign", "utm_content", "utm_term", "utm_medium", "utm_source",
-    "first_conversion_event_name", "recent_conversion_event_name",
-  ];
+  // === ATM: query Companies directly (matches native "Inbounds YTD Monthly Leads By Tier" report) ===
+  const companySearchBody = {
+    filterGroups: [{
+      filters: [
+        { propertyName: COMPANY_ATM_PROP, operator: "GTE", value: String(fromTs) },
+        { propertyName: COMPANY_ATM_PROP, operator: "LTE", value: String(toTs) },
+        { propertyName: COMPANY_LEAD_SOURCE_PROP, operator: "EQ", value: "Inbound" },
+        { propertyName: COMPANY_TIER_PROP, operator: "IN", values: COMPANY_TIER_ALLOWLIST },
+      ],
+    }],
+    properties: ["name", COMPANY_TIER_PROP, COMPANY_LEAD_SOURCE_PROP, COMPANY_ATM_PROP, "domain"],
+    limit: 100,
+  };
 
-  // Query 1: ATM leads — contacts with ATM date in range.
-  // NO lead-source filter at query time: HubSpot's native "Inbound Leads By Tier" report
-  // filters by company TIER, not the contact's lead_source field. We'll match that logic
-  // below (tier-based denylist). This fixes the common case where a contact has
-  // lead_source="" or a variant label but is still a valid inbound on the tier-based report.
-  const atmFilters: any[] = [
-    { propertyName: config.atmProperty, operator: "GTE", value: String(fromTs) },
-    { propertyName: config.atmProperty, operator: "LTE", value: String(toTs) },
-  ];
+  const atmCompanies: Array<{ id: string; properties: Record<string, string | null> }> = [];
+  let compAfter: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/companies/search", {
+      method: "POST",
+      body: JSON.stringify({ ...companySearchBody, ...(compAfter ? { after: compAfter } : {}) }),
+    });
+    atmCompanies.push(...(r.results || []));
+    compAfter = r.paging?.next?.after;
+  } while (compAfter);
+  console.log(`[hubspot] ATM companies matching native report filters (${fromDate}→${toDate}): ${atmCompanies.length}`);
 
-  const atmContacts = await paginateHubSpotSearch({
-    filterGroups: [{ filters: atmFilters }],
-    properties: [...new Set(atmProps)],
-  });
-  console.log(`[hubspot] Raw ATM contacts in range ${fromDate}→${toDate}: ${atmContacts.length}`);
-
-  // Fetch associated company tiers for all ATM contacts
-  // The Company "tier" property (SMB/Mid-Market/Enterprise) is the real filter,
-  // not employee count — micro SMBs get re-tiered to SMB when qualified
-  const companyTierMap = new Map<string, string>();
-  // Company's own lead_source — the native report filters on this (Company.lead_source = Inbound)
-  const companyLeadSourceMap = new Map<string, string>();
-  // Persistent contact → company ID map so we can dedupe by company at the end
-  // (HubSpot native "Inbound Leads By Tier" report counts UNIQUE companies, not contacts)
-  const contactToCompanyGlobal = new Map<string, string>();
+  // For each matching company, fetch associated contacts for attribution (UTMs, ad, source)
+  // and lifecycle/lead status (to classify SQL vs ATM).
+  const companyToContacts = new Map<string, HubSpotContact[]>();
+  const contactDetails = new Map<string, HubSpotContact>();
   try {
-    // Batch fetch company associations + tier for contacts
-    const contactIds = atmContacts.map(c => c.id);
-    for (let i = 0; i < contactIds.length; i += 100) {
-      const batch = contactIds.slice(i, i + 100);
-      const batchBody = {
-        inputs: batch.map(id => ({ id })),
-      };
-      const assocData = await hubspotFetch("/crm/v4/associations/contacts/companies/batch/read", {
+    for (let i = 0; i < atmCompanies.length; i += 100) {
+      const batch = atmCompanies.slice(i, i + 100);
+      const assocData = await hubspotFetch("/crm/v4/associations/companies/contacts/batch/read", {
         method: "POST",
-        body: JSON.stringify(batchBody),
+        body: JSON.stringify({ inputs: batch.map(c => ({ id: c.id })) }),
       });
-      // Collect company IDs
-      const companyIds = new Set<string>();
-      const contactToCompany = new Map<string, string>();
-      for (const result of (assocData.results || [])) {
-        const contactId = result.from?.id;
-        const companyId = result.to?.[0]?.toObjectId;
-        if (contactId && companyId) {
-          contactToCompany.set(String(contactId), String(companyId));
-          contactToCompanyGlobal.set(String(contactId), String(companyId));
-          companyIds.add(String(companyId));
+      const contactIdsForCompanies = new Map<string, string[]>();
+      const allContactIds = new Set<string>();
+      for (const r of (assocData.results || [])) {
+        const companyId = String(r.from?.id || "");
+        const cids = (r.to || []).map((t: any) => String(t.toObjectId)).filter(Boolean);
+        if (companyId && cids.length) {
+          contactIdsForCompanies.set(companyId, cids);
+          cids.forEach((cid: string) => allContactIds.add(cid));
         }
       }
-      // Fetch tier for these companies
-      if (companyIds.size > 0) {
-        const compIds = Array.from(companyIds);
-        for (let j = 0; j < compIds.length; j += 100) {
-          const compBatch = compIds.slice(j, j + 100);
-          const compData = await hubspotFetch("/crm/v3/objects/companies/batch/read", {
-            method: "POST",
-            body: JSON.stringify({
-              inputs: compBatch.map(id => ({ id })),
-              properties: ["tier", "lead_source", "hs_lead_source"],
-            }),
-          });
-          for (const comp of (compData.results || [])) {
-            const tier = comp.properties?.tier || "";
-            const companyLeadSource = comp.properties?.lead_source || comp.properties?.hs_lead_source || "";
-            // Map back to contacts
-            for (const [cId, coId] of contactToCompany.entries()) {
-              if (coId === comp.id) {
-                companyTierMap.set(cId, tier);
-                companyLeadSourceMap.set(cId, companyLeadSource);
-              }
-            }
-          }
+      // Batch fetch contact details (UTMs + lifecycle + status)
+      const contactIdArr = Array.from(allContactIds);
+      for (let j = 0; j < contactIdArr.length; j += 100) {
+        const compBatch = contactIdArr.slice(j, j + 100);
+        const contactData = await hubspotFetch("/crm/v3/objects/contacts/batch/read", {
+          method: "POST",
+          body: JSON.stringify({
+            inputs: compBatch.map(id => ({ id })),
+            properties: [
+              "firstname", "lastname", "email", "lifecyclestage",
+              "hs_lead_status", "hs_analytics_source", "hs_analytics_source_data_1",
+              "hs_analytics_source_data_2", "utm_campaign", "utm_content", "utm_term",
+              "utm_medium", "utm_source", "hs_predictivescoringtier",
+              config.atmProperty, "createdate",
+            ],
+          }),
+        });
+        for (const c of (contactData.results || [])) {
+          contactDetails.set(String(c.id), c);
         }
+      }
+      for (const [companyId, cids] of contactIdsForCompanies.entries()) {
+        const contacts = cids.map(cid => contactDetails.get(cid)).filter(Boolean) as HubSpotContact[];
+        companyToContacts.set(companyId, contacts);
       }
     }
   } catch (err) {
-    console.error("Company tier lookup failed (non-fatal, skipping tier filter):", err);
+    console.error("Company → contacts lookup failed (attribution data will be partial):", err);
   }
-
-  // Match HubSpot's native "Inbound Leads By Tier" report logic exactly:
-  //   - Keep contacts whose associated company tier is SMB / Mid-Market / Enterprise
-  //   - Drop Micro SMB UNLESS the contact was re-tiered (became SQL / customer / opportunity)
-  //   - Drop contacts with no tier (not in the report) — but keep if re-tiered via stage/status
-  const normalizeTier = (t: string) => t.toLowerCase().replace(/[_\s-]/g, "");
-  const validTiers = new Set(["smb", "midmarket", "enterprise"]);
-  const isMicroSmb = (tier: string): boolean => {
-    const t = normalizeTier(tier);
-    return t === "microsmb" || t === "micro" || t === "nano" ||
-           t.includes("1-10") || t.includes("1to10");
-  };
-
-  const tierDistribution = new Map<string, number>();
-  for (const tier of companyTierMap.values()) {
-    const key = tier || "(empty)";
-    tierDistribution.set(key, (tierDistribution.get(key) || 0) + 1);
-  }
-  console.log(`[hubspot] Tier distribution across ${companyTierMap.size} contacts:`, Object.fromEntries(tierDistribution));
-  console.log(`[hubspot] Total ATM contacts before filter: ${atmContacts.length}, tier lookup hit: ${companyTierMap.size}`);
-
-  // STRICT allowlist matching HubSpot's native "Inbound Leads By Tier" report exactly:
-  // Only count contacts whose associated company tier is SMB, Mid-Market, or Enterprise.
-  // Re-tiered Micro SMB contacts (now SQL / customer / opportunity) are still kept.
-  const tierFilteredATM = atmContacts.filter(c => {
-    const tier = companyTierMap.get(c.id) || "";
-    const normalized = normalizeTier(tier);
-    const stage = c.properties.lifecyclestage || "";
-    const leadStatus = c.properties.hs_lead_status || "";
-    const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
-
-    // Tier API call totally failed — fall back to keep all
-    if (companyTierMap.size === 0) return true;
-
-    // Re-tiered carve-out — always keep
-    if (isReTiered) return true;
-
-    // Tier must be SMB / Mid-Market / Enterprise
-    if (!validTiers.has(normalized)) return false;
-
-    // Company's lead_source must be Inbound (matches native report's Lead Source filter)
-    const companyLeadSource = (companyLeadSourceMap.get(c.id) || "").toLowerCase().trim();
-    if (companyLeadSource && companyLeadSource !== "inbound") return false;
-
-    return true;
-  });
-  console.log(`[hubspot] ATM after tier + lead_source filter: ${tierFilteredATM.length}`);
-
-  // Dedupe by company — HubSpot native "Inbound Leads By Tier" report counts unique companies.
-  // It filters on COMPANY properties (tier, lead source, agreed to meet date), so contacts
-  // without a company association are excluded from the count entirely.
-  const companyToEarliest = new Map<string, HubSpotContact>();
-  let droppedNoCompany = 0;
-  for (const c of tierFilteredATM) {
-    const companyId = contactToCompanyGlobal.get(c.id);
-    if (!companyId) {
-      droppedNoCompany++;
-      continue; // exclude — native report requires company
-    }
-    const existing = companyToEarliest.get(companyId);
-    const curDate = parseInt(c.properties[config.atmProperty] || "0", 10);
-    if (!existing) {
-      companyToEarliest.set(companyId, c);
-    } else {
-      const existingDate = parseInt(existing.properties[config.atmProperty] || "0", 10);
-      if (curDate < existingDate) companyToEarliest.set(companyId, c);
-    }
-  }
-  const filteredATM = [...companyToEarliest.values()];
-  console.log(`[hubspot] ATM after company dedupe: ${filteredATM.length} unique companies (dropped ${droppedNoCompany} contacts w/o company association)`);
 
   // Query 2: MQLs (optional — non-fatal)
   let mqlContacts: HubSpotContact[] = [];
@@ -306,8 +238,14 @@ export async function getLeadsFunnel(
     console.error("MQL query failed (non-fatal):", err);
   }
 
-  // Filter MQLs: exclude ATM contacts
-  const atmContactIds = new Set(filteredATM.map(c => c.id));
+  // Collect contact IDs across all matching companies so we can dedupe MQLs against them.
+  // Any contact belonging to a matched ATM company is NOT counted as an MQL.
+  const atmContactIds = new Set<string>();
+  for (const contacts of companyToContacts.values()) {
+    for (const c of contacts) atmContactIds.add(c.id);
+  }
+
+  // Filter MQLs: exclude contacts already attached to an ATM company and contacts with their own ATM date.
   const pureMQLs = mqlContacts.filter(c => {
     if (atmContactIds.has(c.id)) return false;
     const atm = c.properties[config.atmProperty];
@@ -315,40 +253,56 @@ export async function getLeadsFunnel(
     return true;
   });
 
-  // Group ATM contacts by date
+  // Group ATM by Company.willing_to_meet date. One entry per company (not per contact).
+  // Attribution (UTMs/source/ad) comes from the earliest associated contact.
   const atmDateMap = new Map<string, { atm: number; sqls: number; contacts: Array<any> }>();
-  for (const contact of filteredATM) {
-    const atmDate = contact.properties[config.atmProperty];
-    if (!atmDate) continue;
-    const parsed = new Date(atmDate);
-    if (isNaN(parsed.getTime())) continue;
-    const dateStr = parsed.toISOString().split("T")[0];
+  for (const company of atmCompanies) {
+    const atmRaw = company.properties[COMPANY_ATM_PROP] || "";
+    const dateStr = parseCompanyDate(atmRaw);
+    if (!dateStr) continue;
 
-    const stage = contact.properties.lifecyclestage || "";
-    const leadStatus = contact.properties.hs_lead_status || "";
-    const isSQL = config.sqlStatuses.includes(leadStatus) || config.sqlStages.includes(stage);
-    const tier = contact.properties.hs_predictivescoringtier || "";
-    const company = contact.properties.company || "";
-    const segment = contact.properties[config.excludeSegmentProperty] || "";
-    const leadSource = contact.properties[config.leadSourceProperty] || contact.properties.hs_analytics_source || "";
+    const contacts = companyToContacts.get(company.id) || [];
+    // Pick the earliest-created contact as the representative for attribution
+    const primary = contacts.slice().sort((a, b) => {
+      const aT = parseInt(a.properties.createdate || "0", 10) || 0;
+      const bT = parseInt(b.properties.createdate || "0", 10) || 0;
+      return aT - bT;
+    })[0];
+
+    // Company is SQL if any associated contact is in an SQL stage/status
+    const isSQL = contacts.some(c => {
+      const stage = c.properties.lifecyclestage || "";
+      const leadStatus = c.properties.hs_lead_status || "";
+      return config.sqlStatuses.includes(leadStatus) || config.sqlStages.includes(stage);
+    });
+
+    const tier = company.properties[COMPANY_TIER_PROP] || "";
+    const leadSource = company.properties[COMPANY_LEAD_SOURCE_PROP] || "";
+    const companyName = company.properties.name || primary?.properties.company || "";
 
     if (!atmDateMap.has(dateStr)) atmDateMap.set(dateStr, { atm: 0, sqls: 0, contacts: [] });
     const day = atmDateMap.get(dateStr)!;
     day.atm++;
     if (isSQL) day.sqls++;
-    // UTMs often hold the most precise paid-ad attribution (campaign/ad)
-    const utmCampaign = contact.properties.utm_campaign || "";
-    const utmContent = contact.properties.utm_content || ""; // usually the ad
-    const utmTerm = contact.properties.utm_term || ""; // usually the adset
+
+    const utmCampaign = primary?.properties.utm_campaign || "";
+    const utmContent = primary?.properties.utm_content || "";
+    const utmTerm = primary?.properties.utm_term || "";
     day.contacts.push({
-      id: contact.id,
-      name: `${contact.properties.firstname || ""} ${contact.properties.lastname || ""}`.trim(),
-      email: contact.properties.email || "",
-      company, stage, leadStatus, date: dateStr, tier, segment, leadSource,
+      id: primary?.id || company.id,
+      name: primary ? `${primary.properties.firstname || ""} ${primary.properties.lastname || ""}`.trim() : "",
+      email: primary?.properties.email || "",
+      company: companyName,
+      stage: primary?.properties.lifecyclestage || "",
+      leadStatus: primary?.properties.hs_lead_status || "",
+      date: dateStr,
+      tier,
+      segment: "",
+      leadSource,
       type: isSQL ? "sql" as const : "atm" as const,
-      source: contact.properties.hs_analytics_source || "",
-      sourcePlatform: contact.properties.hs_analytics_source_data_1 || "",
-      campaign: utmCampaign || contact.properties.hs_analytics_source_data_2 || "",
+      source: primary?.properties.hs_analytics_source || "",
+      sourcePlatform: primary?.properties.hs_analytics_source_data_1 || "",
+      campaign: utmCampaign || primary?.properties.hs_analytics_source_data_2 || "",
       adset: utmTerm || "",
       ad: utmContent || "",
     });
