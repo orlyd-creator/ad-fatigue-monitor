@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -52,6 +53,9 @@ function AdCompareCard({
   rank: number;
   isPublic: boolean;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const src = ad.thumbnailUrl;
+  const showImage = !!src && !imgFailed;
   const isWinner = verdict === "winner";
   const accent = isWinner ? "from-emerald-100 to-emerald-50 border-emerald-200" : "from-rose-100 to-rose-50 border-rose-200";
   const badge = isWinner ? "bg-emerald-500 text-white" : "bg-rose-500 text-white";
@@ -68,14 +72,19 @@ function AdCompareCard({
           {label}
         </span>
       </div>
-      {ad.thumbnailUrl ? (
+      {showImage ? (
         <img
-          src={ad.thumbnailUrl}
-          alt={ad.adName}
+          src={src}
+          alt=""
+          onError={() => setImgFailed(true)}
           className="w-full aspect-video object-cover"
         />
       ) : (
-        <div className="w-full aspect-video bg-gradient-to-br from-[#6B93D8]/20 to-[#D06AB8]/20" />
+        <div className="w-full aspect-video bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center">
+          <svg className="w-10 h-10 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+        </div>
       )}
       <div className="p-4">
         <div className="text-[14px] font-semibold text-foreground truncate" title={ad.adName}>

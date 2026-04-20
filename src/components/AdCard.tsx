@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FatigueScoreBadge from "./FatigueScoreBadge";
 import SparklineChart from "./SparklineChart";
@@ -23,6 +24,9 @@ interface Props {
 
 export default function AdCard({ id, adName, campaignName, status, fatigue, recentMetrics, thumbnailUrl, imageUrl, adBody }: Props) {
   const router = useRouter();
+  const [imgFailed, setImgFailed] = useState(false);
+  const src = imageUrl || thumbnailUrl || "";
+  const showImage = !!src && !imgFailed;
   const isCollecting = fatigue.dataStatus !== "sufficient";
   const glowClass = !isCollecting ? STAGE_GLOW[fatigue.stage] : "";
 
@@ -43,17 +47,28 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
 
   return (
     <div onClick={() => router.push(`/ad/${id}`)} className={`group cursor-pointer lv-card p-6 ${glowClass}`}>
-      {(imageUrl || thumbnailUrl) && (
-        <div className="mb-4 -mx-6 -mt-6 relative overflow-hidden pointer-events-none">
+      <div className="mb-4 -mx-6 -mt-6 relative overflow-hidden pointer-events-none">
+        {showImage ? (
           <img
-            src={imageUrl || thumbnailUrl || ""}
-            alt={`${adName} creative`}
+            src={src}
+            alt=""
             loading="lazy"
+            onError={() => setImgFailed(true)}
             className="w-full h-36 object-cover rounded-t-2xl bg-gray-100"
           />
+        ) : (
+          // Gradient placeholder when image is missing or 404'd — avoids
+          // the ugly broken-image icon + alt text fallback.
+          <div className="w-full h-36 rounded-t-2xl bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center">
+            <svg className="w-10 h-10 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+            </svg>
+          </div>
+        )}
+        {showImage && (
           <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent rounded-t-2xl" />
-        </div>
-      )}
+        )}
+      </div>
       <div className="flex items-start justify-between gap-4 pointer-events-none">
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-[15px] text-foreground truncate group-hover:text-[#6B93D8]">
