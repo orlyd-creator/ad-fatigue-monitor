@@ -114,8 +114,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Sort worst first
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);
 
-  // Build set of ad IDs belonging to this user's account (for filtering aggregate queries)
-  const userAdIds = new Set(allAds.map(a => a.id));
+  // For aggregate spend/clicks/impressions use ALL ads including paused,
+  // archived, deleted, and synthetic __unattributed_* rows — Meta stops
+  // exposing ads once deleted but their historical spend still counts in
+  // the period total. The filtered `allAds` is only for the card list.
+  const userAdIds = new Set(allAdsRaw.map(a => a.id));
 
   // Compute spend data for the selected range (filtered to user's ads)
   const allMetricsRangeRaw = await db
