@@ -80,17 +80,13 @@ export default function ForecastClient({ forecast, atRisk, rising, budgetBreakdo
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap animate-fade-in">
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-gray-500 font-medium mb-1">
-            Forecast
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#F04E80] bg-clip-text text-transparent">
-              Month-end outlook
-            </span>
+          <div className="display-label mb-1.5">Forecast</div>
+          <h1 className="display-heading mb-1.5">
+            <span className="gradient-text">Month-end outlook</span>
           </h1>
-          <p className="text-[13.5px] text-gray-600 mt-1.5 max-w-xl">
+          <p className="text-[13.5px] text-gray-600 max-w-xl">
             Anchored to your real MTD CPL, live Meta budget caps, and {lastMonth.label}'s benchmark.
           </p>
         </div>

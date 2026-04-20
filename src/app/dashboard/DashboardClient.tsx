@@ -398,12 +398,13 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* Hero + Date Range */}
-      <div className="mb-8">
-        <div className="flex items-start justify-between gap-4">
+      {/* Page header — eyebrow + display heading + subtitle */}
+      <div className="mb-8 animate-fade-in">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">Your Ads</h1>
-            <p className="text-[14px] text-muted-foreground mt-1">
+            <div className="display-label mb-1.5">Dashboard</div>
+            <h1 className="display-heading mb-1.5">Your Ads</h1>
+            <p className="text-[13.5px] text-muted-foreground">
               {ads.length > 0
                 ? urgentCount > 0
                   ? `${urgentCount} active ad${urgentCount > 1 ? "s" : ""} need${urgentCount === 1 ? "s" : ""} your attention right now`

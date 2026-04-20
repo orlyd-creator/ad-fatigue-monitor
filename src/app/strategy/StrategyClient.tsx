@@ -130,11 +130,12 @@ export default function StrategyClient({
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          <span className="gradient-text">Analytics</span>
+      <div className="mb-6 animate-fade-in">
+        <div className="display-label mb-1.5">Analytics</div>
+        <h1 className="display-heading mb-1.5">
+          <span className="gradient-text">Performance</span>
         </h1>
-        <p className="text-gray-600 mt-1 text-[14px]">
+        <p className="text-[13.5px] text-gray-600">
           Performance data across your active ads
         </p>
       </div>

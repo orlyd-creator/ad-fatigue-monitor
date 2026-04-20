@@ -170,12 +170,13 @@ export default function LeadsClient({
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Header + Date Range */}
-      <div className="flex items-start justify-between gap-4 mb-6">
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <div className="display-label mb-1.5">Leads & Analytics</div>
+          <h1 className="display-heading mb-1.5">
             <span className="gradient-text">Leads</span>
           </h1>
-          <p className="text-gray-600 mt-1 text-[14px]">
+          <p className="text-[13.5px] text-gray-600">
             Meta ad performance {hasHubSpot ? "& HubSpot leads" : ""}, your source of truth
           </p>
         </div>

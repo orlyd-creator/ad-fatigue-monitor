@@ -151,11 +151,11 @@ export default function ExecutiveClient({
   return (
     <main className="exec-root max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap animate-fade-in">
         <div>
-          <div className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Executive view</div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">{rangeLabel}</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">
+          <div className="display-label mb-1.5">Executive view</div>
+          <h1 className="display-heading mb-1.5">{rangeLabel}</h1>
+          <p className="text-[13.5px] text-muted-foreground">
             Ad spend, demos booked, and SQLs for the selected period.
           </p>
         </div>
