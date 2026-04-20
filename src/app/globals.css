@@ -1,28 +1,65 @@
 @import "tailwindcss";
 
+/*
+ * OD brand design system. Palette LOCKED (purple/pink/blue gradient plus
+ * semantic status colors). Layout/type/motion is where this system does the
+ * Mercury/Linear polish, not the colors.
+ */
+
 :root {
+  /* Surfaces. Canvas keeps Orly's gradient background but app content lives
+     on layered white cards so the UI doesn't feel like a wash of color. */
   --background: transparent;
-  --foreground: #000000;
-  --card: rgba(255, 255, 255, 0.85);
-  --card-border: rgba(107, 147, 216, 0.08);
-  --card-hover: rgba(255, 255, 255, 0.92);
+  --foreground: #0B0B16;
+  --foreground-subtle: #1f2937;
   --muted: #6b7280;
-  --muted-foreground: #374151;
+  --muted-foreground: #4b5563;
+  --text-dim: #9CA3AF;
+
+  /* Cards */
+  --card: rgba(255, 255, 255, 0.92);
+  --card-strong: #ffffff;
+  --card-border: rgba(255, 255, 255, 0.6);
+  --card-border-solid: rgba(15, 23, 42, 0.06);
+  --card-hover: #ffffff;
   --surface: rgba(237, 240, 248, 0.6);
-  --healthy: #22c55e;
-  --healthy-bg: #f0fdf4;
-  --warning: #f59e0b;
-  --warning-bg: #fffbeb;
-  --fatiguing: #f97316;
-  --fatiguing-bg: #fff7ed;
-  --fatigued: #ef4444;
-  --fatigued-bg: #fef2f2;
-  --accent: #7B8AD8;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05), 0 2px 6px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.06), 0 8px 20px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 4px 12px rgba(15, 23, 42, 0.08), 0 20px 40px rgba(15, 23, 42, 0.06);
+
+  /* Brand palette, DO NOT CHANGE (Orly feedback 2026-04-20) */
+  --brand-blue: #6B93D8;
+  --brand-indigo: #7B8AD8;
+  --brand-violet: #9B7ED0;
+  --brand-violet-deep: #7E69AB;
+  --brand-pink: #D06AB8;
+  --brand-coral: #F04E80;
+  --brand-grad: linear-gradient(135deg, #6B93D8 0%, #9B7ED0 50%, #F04E80 100%);
+  --brand-grad-h: linear-gradient(90deg, #6B93D8 0%, #9B7ED0 50%, #F04E80 100%);
+
+  /* Semantic status colors */
+  --healthy: #22c55e;      --healthy-bg: #f0fdf4;
+  --warning: #f59e0b;      --warning-bg: #fffbeb;
+  --fatiguing: #f97316;    --fatiguing-bg: #fff7ed;
+  --fatigued: #ef4444;     --fatigued-bg: #fef2f2;
+
+  /* Accent alias kept for older component calls */
+  --accent: var(--brand-violet);
   --accent-hover: #6B78C8;
   --accent-bg: rgba(238, 240, 250, 0.6);
   --accent-border: rgba(123, 138, 216, 0.2);
   --accent-light: rgba(224, 228, 245, 0.6);
-  --ring: rgba(123, 138, 216, 0.25);
+  --ring: rgba(155, 126, 208, 0.35);
+
+  /* Border radius tokens, tighter than before, consistent across components */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
 }
 
 @theme inline {
@@ -51,82 +88,118 @@
   --font-sans: var(--font-inter);
 }
 
+/*
+ * Canvas background. Kept Orly's vertical gradient but softened the top
+ * portion so content in the viewport is readable without the blue/pink
+ * competing with every card.
+ */
 body {
-  background: linear-gradient(180deg, #ffffff 0%, #EBF4FF 4%, #C5D9F5 10%, #9AB8E8 18%, #7BA3E0 26%, #6B93D8 34%, #7B8AD8 42%, #9B7ED0 50%, #BB72C8 56%, #D06AB8 62%, #DE65AA 68%, #E660A0 74%, #EC5890 80%, #F04E80 86%, #F24570 92%, #F53558 100%);
+  background: linear-gradient(180deg,
+    #F7F8FC 0%,
+    #EEF3FB 6%,
+    #DDE5F5 12%,
+    #C5D1EE 20%,
+    #ABBFE8 28%,
+    #96B0E2 36%,
+    #8FA3DD 44%,
+    #9B91D5 52%,
+    #AE85CC 60%,
+    #C176BE 68%,
+    #D16AB0 76%,
+    #E05D9C 84%,
+    #EB5388 92%,
+    #F04E80 100%);
   background-attachment: fixed;
   min-height: 100vh;
   color: var(--foreground);
   font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.005em;
 }
 
-/* === CLICK FIX: No global transitions on interactive elements === */
-/* Components handle their own transitions via Tailwind classes */
 button, a, [role="button"] {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* === Animations === */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Typography scale helpers, use on headings for consistent tracking */
+.display-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  font-weight: 600;
 }
-.animate-fade-in { animation: fadeInUp 0.4s ease-out forwards; opacity: 0; }
-.animate-delay-1 { animation-delay: 0.1s; }
-.animate-delay-2 { animation-delay: 0.2s; }
-.animate-delay-3 { animation-delay: 0.3s; }
-.animate-delay-4 { animation-delay: 0.4s; }
-.animate-delay-5 { animation-delay: 0.5s; }
-.animate-delay-6 { animation-delay: 0.6s; }
-
-@keyframes pulseGlow {
-  0%, 100% { filter: drop-shadow(0 0 3px var(--glow-color, #f59e0b)); }
-  50% { filter: drop-shadow(0 0 10px var(--glow-color, #f59e0b)); }
+.display-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
 }
-.ring-pulse-warning { --glow-color: #f59e0b; animation: pulseGlow 2s ease-in-out infinite; }
-.ring-pulse-fatiguing { --glow-color: #f97316; animation: pulseGlow 1.8s ease-in-out infinite; }
-.ring-pulse-fatigued { --glow-color: #ea384c; animation: pulseGlow 1.5s ease-in-out infinite; }
 
-@keyframes gentleBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+/* Section header (eyebrow + title + subtitle) */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
-.animate-gentle-bounce { animation: gentleBounce 2s ease-in-out infinite; }
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+.section-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
 }
-.animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 
-/* === Cards, solid whites, no backdrop-filter, no pseudo-element overlays === */
+/*
+ * Card system. Three variants share the same radius + shadow rhythm.
+ * `lv-card` (most content), `lv-card-solid` (fully opaque, for chart/table
+ * density), `lv-card-featured` (gradient accent stripe at the top).
+ */
 .lv-card {
-  background: rgba(255, 255, 255, 0.88);
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(107, 147, 216, 0.06), 0 4px 12px rgba(107, 147, 216, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--card-border);
+  transition: box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
 }
 .lv-card:hover {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 8px rgba(107, 147, 216, 0.1), 0 8px 24px rgba(107, 147, 216, 0.06);
+  background: var(--card-hover);
+  box-shadow: var(--shadow-md);
+}
+.lv-card-solid {
+  background: var(--card-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--card-border-solid);
+}
+.lv-card-featured {
+  position: relative;
+  overflow: hidden;
+}
+.lv-card-featured::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--brand-grad-h);
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
 }
 
-/* Status cards, clean hover, no pseudo-elements */
-.status-card-hover:hover {
-  box-shadow: 0 8px 24px rgba(107, 147, 216, 0.12);
-}
+.status-card-hover:hover { box-shadow: var(--shadow-md); }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #B8C8E8; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgba(155, 126, 208, 0.4); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(155, 126, 208, 0.6); }
 
 /* Range input */
 input[type="range"] {
@@ -142,54 +215,94 @@ input[type="range"]::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
+  background: var(--brand-grad);
   cursor: pointer;
   border: 3px solid white;
   box-shadow: 0 2px 8px rgba(107, 147, 216, 0.3);
 }
 
 /* Stage border glows */
-.glow-green:hover { border-color: rgba(34, 197, 94, 0.3) !important; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1) !important; }
+.glow-green:hover  { border-color: rgba(34, 197, 94, 0.3) !important; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1) !important; }
 .glow-yellow:hover { border-color: rgba(245, 158, 11, 0.3) !important; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1) !important; }
 .glow-orange:hover { border-color: rgba(249, 115, 22, 0.3) !important; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.1) !important; }
-.glow-red:hover { border-color: rgba(239, 68, 68, 0.3) !important; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1) !important; }
+.glow-red:hover    { border-color: rgba(239, 68, 68, 0.3) !important;  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1) !important; }
 
 /* Utility classes */
 .gradient-text {
-  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
+  background: var(--brand-grad);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.gradient-bg {
-  background: linear-gradient(135deg, #6B93D8, #D06AB8, #F04E80);
+.gradient-bg      { background: var(--brand-grad); }
+.gradient-bg-soft { background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE); }
+.gradient-stripe-h { background: var(--brand-grad-h); }
+
+/* Animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.gradient-bg-soft {
-  background: linear-gradient(135deg, #EEF0FA, #F5E8F5, #FDE8EE);
+.animate-fade-in { animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+.animate-delay-1 { animation-delay: 0.05s; }
+.animate-delay-2 { animation-delay: 0.10s; }
+.animate-delay-3 { animation-delay: 0.15s; }
+.animate-delay-4 { animation-delay: 0.20s; }
+.animate-delay-5 { animation-delay: 0.25s; }
+.animate-delay-6 { animation-delay: 0.30s; }
+
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px var(--glow-color, #f59e0b)); }
+  50%      { filter: drop-shadow(0 0 10px var(--glow-color, #f59e0b)); }
+}
+.ring-pulse-warning   { --glow-color: #f59e0b; animation: pulseGlow 2.0s ease-in-out infinite; }
+.ring-pulse-fatiguing { --glow-color: #f97316; animation: pulseGlow 1.8s ease-in-out infinite; }
+.ring-pulse-fatigued  { --glow-color: #ea384c; animation: pulseGlow 1.5s ease-in-out infinite; }
+
+@keyframes gentleBounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.animate-gentle-bounce { animation: gentleBounce 2s ease-in-out infinite; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-slide-up { animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Large display heading, used on page titles (h1) */
+.display-heading {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+}
+.display-heading-sm {
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.022em;
 }
 
-/* Print styles, drives the "Export PDF" button on /executive */
+/* Print */
 @media print {
-  /* Kill chrome: sidebar, chat bubble, any explicitly-excluded element */
   aside, nav, .sidebar, #chat-bot-root, .exec-no-print, [data-exec-no-print] {
     display: none !important;
   }
-  /* Pure white background for readability when printed on paper */
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
   }
-  /* Let the Executive content use the full page width */
   .exec-root {
     max-width: none !important;
     margin: 0 !important;
     padding: 0.5in !important;
   }
-  /* Preserve card backgrounds + shadows Chrome strips by default */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* Avoid awkward page breaks inside cards / chart blocks */
   .lv-card, .recharts-wrapper {
     break-inside: avoid;
     page-break-inside: avoid;
