@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { getLeadsFunnelLite, getATMLeadsByCampaign } from "@/lib/hubspot/client";
+import { getLeadsFunnelLite, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
 
@@ -186,7 +186,7 @@ export default async function StrategyPage() {
   // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
   // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
   // matter for growth decisions.
-  const [hs, utmLeads] = await Promise.all([
+  const [hs, utmLeads, won] = await Promise.all([
     getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
       console.error("[strategy] HubSpot fetch failed:", err);
       return null;
@@ -194,6 +194,10 @@ export default async function StrategyPage() {
     getATMLeadsByCampaign(rangeStart, rangeEnd).catch((err) => {
       console.error("[strategy] HubSpot utm-campaign fetch failed:", err);
       return [] as Array<{ campaign: string; count: number }>;
+    }),
+    getClosedWonRevenue(rangeStart, rangeEnd).catch((err) => {
+      console.error("[strategy] HubSpot closed-won fetch failed:", err);
+      return { totalRevenue: 0, wonCount: 0, revenueByUtm: [] as Array<{ campaign: string; revenue: number; deals: number }> };
     }),
   ]);
   const totalATM = hs?.totalATM ?? 0;
@@ -243,6 +247,40 @@ export default async function StrategyPage() {
     .filter(u => !utmClaimed.has(u.campaign))
     .map(u => ({ campaign: u.campaign, count: u.count }));
 
+  // ROAS: attribute closed-won revenue back to Meta campaigns using the same
+  // normalized utm match. Revenue matches once per utm (longest-normalized
+  // campaign name wins), the rest is surfaced as "unmatched revenue."
+  const revNormMap = new Map(won.revenueByUtm.map(r => [normalize(r.campaign), r] as const));
+  const revClaimed = new Set<string>();
+  const campaignROAS = campaignCPL.map(c => {
+    const nameNorm = normalize(c.campaignName);
+    let revenue = 0;
+    let deals = 0;
+    const exact = revNormMap.get(nameNorm);
+    if (exact && !revClaimed.has(exact.campaign)) {
+      revenue = exact.revenue;
+      deals = exact.deals;
+      revClaimed.add(exact.campaign);
+    } else {
+      const cands = [...revNormMap.entries()]
+        .filter(([k, v]) => !revClaimed.has(v.campaign) && (k.includes(nameNorm) || nameNorm.includes(k)) && k.length > 2)
+        .sort((a, b) => b[0].length - a[0].length);
+      if (cands.length > 0) {
+        revenue = cands[0][1].revenue;
+        deals = cands[0][1].deals;
+        revClaimed.add(cands[0][1].campaign);
+      }
+    }
+    const roas = c.spend > 0 ? Math.round((revenue / c.spend) * 100) / 100 : null;
+    return { ...c, revenue, dealsWon: deals, roas };
+  });
+  const unmatchedRevenue = won.revenueByUtm
+    .filter(r => !revClaimed.has(r.campaign))
+    .map(r => ({ campaign: r.campaign, revenue: r.revenue, deals: r.deals }));
+  const unmatchedRevenueTotal = unmatchedRevenue.reduce((s, r) => s + r.revenue, 0);
+
+  const totalROAS = totalSpend > 0 ? Math.round((won.totalRevenue / totalSpend) * 100) / 100 : null;
+
   // DAY-OF-WEEK PERFORMANCE: aggregate spend + clicks + CTR by weekday to
   // expose when campaigns are most efficient.
   const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -285,8 +323,13 @@ export default async function StrategyPage() {
         demoToSQLRate={demoToSQLRate !== null ? Math.round(demoToSQLRate * 10) / 10 : null}
         clickToLeadRate={clickToLeadRate !== null ? Math.round(clickToLeadRate * 100) / 100 : null}
         dayOfWeek={dayOfWeek}
-        campaignCPL={campaignCPL}
+        campaignCPL={campaignROAS}
         unmatchedUtm={unmatchedUtm}
+        totalRevenue={won.totalRevenue}
+        wonCount={won.wonCount}
+        totalROAS={totalROAS}
+        unmatchedRevenue={unmatchedRevenue}
+        unmatchedRevenueTotal={Math.round(unmatchedRevenueTotal * 100) / 100}
         rangeLabel={`${format(startOfMonth(now), "MMM d")} – ${format(now, "MMM d, yyyy")}`}
       />
     </div>

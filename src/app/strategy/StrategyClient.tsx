@@ -54,8 +54,13 @@ interface StrategyClientProps {
   demoToSQLRate: number | null;
   clickToLeadRate: number | null;
   dayOfWeek: Array<{ day: string; spend: number; clicks: number; ctr: number }>;
-  campaignCPL: Array<{ campaignName: string; spend: number; leads: number; cpl: number | null; matchedUtm: string | null }>;
+  campaignCPL: Array<{ campaignName: string; spend: number; leads: number; cpl: number | null; matchedUtm: string | null; revenue: number; dealsWon: number; roas: number | null }>;
   unmatchedUtm: Array<{ campaign: string; count: number }>;
+  totalRevenue: number;
+  wonCount: number;
+  totalROAS: number | null;
+  unmatchedRevenue: Array<{ campaign: string; revenue: number; deals: number }>;
+  unmatchedRevenueTotal: number;
   rangeLabel: string;
 }
 
@@ -85,7 +90,9 @@ export default function StrategyClient({
   ads, dailySpendByAd, campaignSpend, accountHealth,
   totalSpend, totalReach, totalClicks, totalImpressions,
   totalATM, totalSQLs, costPerDemo, costPerSQL, demoToSQLRate, clickToLeadRate,
-  dayOfWeek, campaignCPL, unmatchedUtm, rangeLabel,
+  dayOfWeek, campaignCPL, unmatchedUtm,
+  totalRevenue, wonCount, totalROAS, unmatchedRevenue, unmatchedRevenueTotal,
+  rangeLabel,
 }: StrategyClientProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -322,11 +329,38 @@ export default function StrategyClient({
             </div>
           </div>
 
-          {/* Per-Campaign CPL — Meta spend × HubSpot ATM leads */}
+          {/* Top-line Revenue + ROAS card */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="lv-card p-5">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Revenue (closed-won)</div>
+              <div className="text-2xl font-semibold text-foreground tabular-nums">
+                ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{wonCount} deal{wonCount === 1 ? "" : "s"} in {rangeLabel}</div>
+            </div>
+            <div className="lv-card p-5">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Meta spend</div>
+              <div className="text-2xl font-semibold text-foreground tabular-nums">
+                ${totalSpend.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{rangeLabel}</div>
+            </div>
+            <div className="lv-card p-5 bg-gradient-to-br from-emerald-50 to-emerald-100/50">
+              <div className="text-[11px] uppercase tracking-wide text-emerald-700 mb-1">ROAS</div>
+              <div className="text-2xl font-semibold tabular-nums" style={{ color: totalROAS !== null && totalROAS >= 1 ? "#059669" : "#dc2626" }}>
+                {totalROAS !== null ? `${totalROAS.toFixed(2)}×` : "—"}
+              </div>
+              <div className="text-[11px] text-emerald-700/70 mt-1">
+                ${totalROAS !== null ? totalROAS.toFixed(2) : "0"} revenue per $1 spent
+              </div>
+            </div>
+          </div>
+
+          {/* Per-Campaign CPL + ROAS — Meta spend × HubSpot ATM leads + won revenue */}
           <div className="lv-card p-6">
-            <h2 className="text-[16px] font-semibold mb-1">Cost per Demo by Campaign</h2>
+            <h2 className="text-[16px] font-semibold mb-1">Cost per Demo & ROAS by Campaign</h2>
             <p className="text-[12px] text-gray-500 mb-4">
-              Spend ÷ ATM leads matched via utm_campaign. Unmatched leads shown below.
+              Spend ÷ ATM leads matched via utm_campaign. Revenue is closed-won deal value joined via the same utm match.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -336,15 +370,21 @@ export default function StrategyClient({
                     <th className="py-2 pr-4 font-medium text-right">Spend</th>
                     <th className="py-2 pr-4 font-medium text-right">ATM Leads</th>
                     <th className="py-2 pr-4 font-medium text-right">Cost / Demo</th>
+                    <th className="py-2 pr-4 font-medium text-right">Revenue</th>
+                    <th className="py-2 pr-4 font-medium text-right">ROAS</th>
                     <th className="py-2 pr-4 font-medium">Matched UTM</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...campaignCPL].sort((a, b) => {
-                    if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
-                    if (a.cpl === null) return 1;
-                    if (b.cpl === null) return -1;
-                    return a.cpl - b.cpl;
+                    // Sort: rows with ROAS desc, then rows with CPL asc, then spend desc
+                    if (a.roas !== null && b.roas !== null) return b.roas - a.roas;
+                    if (a.roas !== null) return -1;
+                    if (b.roas !== null) return 1;
+                    if (a.cpl !== null && b.cpl !== null) return a.cpl - b.cpl;
+                    if (a.cpl !== null) return -1;
+                    if (b.cpl !== null) return 1;
+                    return b.spend - a.spend;
                   }).map((row) => (
                     <tr key={row.campaignName} className="border-b border-gray-100 last:border-0">
                       <td className="py-2 pr-4 font-medium text-foreground">
@@ -361,9 +401,24 @@ export default function StrategyClient({
                       <td className="py-2 pr-4 text-right tabular-nums font-semibold">
                         {row.cpl !== null
                           ? `$${row.cpl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                          : <span className="text-gray-400 font-normal">no match</span>}
+                          : <span className="text-gray-400 font-normal">—</span>}
                       </td>
-                      <td className="py-2 pr-4 text-[11px] text-gray-500 truncate max-w-[240px]">
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {row.revenue > 0
+                          ? `$${row.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : <span className="text-gray-400">—</span>}
+                        {row.dealsWon > 0 && (
+                          <span className="text-[10px] text-gray-400 ml-1">({row.dealsWon})</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums font-semibold">
+                        {row.roas !== null ? (
+                          <span style={{ color: row.roas >= 1 ? "#059669" : "#dc2626" }}>
+                            {row.roas.toFixed(2)}×
+                          </span>
+                        ) : <span className="text-gray-400 font-normal">—</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-[11px] text-gray-500 truncate max-w-[200px]">
                         {row.matchedUtm || <span className="text-gray-300">—</span>}
                       </td>
                     </tr>
@@ -381,6 +436,21 @@ export default function StrategyClient({
                     <div key={u.campaign} className="flex justify-between text-gray-600">
                       <span className="font-mono text-[11px]">{u.campaign}</span>
                       <span>{u.count} leads</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+            {unmatchedRevenue.length > 0 && (
+              <details className="mt-2 text-[12px]">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                  ${unmatchedRevenueTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} of closed-won revenue couldn't be matched to a Meta campaign
+                </summary>
+                <div className="mt-2 space-y-1 pl-4">
+                  {unmatchedRevenue.map((r) => (
+                    <div key={r.campaign} className="flex justify-between text-gray-600">
+                      <span className="font-mono text-[11px]">{r.campaign}</span>
+                      <span>${r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {r.deals} deal{r.deals === 1 ? "" : "s"}</span>
                     </div>
                   ))}
                 </div>

@@ -299,6 +299,146 @@ async function _getLeadsFunnelLiteUncached(
   };
 }
 
+// Closed-won stage IDs across all Obol pipelines (from the diagnostic endpoint).
+// If a new pipeline is added with its own closed-won stage, add the ID here.
+const CLOSED_WON_STAGE_IDS = [
+  "270845155",  // Closed Won (Obol Sales Pipeline LEGACY)
+  "1735129325", // Closed Won (Micro SMB Sales Pipeline)
+  "2626624699", // Closed Won (Upsell Pipeline)
+  "4562277596", // Lost (PLG) — excluded below, kept here only for reference
+  "4704358635", // Upsell Completed (PLG)
+  "4666719467", // Live (PLG)  — treated as won (customer is paying)
+];
+// Stages explicitly NOT counted as revenue
+const CLOSED_WON_EXCLUDE = new Set(["4562277596"]);
+
+/**
+ * ROAS data: pulls closed-won deals whose close date is in the range and
+ * returns {totalRevenue, wonCount, dealsByUtm}. We use `closedate` so revenue
+ * is booked to the period it actually closed, not when the deal was created.
+ *
+ * Per-campaign attribution: for each won deal we look up the associated
+ * company's primary contact utm_campaign (via a second contact-search call
+ * that filters associatedcompanyid IN the won companies). Falls back to
+ * hs_analytics_source_data_2 if utm_campaign is blank.
+ */
+export async function getClosedWonRevenue(
+  fromDate: string,
+  toDate: string,
+): Promise<{
+  totalRevenue: number;
+  wonCount: number;
+  revenueByUtm: Array<{ campaign: string; revenue: number; deals: number }>;
+}> {
+  return cached(`won:${fromDate}:${toDate}`, HUBSPOT_CACHE_TTL_MS, () =>
+    _getClosedWonRevenueUncached(fromDate, toDate),
+  );
+}
+
+async function _getClosedWonRevenueUncached(fromDate: string, toDate: string) {
+  const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
+  const toTs = new Date(toDate + "T23:59:59Z").getTime();
+  const wonStages = CLOSED_WON_STAGE_IDS.filter(id => !CLOSED_WON_EXCLUDE.has(id));
+
+  // Pull deals closed in the range that landed in any closed-won stage.
+  const dealSearchBody = {
+    filterGroups: [{
+      filters: [
+        { propertyName: "closedate", operator: "GTE", value: String(fromTs) },
+        { propertyName: "closedate", operator: "LTE", value: String(toTs) },
+        { propertyName: "dealstage", operator: "IN", values: wonStages },
+      ],
+    }],
+    properties: ["amount", "closedate", "dealstage", "pipeline"],
+    limit: 100,
+  };
+
+  const deals: Array<{ id: string; properties: Record<string, string | null> }> = [];
+  let after: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/deals/search", {
+      method: "POST",
+      body: JSON.stringify({ ...dealSearchBody, ...(after ? { after } : {}) }),
+    });
+    deals.push(...(r.results || []));
+    after = r.paging?.next?.after;
+  } while (after);
+
+  const totalRevenue = deals.reduce(
+    (s, d) => s + (parseFloat(d.properties.amount || "0") || 0),
+    0,
+  );
+  const wonCount = deals.length;
+
+  // Per-deal utm attribution via deal → company → primary contact.
+  // Batch the company associations for efficiency.
+  const dealIds = deals.map(d => d.id);
+  const dealAmount = new Map(
+    deals.map(d => [d.id, parseFloat(d.properties.amount || "0") || 0] as const),
+  );
+
+  const dealToCompany = new Map<string, string>();
+  if (dealIds.length > 0) {
+    for (let i = 0; i < dealIds.length; i += 100) {
+      const chunk = dealIds.slice(i, i + 100);
+      const r = await hubspotFetch(
+        "/crm/v4/associations/deals/companies/batch/read",
+        {
+          method: "POST",
+          body: JSON.stringify({ inputs: chunk.map(id => ({ id })) }),
+        },
+      ).catch(() => ({ results: [] as any[] }));
+      for (const row of r.results || []) {
+        const firstCompany = row.to?.[0]?.toObjectId;
+        if (firstCompany) dealToCompany.set(row.from?.id || row._from?.id, String(firstCompany));
+      }
+    }
+  }
+
+  // Now pull utm_campaign per company via contacts search filtered by associated company.
+  const companyIds = Array.from(new Set(dealToCompany.values()));
+  const companyToUtm = new Map<string, string>();
+  for (let i = 0; i < companyIds.length; i += 100) {
+    const chunk = companyIds.slice(i, i + 100);
+    const r = await hubspotFetch("/crm/v3/objects/contacts/search", {
+      method: "POST",
+      body: JSON.stringify({
+        filterGroups: [{
+          filters: [
+            { propertyName: "associatedcompanyid", operator: "IN", values: chunk },
+          ],
+        }],
+        properties: ["utm_campaign", "hs_analytics_source_data_2", "associatedcompanyid", "createdate"],
+        limit: 100,
+        sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
+      }),
+    }).catch(() => ({ results: [] as any[] }));
+    for (const c of r.results || []) {
+      const cid = c.properties.associatedcompanyid;
+      if (!cid || companyToUtm.has(cid)) continue;
+      const utm = (c.properties.utm_campaign || "").trim();
+      const auto = (c.properties.hs_analytics_source_data_2 || "").trim();
+      companyToUtm.set(cid, utm || auto || "(no utm)");
+    }
+  }
+
+  const revenueByCampaign = new Map<string, { revenue: number; deals: number }>();
+  for (const [dealId, amount] of dealAmount) {
+    const companyId = dealToCompany.get(dealId);
+    const campaign = (companyId && companyToUtm.get(companyId)) || "(no utm)";
+    const agg = revenueByCampaign.get(campaign) ?? { revenue: 0, deals: 0 };
+    agg.revenue += amount;
+    agg.deals += 1;
+    revenueByCampaign.set(campaign, agg);
+  }
+
+  const revenueByUtm = Array.from(revenueByCampaign.entries())
+    .map(([campaign, v]) => ({ campaign, revenue: Math.round(v.revenue * 100) / 100, deals: v.deals }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  return { totalRevenue: Math.round(totalRevenue * 100) / 100, wonCount, revenueByUtm };
+}
+
 /**
  * Lean attribution query: returns ATM lead counts grouped by utm_campaign value.
  * Used to compute per-campaign CPL by joining against Meta campaign spend.
