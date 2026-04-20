@@ -18,7 +18,15 @@ export async function GET(
   ctx: { params: Promise<{ token: string }> }
 ) {
   const { token } = await ctx.params;
-  const origin = req.nextUrl.origin;
+
+  // On Railway (and most proxied hosts) req.nextUrl.origin reports the internal
+  // origin (e.g. localhost:8080). Use the forwarded headers to reconstruct the
+  // public origin so redirects stay on the same domain the user arrived from.
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const host = forwardedHost || req.headers.get("host") || req.nextUrl.host;
+  const proto = forwardedProto || (host.includes("localhost") ? "http" : "https");
+  const origin = `${proto}://${host}`;
 
   try {
     const record = await db
