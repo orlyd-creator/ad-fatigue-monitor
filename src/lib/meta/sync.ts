@@ -257,21 +257,24 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       const adHeadline = creative.title || creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null;
       const adLinkUrl = creative.link_url || creative.object_story_spec?.link_data?.link || null;
 
-      // Prefer STABLE Facebook CDN URLs over Meta's parameterized thumbnail_url.
-      // thumbnail_url.width(1080).height(1080) returns a signed URL that expires
-      // within hours, so once the DB row ages the image 404s. asset_feed_spec
-      // and object_story_spec URLs are long-lived scontent.* CDN URLs.
-      // creative.image_url is smaller (~100-400px) but also stable.
+      // Image URL priority — balance SHARPNESS vs EXPIRY:
+      //   1-3. Stable CDN URLs (asset_feed, story_picture, story_photo) —
+      //        scontent.* URLs that don't expire. Use when available.
+      //   4.   image_hash → adimages.permalink_url — stable, full resolution.
+      //   5.   creative.thumbnail_url at 1080x1080 — SIGNED, expires ~8h,
+      //        but we resync hourly so the URL stays fresh. Much sharper
+      //        than image_url. ACCEPTABLE because sync keeps it current.
+      //   6.   creative.image_url — small (~100-400px) but stable. Last resort.
       const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
       const storyPictureLink = creative.object_story_spec?.link_data?.picture;
       const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
-      // Resolved stable URL from the image_hash → adimages lookup above.
       const hashResolved = creative.image_hash ? hashToUrl.get(creative.image_hash) : null;
       const imageUrl =
         assetFeedImage ||
         storyPictureLink ||
         storyPicturePhoto ||
         hashResolved ||
+        creative.thumbnail_url ||   // 1080x1080 signed — refreshed by hourly sync
         creative.image_url ||
         null;
       // thumbnailUrl is ONLY used if imageUrl is missing. It's signed/expiring,
