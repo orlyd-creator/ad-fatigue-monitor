@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ads, dailyMetrics, alerts, settings, accounts } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, gte, inArray } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
+import { format, startOfMonth } from "date-fns";
+import { getLeadsFunnelLite, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
+import { computeAdQuality, type AdInput } from "@/lib/strategy/recommendations";
 
 /**
  * If the DB row is missing the caption / headline / link (common for Dynamic
@@ -114,10 +117,89 @@ export async function GET(
     .limit(20)
     .all();
 
+  // ── Per-ad quality + rotation signal ──
+  // Pull HS attribution for THIS ad's campaign + all ads in the account so we
+  // can compute account CPL + this ad's CPL (attributed via campaign).
+  const now = new Date();
+  const rangeStart = format(startOfMonth(now), "yyyy-MM-dd");
+  const rangeEnd = format(now, "yyyy-MM-dd");
+  const [funnel, utmLeads, won, allAcctAdsMetrics, allAcctAds] = await Promise.all([
+    getLeadsFunnelLite(rangeStart, rangeEnd).catch(() => null),
+    getATMLeadsByCampaign(rangeStart, rangeEnd).catch(() => [] as Array<{ campaign: string; count: number }>),
+    getClosedWonRevenue(rangeStart, rangeEnd).catch(() => ({ totalRevenue: 0, wonCount: 0, revenueByUtm: [] as Array<{ campaign: string; revenue: number; deals: number }> })),
+    db.select().from(dailyMetrics).where(gte(dailyMetrics.date, rangeStart)).all(),
+    db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
+  ]);
+
+  // Account CPL = total spend / total ATM for this month
+  const accountSpend = allAcctAdsMetrics
+    .filter(m => m.date <= rangeEnd && allAcctAds.some(a => a.id === m.adId))
+    .reduce((s, m) => s + (m.spend ?? 0), 0);
+  const accountCPL = funnel && funnel.totalATM > 0 ? accountSpend / funnel.totalATM : null;
+
+  // This-ad range-scoped totals
+  const adRangeMetrics = metrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
+  const adSpend = adRangeMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
+  const adClicks = adRangeMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
+  const adImpressions = adRangeMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
+  const adReach = adRangeMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
+  const adCtr = adRangeMetrics.length ? adRangeMetrics.reduce((s, m) => s + m.ctr, 0) / adRangeMetrics.length : 0;
+  const adCpm = adRangeMetrics.length ? adRangeMetrics.reduce((s, m) => s + m.cpm, 0) / adRangeMetrics.length : 0;
+  const adFrequency = adRangeMetrics.length ? adRangeMetrics.reduce((s, m) => s + m.frequency, 0) / adRangeMetrics.length : 0;
+  const adCpc = adRangeMetrics.length ? adRangeMetrics.reduce((s, m) => s + m.cpc, 0) / adRangeMetrics.length : 0;
+
+  // Best-effort lead + revenue attribution for this ad's campaign.
+  // Normalized substring match against hs_analytics_source_data_2 values.
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const campNorm = normalize(ad.campaignName);
+  const matchedUtm = utmLeads.find(u => {
+    const un = normalize(u.campaign);
+    return un === campNorm || un.includes(campNorm) || campNorm.includes(un);
+  });
+  const matchedRev = won.revenueByUtm.find(u => {
+    const un = normalize(u.campaign);
+    return un === campNorm || un.includes(campNorm) || campNorm.includes(un);
+  });
+  const campaignLeads = matchedUtm?.count || 0;
+  const campaignRevenue = matchedRev?.revenue || 0;
+
+  // Pro-rate campaign-level leads/revenue to THIS ad by spend share within
+  // the campaign. Rough but the best we can do without per-ad utm.
+  const campaignSpendTotal = allAcctAdsMetrics
+    .filter(m => m.date >= rangeStart && m.date <= rangeEnd)
+    .filter(m => {
+      const a = allAcctAds.find(x => x.id === m.adId);
+      return a && a.campaignName === ad.campaignName;
+    })
+    .reduce((s, m) => s + (m.spend ?? 0), 0);
+  const spendShare = campaignSpendTotal > 0 ? adSpend / campaignSpendTotal : 0;
+  const adAtmLeads = Math.round(campaignLeads * spendShare);
+  const adRevenue = Math.round(campaignRevenue * spendShare * 100) / 100;
+
+  const adInput: AdInput = {
+    id: ad.id, adName: ad.adName, campaignName: ad.campaignName, status: ad.status,
+    fatigue, spend: adSpend, clicks: adClicks, impressions: adImpressions,
+    reach: adReach, conversions: 0,
+    ctr: adCtr, cpm: adCpm, frequency: adFrequency, cpc: adCpc,
+    atmLeads: adAtmLeads,
+    closedWonRevenue: adRevenue,
+  };
+  const quality = computeAdQuality(adInput, accountCPL);
+
   return NextResponse.json({
     ad,
     fatigue,
     metrics,
     alerts: adAlerts,
+    quality,
+    context: {
+      accountCPL: accountCPL !== null ? Math.round(accountCPL * 100) / 100 : null,
+      adSpendThisMonth: Math.round(adSpend * 100) / 100,
+      adCPLThisMonth: adAtmLeads > 0 ? Math.round((adSpend / adAtmLeads) * 100) / 100 : null,
+      adLeadsThisMonth: adAtmLeads,
+      adRevenueThisMonth: adRevenue,
+      adROASThisMonth: adSpend > 0 ? Math.round((adRevenue / adSpend) * 100) / 100 : null,
+      attributionNote: "Leads + revenue are pro-rated from campaign totals by this ad's spend share.",
+    },
   });
 }

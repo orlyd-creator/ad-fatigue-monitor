@@ -13,10 +13,29 @@ interface Metric {
   conversionRate: number; costPerAction: number; inlinePostEngagement: number;
   impressions: number; spend: number; clicks: number; actions: number;
 }
+interface AdQualityScore {
+  score: number;
+  cpl: number | null;
+  costPerSQL: number | null;
+  leadToSQLRate: number | null;
+  roas: number | null;
+  dominantSignal: string;
+}
+interface AdContext {
+  accountCPL: number | null;
+  adSpendThisMonth: number;
+  adCPLThisMonth: number | null;
+  adLeadsThisMonth: number;
+  adRevenueThisMonth: number;
+  adROASThisMonth: number | null;
+  attributionNote: string;
+}
 interface AdDetail {
   ad: { id: string; adName: string; campaignName: string; adsetName: string; status: string;
     imageUrl?: string | null; thumbnailUrl?: string | null; adBody?: string | null; adHeadline?: string | null; adLinkUrl?: string | null; };
   fatigue: FatigueResult; metrics: Metric[]; alerts: any[];
+  quality?: AdQualityScore;
+  context?: AdContext;
 }
 
 const REC: Record<string, { title: string; body: string; action: string }> = {
@@ -124,6 +143,53 @@ export default function AdDetailPage() {
           <p className="text-[13px] font-semibold mt-3" style={{ color: stageColor }}>{rec.action}</p>
         </div>
 
+        {/* Ad quality score + attribution — this month */}
+        {data.quality && data.context && (
+          <div className="lv-card p-6 mb-6 relative overflow-hidden">
+            <div
+              className="absolute top-0 left-0 right-0 h-[3px]"
+              style={{ background: "linear-gradient(90deg, #6B93D8, #9B7ED0, #D06AB8, #F04E80)" }}
+            />
+            <div className="flex flex-wrap items-start justify-between gap-6 pt-1">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#F04E80]" />
+                  <h3 className="text-[15px] font-semibold text-foreground">Ad quality score</h3>
+                </div>
+                <p className="text-[12px] text-gray-500 leading-relaxed max-w-sm">
+                  0–100 score blending CPL vs account avg, SQL conversion rate, lead volume, ROAS, and fatigue health.
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1.5 max-w-sm">{data.context.attributionNote}</p>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="text-center">
+                  <div
+                    className="text-4xl font-semibold tabular-nums"
+                    style={{ color: data.quality.score >= 70 ? "#6B93D8" : data.quality.score >= 40 ? "#9B7ED0" : "#F04E80" }}
+                  >
+                    {data.quality.score}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">Quality</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-0.5">Signal</div>
+                  <div className="text-[13px] font-medium text-foreground capitalize">{data.quality.dominantSignal}</div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-gray-100">
+              <QualityStat label="CPL" value={data.context.adCPLThisMonth !== null ? `$${data.context.adCPLThisMonth}` : "—"} sub={data.context.accountCPL ? `avg $${data.context.accountCPL}` : undefined} />
+              <QualityStat label="Leads" value={String(data.context.adLeadsThisMonth)} sub="this month" />
+              <QualityStat label="Revenue" value={`$${data.context.adRevenueThisMonth.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="closed-won" />
+              <QualityStat
+                label="ROAS"
+                value={data.context.adROASThisMonth !== null ? `${data.context.adROASThisMonth.toFixed(2)}×` : "—"}
+                valueColor={data.context.adROASThisMonth !== null && data.context.adROASThisMonth >= 1 ? "#059669" : data.context.adROASThisMonth !== null ? "#dc2626" : undefined}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Fatigue Forecast */}
         <FatigueForecastCard
           fatigueScore={fatigue.fatigueScore}
@@ -159,6 +225,16 @@ export default function AdDetailPage() {
         <h3 className="text-[16px] font-semibold text-foreground mb-4">Alert History</h3>
         <AlertFeed alerts={alerts.map((a: any) => ({ ...a, adName: ad.adName }))} />
       </main>
+    </div>
+  );
+}
+
+function QualityStat({ label, value, sub, valueColor }: { label: string; value: string; sub?: string; valueColor?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{label}</div>
+      <div className="text-[18px] font-semibold tabular-nums text-foreground" style={valueColor ? { color: valueColor } : undefined}>{value}</div>
+      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
     </div>
   );
 }
