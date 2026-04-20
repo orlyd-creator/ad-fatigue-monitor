@@ -96,7 +96,7 @@ export default function AdDetailPage() {
                 </div>
               ) : (
                 <img
-                  src={`/api/ad-image/${ad.id}`}
+                  src={`/api/ad-image/${ad.id}?v=2`}
                   alt=""
                   onError={() => setImgFailed(true)}
                   className="w-72 max-h-80 object-contain rounded-xl bg-gray-50 flex-shrink-0"

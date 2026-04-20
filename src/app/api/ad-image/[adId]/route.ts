@@ -29,36 +29,66 @@ export const runtime = "nodejs";
 const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 const URL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
-async function resolveImageUrl(adId: string, token: string): Promise<string | null> {
+async function resolveImageUrl(
+  adId: string,
+  accountId: string,
+  token: string,
+): Promise<string | null> {
   const hit = urlCache.get(adId);
   if (hit && Date.now() - hit.fetchedAt < URL_CACHE_TTL) return hit.url;
 
   try {
-    // Request the largest thumbnail Meta will serve. 1440 keeps cards crisp
-    // on retina displays without going oversize.
     const fields =
-      "creative{thumbnail_url.width(1440).height(1440),image_url,image_hash,asset_feed_spec,object_story_spec}";
+      "creative{thumbnail_url.width(1920).height(1920),image_url,image_hash,asset_feed_spec,object_story_spec}";
     const res = await fetch(
       `https://graph.facebook.com/v21.0/${adId}?fields=${encodeURIComponent(fields)}&access_token=${token}`,
     );
     if (!res.ok) return null;
     const data = await res.json();
     const creative = data.creative || {};
-    const thumb1440 = creative.thumbnail_url; // already includes .width(1440).height(1440) via fields param
+
+    // HIGHEST PRIORITY: image_hash -> adimages permalink_url.
+    // This is the original uploaded image at full resolution, stable URL,
+    // doesn't expire. Meta's thumbnail_url can upscale a low-res source;
+    // permalink_url returns the exact bytes Orly uploaded.
+    const hash = creative.image_hash;
+    if (hash && accountId) {
+      try {
+        const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
+        const imgRes = await fetch(
+          `https://graph.facebook.com/v21.0/${actId}/adimages?hashes=${encodeURIComponent(JSON.stringify([hash]))}&fields=permalink_url,url,url_128&access_token=${token}`,
+        );
+        if (imgRes.ok) {
+          const imgData = await imgRes.json();
+          const permalink = imgData.data?.[0]?.permalink_url || imgData.data?.[0]?.url;
+          if (permalink) {
+            urlCache.set(adId, { url: permalink, fetchedAt: Date.now() });
+            return permalink;
+          }
+        }
+      } catch (e) {
+        console.error(`[ad-image] adimages lookup failed for ${adId}:`, e);
+      }
+    }
+
+    // SECONDARY: asset_feed_spec uploads are usually hi-res originals too.
     const assetFeed = creative.asset_feed_spec?.images?.[0]?.url;
+    if (assetFeed) {
+      urlCache.set(adId, { url: assetFeed, fetchedAt: Date.now() });
+      return assetFeed;
+    }
+
+    // FALLBACK: explicitly-sized thumbnail (may upscale a low-res source).
+    const thumb = creative.thumbnail_url;
+    if (thumb) {
+      urlCache.set(adId, { url: thumb, fetchedAt: Date.now() });
+      return thumb;
+    }
+
+    // LAST RESORT: stable but often small (400px) CDN URLs.
     const storyLink = creative.object_story_spec?.link_data?.picture;
     const storyPhoto = creative.object_story_spec?.photo_data?.picture;
-    // Priority: the explicitly-sized 1440×1440 thumbnail_url WINS. story_spec
-    // and link_data pictures are stable but often only ~400px, which looks
-    // mushy on retina cards. We re-resolve every 30 min so the signed URL
-    // never has a chance to expire in the browser cache.
-    const url =
-      thumb1440 ||
-      assetFeed ||
-      storyLink ||
-      storyPhoto ||
-      creative.image_url ||
-      null;
+    const url = storyLink || storyPhoto || creative.image_url || null;
     if (url) {
       urlCache.set(adId, { url, fetchedAt: Date.now() });
       return url;
@@ -107,7 +137,7 @@ export async function GET(
 
   let resolved: string | null = null;
   if (token) {
-    resolved = await resolveImageUrl(adId, token);
+    resolved = await resolveImageUrl(adId, ad.accountId, token);
   }
   // Fallback to whatever's stored in the DB if live fetch failed.
   if (!resolved) resolved = ad.imageUrl || ad.thumbnailUrl || null;

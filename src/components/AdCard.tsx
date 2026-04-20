@@ -27,7 +27,9 @@ export default function AdCard({ id, adName, campaignName, status, fatigue, rece
   const [imgFailed, setImgFailed] = useState(false);
   // Route through our server-side image proxy. Resolves the freshest URL
   // from Meta on demand so signed-URL expiry never shows broken images.
-  const src = `/api/ad-image/${id}`;
+  // ?v=2 busts the browser cache after the image-proxy quality upgrade
+  // (image_hash permalink_url is now priority-1). Bump when ladder changes.
+  const src = `/api/ad-image/${id}?v=2`;
   const showImage = !imgFailed;
   const isCollecting = fatigue.dataStatus !== "sufficient";
   const glowClass = !isCollecting ? STAGE_GLOW[fatigue.stage] : "";
