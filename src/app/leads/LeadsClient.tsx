@@ -89,6 +89,32 @@ export default function LeadsClient({
   const costPerClick = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const hasHubSpot = (hubspotATM && hubspotATM.length > 0) || (hubspotMQLs && hubspotMQLs.length > 0);
 
+  // Running-total series: cumulative spend / cumulative atm (or sql) through
+  // each day. On zero-lead days, CPL carries forward instead of spiking.
+  // This is what Orly asked for: "spend adds up, inbound ATMs add up, and at
+  // some point CPL freezes and continues, not daily".
+  const runningSeries = (dailyCPL ?? []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  let cumSpend = 0;
+  let cumAtm = 0;
+  let cumSqls = 0;
+  let lastCPL: number | null = null;
+  let lastCostPerSQL: number | null = null;
+  const runningData = runningSeries.map((d) => {
+    cumSpend += d.spend || 0;
+    cumAtm += d.atm || 0;
+    cumSqls += d.sqls || 0;
+    if (cumAtm > 0) lastCPL = Math.round((cumSpend / cumAtm) * 100) / 100;
+    if (cumSqls > 0) lastCostPerSQL = Math.round((cumSpend / cumSqls) * 100) / 100;
+    return {
+      date: d.date,
+      spend: Math.round(cumSpend * 100) / 100,
+      atm: cumAtm,
+      sqls: cumSqls,
+      cpl: lastCPL,
+      costPerSql: lastCostPerSQL,
+    };
+  });
+
   // Week-over-week ATM, bucket daily ATM counts into ISO weeks (Mon → Sun)
   const weeklyATM = (() => {
     if (!hubspotATM || hubspotATM.length === 0) return [] as { weekStart: string; atm: number; sqls: number; label: string }[];
@@ -276,14 +302,16 @@ export default function LeadsClient({
         </div>
       )}
 
-      {/* Daily CPL vs Spend */}
-      {dailyCPL && dailyCPL.length > 0 && hasHubSpot && (
+      {/* Running CPL vs Spend (cumulative) */}
+      {runningData.length > 0 && hasHubSpot && (
         <div className="lv-card p-6 mb-8">
-          <h2 className="text-[16px] font-semibold mb-1">Daily CPL vs Spend</h2>
-          <p className="text-[12px] text-gray-500 mb-4">Cost per lead (demo) compared to daily ad spend</p>
+          <h2 className="text-[16px] font-semibold mb-1">Running CPL vs cumulative spend</h2>
+          <p className="text-[12px] text-gray-500 mb-4">
+            Cumulative spend ÷ cumulative ATMs through each day. On zero-lead days, CPL holds flat instead of spiking.
+          </p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyCPL} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <LineChart data={runningData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }}
                   tickFormatter={(v) => { const d = new Date(v + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; }} />
@@ -293,28 +321,30 @@ export default function LeadsClient({
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
                     if (value === null || value === undefined) return ["-", name];
-                    if (name === "Spend") return [`$${Number(value).toFixed(2)}`, "Spend"];
-                    if (name === "CPL") return [`$${Number(value).toFixed(2)}`, "CPL"];
+                    if (name === "Cumulative spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "Running CPL") return [`$${Number(value).toFixed(0)}`, name];
                     return [value, name];
                   }}
                 />
                 <Legend />
-                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Spend" />
-                <Line yAxisId="cpl" type="monotone" dataKey="cpl" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 3, fill: "#F04E80" }} connectNulls name="CPL" />
+                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Cumulative spend" />
+                <Line yAxisId="cpl" type="monotone" dataKey="cpl" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 3, fill: "#F04E80" }} connectNulls name="Running CPL" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* Daily Cost per SQL vs Spend */}
-      {dailyCPL && dailyCPL.length > 0 && hasHubSpot && (
+      {/* Running Cost per SQL vs Spend (cumulative) */}
+      {runningData.length > 0 && hasHubSpot && (
         <div className="lv-card p-6 mb-8">
-          <h2 className="text-[16px] font-semibold mb-1">Daily Cost per SQL vs Spend</h2>
-          <p className="text-[12px] text-gray-500 mb-4">How much are you paying per qualified lead each day?</p>
+          <h2 className="text-[16px] font-semibold mb-1">Running Cost per SQL vs cumulative spend</h2>
+          <p className="text-[12px] text-gray-500 mb-4">
+            Cumulative spend ÷ cumulative SQLs. Carries forward on zero-SQL days.
+          </p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyCPL} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <LineChart data={runningData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }}
                   tickFormatter={(v) => { const d = new Date(v + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; }} />
@@ -324,14 +354,14 @@ export default function LeadsClient({
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
                     if (value === null || value === undefined) return ["-", name];
-                    if (name === "Spend") return [`$${Number(value).toFixed(2)}`, "Spend"];
-                    if (name === "Cost per SQL") return [`$${Number(value).toFixed(2)}`, "Cost per SQL"];
+                    if (name === "Cumulative spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "Running cost per SQL") return [`$${Number(value).toFixed(0)}`, name];
                     return [value, name];
                   }}
                 />
                 <Legend />
-                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Spend" />
-                <Line yAxisId="cps" type="monotone" dataKey="costPerSql" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3, fill: "#8b5cf6" }} connectNulls name="Cost per SQL" />
+                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Cumulative spend" />
+                <Line yAxisId="cps" type="monotone" dataKey="costPerSql" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3, fill: "#8b5cf6" }} connectNulls name="Running cost per SQL" />
               </LineChart>
             </ResponsiveContainer>
           </div>
