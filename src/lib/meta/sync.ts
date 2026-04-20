@@ -107,17 +107,19 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
   }
 
-  // Determine lookback window — always pull from start of current month minimum
-  // This ensures spend data is complete for the current period even if ads were paused mid-month
+  // Determine lookback window — pull a rolling 90-day window on every sync so
+  // last month's numbers stay accurate as Meta retro-attributes conversions and
+  // adjusts spend. First sync goes back 180d so historical charts have depth
+  // from day one. Previously we only pulled "days since start of current month"
+  // which meant March data was captured once on first sync and never refreshed,
+  // causing the Executive view to drift from Ads Manager.
   const existingAds = await db.select({ id: ads.id }).from(ads).where(eq(ads.accountId, accountId)).limit(1).all();
   const isFirstSync = existingAds.length === 0;
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const daysSinceMonthStart = Math.ceil((now.getTime() - startOfMonth.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const lookbackDays = isFirstSync ? 60 : Math.max(daysSinceMonthStart, 7);
+  const lookbackDays = isFirstSync ? 180 : 90;
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
   const until = format(now, "yyyy-MM-dd");
 
-  console.log(`[sync] Account: ${actId} | ${isFirstSync ? "First sync (30d)" : "Incremental (3d)"}: ${since} → ${until}`);
+  console.log(`[sync] Account: ${actId} | ${isFirstSync ? "First sync (180d)" : "Incremental (90d)"}: ${since} → ${until}`);
 
   try {
     // ── Step 1: Verify account access ────────────────────────────
