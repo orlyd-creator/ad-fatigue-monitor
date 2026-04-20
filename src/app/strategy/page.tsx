@@ -127,33 +127,6 @@ export default async function StrategyPage() {
     ),
   }));
 
-  // Campaign-level aggregates
-  const campaignMap = new Map<string, { spend: number; reach: number; clicks: number; ads: number; fatigueSum: number }>();
-  for (const ad of adSummaries) {
-    const key = ad.campaignName;
-    const c = campaignMap.get(key) ?? { spend: 0, reach: 0, clicks: 0, ads: 0, fatigueSum: 0 };
-    c.spend += ad.totalSpend;
-    c.reach += ad.totalReach;
-    c.clicks += ad.totalClicks;
-    c.ads++;
-    c.fatigueSum += ad.fatigueScore;
-    campaignMap.set(key, c);
-  }
-
-  const campaignSpend = Array.from(campaignMap.entries()).map(([campaignName, c]) => ({
-    campaignName,
-    spend: Math.round(c.spend * 100) / 100,
-    reach: c.reach,
-    clicks: c.clicks,
-    ads: c.ads,
-    avgFatigue: Math.round(c.fatigueSum / c.ads),
-  }));
-
-  // Account health
-  const accountHealth = adSummaries.length > 0
-    ? Math.round(100 - adSummaries.reduce((s, a) => s + a.fatigueScore, 0) / adSummaries.length)
-    : 100;
-
   // TOP-LINE TOTALS: sum from ALL ads in range (including paused/archived/
   // unattributed) so the numbers match Dashboard's Performance card exactly.
   const allAdIdsFull = new Set(allAdsRaw.map(a => a.id));
@@ -169,6 +142,46 @@ export default async function StrategyPage() {
   const totalReach = rangeScopedAll.reduce((s, m) => s + (m.reach ?? 0), 0);
   const totalClicks = rangeScopedAll.reduce((s, m) => s + (m.clicks ?? 0), 0);
   const totalImpressionsAll = rangeScopedAll.reduce((s, m) => s + (m.impressions ?? 0), 0);
+
+  // Campaign-level aggregates — spend/reach/clicks MUST include paused/archived/
+  // unattributed rows so totals match Dashboard + top-line. Previous version summed
+  // adSummaries (ACTIVE-only) which silently dropped historical spend.
+  const campaignNameById = new Map(allAdsRaw.map(a => [a.id, a.campaignName]));
+  const activeAdCountByCampaign = new Map<string, number>();
+  const fatigueSumByCampaign = new Map<string, number>();
+  for (const ad of adSummaries) {
+    activeAdCountByCampaign.set(ad.campaignName, (activeAdCountByCampaign.get(ad.campaignName) ?? 0) + 1);
+    fatigueSumByCampaign.set(ad.campaignName, (fatigueSumByCampaign.get(ad.campaignName) ?? 0) + ad.fatigueScore);
+  }
+
+  const campaignMap = new Map<string, { spend: number; reach: number; clicks: number }>();
+  for (const m of rangeScopedAll) {
+    const name = campaignNameById.get(m.adId);
+    if (!name) continue;
+    const c = campaignMap.get(name) ?? { spend: 0, reach: 0, clicks: 0 };
+    c.spend += m.spend ?? 0;
+    c.reach += m.reach ?? 0;
+    c.clicks += m.clicks ?? 0;
+    campaignMap.set(name, c);
+  }
+
+  const campaignSpend = Array.from(campaignMap.entries()).map(([campaignName, c]) => {
+    const activeAds = activeAdCountByCampaign.get(campaignName) ?? 0;
+    const fatigueSum = fatigueSumByCampaign.get(campaignName) ?? 0;
+    return {
+      campaignName,
+      spend: Math.round(c.spend * 100) / 100,
+      reach: c.reach,
+      clicks: c.clicks,
+      ads: activeAds,
+      avgFatigue: activeAds > 0 ? Math.round(fatigueSum / activeAds) : 0,
+    };
+  });
+
+  // Account health
+  const accountHealth = adSummaries.length > 0
+    ? Math.round(100 - adSummaries.reduce((s, a) => s + a.fatigueScore, 0) / adSummaries.length)
+    : 100;
 
   // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
   // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
