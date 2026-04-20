@@ -172,7 +172,10 @@ export default function TeamClient({
   }
 
   function copyPublic(token: string) {
-    const url = `${origin}/public/executive/${token}`;
+    // /public/<token> is a redirect route that sets the public_view cookie
+    // and sends the viewer to /dashboard. From there, Dashboard / Leads /
+    // Executive / Ads all work without login.
+    const url = `${origin}/public/${token}`;
     navigator.clipboard.writeText(url);
     setCopiedPublic(token);
     setTimeout(() => setCopiedPublic(null), 1800);
@@ -201,8 +204,8 @@ export default function TeamClient({
           <span className="text-[11px] font-medium text-[#D06AB8] bg-[#D06AB8]/10 px-2 py-0.5 rounded-full">No login</span>
         </div>
         <p className="text-[13px] text-muted-foreground mb-4">
-          Create a link that goes straight to your Executive dashboard — anyone with the URL can view it, no sign-in, no Facebook.
-          Live data, view-only. Revoke anytime.
+          Create a link that opens the <span className="font-medium text-foreground">whole platform</span> — Dashboard, Leads, Executive, Ads, all of it.
+          No sign-in, no Facebook. Live data, view-only. Revoke anytime.
         </p>
         <form onSubmit={handleCreatePublic} className="flex gap-2">
           <input
@@ -228,7 +231,7 @@ export default function TeamClient({
         {activePublic.length > 0 && (
           <ul className="mt-5 space-y-2">
             {activePublic.map(t => {
-              const url = `${origin}/public/executive/${t.token}`;
+              const url = `${origin}/public/${t.token}`;
               return (
                 <li key={t.token} className="flex items-center gap-2 p-3 rounded-xl bg-white/70 border border-border">
                   <div className="flex-1 min-w-0">
