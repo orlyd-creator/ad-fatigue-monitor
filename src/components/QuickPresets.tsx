@@ -52,7 +52,13 @@ export default function QuickPresets() {
     p.set("from", format(from, "yyyy-MM-dd"));
     p.set("to", format(to, "yyyy-MM-dd"));
     p.set("preset", preset);
-    start(() => router.push(`${pathname}?${p.toString()}`));
+    start(() => {
+      router.push(`${pathname}?${p.toString()}`);
+      // Force the server component to re-render with the new params. Without
+      // this the page sometimes keeps the stale data because Next's app
+      // router treats the URL change as a soft navigation.
+      router.refresh();
+    });
   };
 
   return (
@@ -64,7 +70,7 @@ export default function QuickPresets() {
             key={p.key}
             onClick={() => apply(p.key)}
             disabled={pending}
-            className={`text-[12px] font-medium px-3 py-1.5 rounded-full transition-all ${
+            className={`text-[12px] font-medium px-3 py-1.5 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#9B7ED0]/40 ${
               active
                 ? "bg-gradient-to-r from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white shadow-sm"
                 : "text-gray-600 hover:text-foreground hover:bg-gray-50"
