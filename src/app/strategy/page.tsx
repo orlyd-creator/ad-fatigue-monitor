@@ -7,18 +7,30 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { getLeadsFunnelLite, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
+import { getLeadsFunnel, getATMLeadsByCampaign, getClosedWonRevenue } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
+import LeadsClient from "../leads/LeadsClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
 
 export const dynamic = "force-dynamic";
+// Full getLeadsFunnel + ATM-by-campaign + closed-won fan out to multiple HS
+// searches + association reads. Raise the timeout so 6-month ranges don't abort.
+export const maxDuration = 300;
 
-export default async function StrategyPage() {
+export default async function StrategyPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ from?: string; to?: string }>;
+}) {
   const session = await getSessionOrPublic();
   if (!session) redirect("/login");
   const accountId = session.accountId;
   if (!accountId) redirect("/login");
   const allAccountIds: string[] = session.allAccountIds;
+
+  // Read the user-selected date range (used by the Leads date picker that
+  // lives inside LeadsClient — pushes ?from=&to= to this page).
+  const params = (await searchParams) || {};
 
   // Get settings
   const userSettings = await db.select().from(settings).where(eq(settings.id, 1)).get();
@@ -43,9 +55,10 @@ export default async function StrategyPage() {
   const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
 
   // This month is the default range — matches the Executive + Dashboard defaults.
+  // Allow ?from=&to= override from the Leads date picker.
   const now = new Date();
-  const rangeStart = format(startOfMonth(now), "yyyy-MM-dd");
-  const rangeEnd = format(endOfMonth(now), "yyyy-MM-dd");
+  const rangeStart = params.from || format(startOfMonth(now), "yyyy-MM-dd");
+  const rangeEnd = params.to || format(endOfMonth(now), "yyyy-MM-dd");
 
   // Process each ACTIVE ad — summaries use ALL-TIME metrics for fatigue scoring
   // (fatigue needs history) but display numbers are range-scoped to this month.
@@ -187,7 +200,7 @@ export default async function StrategyPage() {
   // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
   // matter for growth decisions.
   const [hs, utmLeads, won] = await Promise.all([
-    getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
+    getLeadsFunnel(rangeStart, rangeEnd).catch((err) => {
       console.error("[strategy] HubSpot fetch failed:", err);
       return null;
     }),
@@ -202,6 +215,14 @@ export default async function StrategyPage() {
   ]);
   const totalATM = hs?.totalATM ?? 0;
   const totalSQLs = hs?.totalSQLs ?? 0;
+  const totalMQLs = hs?.totalMQLs ?? 0;
+  const hubspotATM = hs?.dailyATM.map(d => ({ date: d.date, atm: d.atm, sqls: d.sqls })) ?? [];
+  const hubspotMQLs = hs?.dailyMQLs.map(d => ({ date: d.date, mqls: d.mqls })) ?? [];
+  const allLeadContacts: Array<any> = [];
+  if (hs) {
+    for (const d of hs.dailyATM) allLeadContacts.push(...d.contacts);
+    for (const d of hs.dailyMQLs) allLeadContacts.push(...d.contacts);
+  }
   const costPerDemo = totalATM > 0 ? totalSpend / totalATM : null;
   const costPerSQL = totalSQLs > 0 ? totalSpend / totalSQLs : null;
   const demoToSQLRate = totalATM > 0 ? (totalSQLs / totalATM) * 100 : null;
@@ -300,6 +321,107 @@ export default async function StrategyPage() {
     ctr: b.impressions > 0 ? Math.round((b.clicks / b.impressions) * 10000) / 100 : 0,
   }));
 
+  // ============================================================
+  // LEADS-page derivations (formerly lived in /leads/page.tsx)
+  // Merged here so /strategy shows the full picture in one page.
+  // ============================================================
+
+  // Daily totals across the range (for top-line stacked-area chart).
+  const leadDailyMap = new Map<string, { spend: number; clicks: number; conversions: number; impressions: number }>();
+  const dStart = new Date(rangeStart + "T00:00:00");
+  const dEnd = new Date(rangeEnd + "T00:00:00");
+  for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
+    leadDailyMap.set(format(d, "yyyy-MM-dd"), { spend: 0, clicks: 0, conversions: 0, impressions: 0 });
+  }
+  for (const m of rangeScopedAll) {
+    const day = leadDailyMap.get(m.date);
+    if (day) {
+      day.spend += m.spend ?? 0;
+      day.clicks += m.clicks ?? 0;
+      day.conversions += m.actions ?? 0;
+      day.impressions += m.impressions ?? 0;
+    }
+  }
+  const dailyData = Array.from(leadDailyMap.entries()).map(([date, d]) => ({
+    date,
+    spend: Math.round(d.spend * 100) / 100,
+    clicks: d.clicks,
+    conversions: d.conversions,
+    impressions: d.impressions,
+  }));
+
+  // Per-campaign breakdown (Leads-style, with CPC + conversionRate).
+  const leadCampaignMap = new Map<string, { spend: number; clicks: number; conversions: number; impressions: number; reach: number }>();
+  for (const m of rangeScopedAll) {
+    const name = campaignNameById.get(m.adId) || "Deleted / archived ads";
+    const c = leadCampaignMap.get(name) ?? { spend: 0, clicks: 0, conversions: 0, impressions: 0, reach: 0 };
+    c.spend += m.spend ?? 0;
+    c.clicks += m.clicks ?? 0;
+    c.conversions += m.actions ?? 0;
+    c.impressions += m.impressions ?? 0;
+    c.reach += m.reach ?? 0;
+    leadCampaignMap.set(name, c);
+  }
+  const campaignBreakdown = Array.from(leadCampaignMap.entries())
+    .map(([name, c]) => ({
+      campaignName: name,
+      spend: Math.round(c.spend * 100) / 100,
+      clicks: c.clicks,
+      conversions: c.conversions,
+      impressions: c.impressions,
+      reach: c.reach,
+      cpc: c.clicks > 0 ? Math.round((c.spend / c.clicks) * 100) / 100 : 0,
+      conversionRate: c.clicks > 0 ? Math.round((c.conversions / c.clicks) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => b.spend - a.spend);
+
+  // Daily spend by campaign (for stacked chart inside LeadsClient).
+  const dailyCampaignMap = new Map<string, Map<string, { spend: number; clicks: number; reach: number; impressions: number }>>();
+  for (const m of rangeScopedAll) {
+    const name = campaignNameById.get(m.adId);
+    if (!name) continue;
+    if (!dailyCampaignMap.has(m.date)) dailyCampaignMap.set(m.date, new Map());
+    const dayMap = dailyCampaignMap.get(m.date)!;
+    const c = dayMap.get(name) ?? { spend: 0, clicks: 0, reach: 0, impressions: 0 };
+    c.spend += m.spend ?? 0;
+    c.clicks += m.clicks ?? 0;
+    c.reach += m.reach ?? 0;
+    c.impressions += m.impressions ?? 0;
+    dayMap.set(name, c);
+  }
+  const leadCampaignNames = campaignBreakdown.map((c) => c.campaignName);
+  const dailyByCampaign = Array.from(leadDailyMap.keys()).map((date) => {
+    const dayMap = dailyCampaignMap.get(date);
+    const row: Record<string, any> = { date };
+    for (const name of leadCampaignNames) {
+      const d = dayMap?.get(name);
+      row[`${name}_spend`] = d ? Math.round(d.spend * 100) / 100 : 0;
+      row[`${name}_clicks`] = d ? d.clicks : 0;
+      row[`${name}_reach`] = d ? d.reach : 0;
+    }
+    return row;
+  });
+
+  // Daily CPL + Cost-per-SQL — merges daily spend with daily ATM & SQL counts.
+  const atmByDate = new Map(hubspotATM.map((d) => [d.date, d.atm]));
+  const sqlsByDate = new Map(hubspotATM.map((d) => [d.date, d.sqls]));
+  const dailyCPL = dailyData.map((day) => {
+    const atm = atmByDate.get(day.date) || 0;
+    const sqls = sqlsByDate.get(day.date) || 0;
+    return {
+      date: day.date,
+      spend: day.spend,
+      atm,
+      sqls,
+      cpl: atm > 0 ? Math.round((day.spend / atm) * 100) / 100 : null,
+      costPerSql: sqls > 0 ? Math.round((day.spend / sqls) * 100) / 100 : null,
+    };
+  });
+
+  const leadPageTotals = {
+    totalConversions: rangeScopedAll.reduce((s, m) => s + (m.actions ?? 0), 0),
+  };
+
   const lastSyncedAt = allAdsRaw.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
 
   return (
@@ -307,6 +429,31 @@ export default async function StrategyPage() {
       <div className="px-8 pt-6">
         <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
       </div>
+
+      {/* Leads section (formerly /leads) */}
+      <LeadsClient
+        totalSpend={Math.round(totalSpend * 100) / 100}
+        totalClicks={totalClicks}
+        totalImpressions={totalImpressionsAll}
+        totalConversions={leadPageTotals.totalConversions}
+        totalReach={totalReach}
+        dailyData={dailyData}
+        campaignBreakdown={campaignBreakdown}
+        rangeFrom={rangeStart}
+        rangeTo={rangeEnd}
+        activeAdCount={allAds.length}
+        hubspotATM={hubspotATM.length > 0 ? hubspotATM : undefined}
+        hubspotMQLs={hubspotMQLs.length > 0 ? hubspotMQLs : undefined}
+        totalATM={totalATM > 0 ? totalATM : undefined}
+        totalSQLs={totalSQLs > 0 ? totalSQLs : undefined}
+        totalMQLs={totalMQLs > 0 ? totalMQLs : undefined}
+        campaignNames={leadCampaignNames}
+        dailyByCampaign={dailyByCampaign}
+        leadContacts={allLeadContacts.length > 0 ? allLeadContacts : undefined}
+        dailyCPL={dailyCPL}
+      />
+
+      {/* Analytics section */}
       <StrategyClient
         ads={adSummaries}
         dailySpendByAd={dailySpendByAd}

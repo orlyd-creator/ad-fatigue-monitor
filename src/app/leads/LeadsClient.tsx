@@ -66,13 +66,13 @@ export default function LeadsClient({
   useEffect(() => {
     if (!dateChanged || !from || !to) return;
     const timer = setTimeout(() => {
-      router.push(`/leads?from=${from}&to=${to}`);
+      router.push(`/strategy?from=${from}&to=${to}`);
     }, 600);
     return () => clearTimeout(timer);
   }, [from, to, dateChanged, router]);
 
   const handleApply = () => {
-    if (from && to) router.push(`/leads?from=${from}&to=${to}`);
+    if (from && to) router.push(`/strategy?from=${from}&to=${to}`);
   };
 
   const handleRefreshHS = () => {
