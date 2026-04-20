@@ -124,35 +124,27 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       return result;
     }
 
-    // ── Step 2: Fetch ACTIVE ads only (fast — typically 5-50 ads) ─
-    console.log("[sync] Step 2: Fetching active ads...");
-    let activeAds: any[] = [];
+    // ── Step 2: Fetch ALL ads regardless of status ─
+    // Pulling everything ensures ad statuses are always up-to-date — if user paused
+    // an ad in Meta, we'll see the new status on next sync.
+    console.log("[sync] Step 2: Fetching all ads (all statuses)...");
+    let allAdsFetch: any[] = [];
 
     try {
-      // Only get ads that are actually running (ACTIVE effective_status)
-      // Pull creative details: full image, body text, headline
-      activeAds = await paginateAll(`/${actId}/ads`, token, {
+      allAdsFetch = await paginateAll(`/${actId}/ads`, token, {
         fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url,image_url,body,title,link_url,object_story_spec}",
-        effective_status: JSON.stringify(["ACTIVE"]),
+        effective_status: JSON.stringify([
+          "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED",
+          "PREAPPROVED", "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ARCHIVED",
+          "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
+        ]),
       });
-      console.log(`[sync] Found ${activeAds.length} ACTIVE ads`);
+      console.log(`[sync] Found ${allAdsFetch.length} ads total`);
     } catch (e: any) {
-      console.error(`[sync] Active ads fetch failed: ${e.message}`);
+      console.error(`[sync] All-status ads fetch failed: ${e.message}`);
     }
 
-    // Also grab recently paused ads (they might have just been paused and still need scoring)
-    let recentPausedAds: any[] = [];
-    try {
-      recentPausedAds = await paginateAll(`/${actId}/ads`, token, {
-        fields: "id,name,status,effective_status,campaign{id,name},adset{id,name},created_time,creative{thumbnail_url,image_url,body,title,link_url,object_story_spec}",
-        effective_status: JSON.stringify(["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]),
-      });
-      console.log(`[sync] Found ${recentPausedAds.length} paused ads`);
-    } catch (e: any) {
-      console.error(`[sync] Paused ads fetch failed: ${e.message}`);
-    }
-
-    const allAds = [...activeAds, ...recentPausedAds];
+    const allAds = allAdsFetch;
 
     if (allAds.length === 0) {
       // Fallback: try campaign-level fetch
