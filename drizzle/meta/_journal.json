@@ -8,6 +8,13 @@
       "when": 1775990776398,
       "tag": "0000_mean_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1776682049330,
+      "tag": "0001_wild_black_bolt",
+      "breakpoints": true
     }
   ]
 }

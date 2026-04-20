@@ -44,6 +44,15 @@ const links = [
     ),
   },
   {
+    href: "/team",
+    label: "Share workspace",
+    icon: (
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72M18 18.72v-.094c0-1.34-.296-2.61-.826-3.748M18 18.72v.002A12 12 0 0112 21a12 12 0 01-6-1.278v-.002m0 0a3 3 0 00-4.681-2.72 9.094 9.094 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M6 18.719a5.971 5.971 0 01.94-3.197m5.06-1.523a3 3 0 11-6 0 3 3 0 016 0zm6-3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+      </svg>
+    ),
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: (

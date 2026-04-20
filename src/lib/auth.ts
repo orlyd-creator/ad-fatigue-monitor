@@ -1,9 +1,9 @@
 import NextAuth from "next-auth";
 import Facebook from "next-auth/providers/facebook";
 import { db } from "@/lib/db";
-import { accounts } from "@/lib/db/schema";
+import { accounts, teamInvites } from "@/lib/db/schema";
 import { exchangeForLongLivedToken, getAdAccounts } from "@/lib/meta/client";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -13,24 +13,68 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.META_APP_SECRET!,
       authorization: {
         params: {
-          scope: "ads_read,ads_management",
+          scope: "email,ads_read,ads_management",
         },
       },
     }),
   ],
   callbacks: {
-    async signIn({ account }) {
+    async signIn({ account, profile }) {
       if (!account?.access_token) return false;
 
+      const email = (profile as any)?.email?.toLowerCase().trim() || "";
+      const fbUserId = account.providerAccountId || "";
+
+      // Check if this user is an existing owner (has accounts in DB under their FB ID).
+      // If so, proceed with full Meta ingestion flow.
+      const existingOwnerAccounts = fbUserId
+        ? await db.select().from(accounts).where(eq(accounts.userId, fbUserId)).all()
+        : [];
+      const isOwner = existingOwnerAccounts.length > 0;
+
+      // Check if this user was invited.
+      let isInvitedTeammate = false;
+      if (email) {
+        const invite = await db
+          .select()
+          .from(teamInvites)
+          .where(eq(teamInvites.email, email))
+          .get();
+        if (invite) {
+          isInvitedTeammate = true;
+          // Mark that they've logged in
+          await db
+            .update(teamInvites)
+            .set({ lastSeenAt: Date.now() })
+            .where(eq(teamInvites.email, email))
+            .run();
+        }
+      }
+
+      // No account check possible? Let first-ever user through (bootstrapping the owner).
+      const anyAccountExists = (await db.select({ n: sql<number>`count(*)` }).from(accounts).get())?.n || 0;
+      const isFirstUser = anyAccountExists === 0;
+
+      if (!isOwner && !isInvitedTeammate && !isFirstUser) {
+        console.log(`[auth] Rejected sign-in from ${email || fbUserId} — not owner, not invited`);
+        return false;
+      }
+
+      // Invited teammates: grant access without triggering Meta account ingestion.
+      // They'll use the shared owner's stored Meta token.
+      if (isInvitedTeammate && !isOwner) {
+        console.log(`[auth] Invited teammate signed in: ${email}`);
+        return true;
+      }
+
+      // Owner (or first-ever user): run full Meta ingestion flow.
       try {
-        // Exchange for long-lived token
         const longLived = await exchangeForLongLivedToken(
           account.access_token,
           process.env.META_APP_ID!,
           process.env.META_APP_SECRET!
         );
 
-        // Log granted permissions for debugging
         try {
           const permsRes = await fetch(`https://graph.facebook.com/v21.0/me/permissions?access_token=${longLived.access_token}`);
           const permsData = await permsRes.json();
@@ -38,47 +82,34 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.log(`[auth] Granted permissions: ${granted.join(", ")}`);
         } catch { /* ignore */ }
 
-        // Discover ALL ad accounts (paginated — gets every account the user has access to)
         const adAccounts = await getAdAccounts(longLived.access_token);
-        console.log(`[auth] Found ${adAccounts.length} ad accounts:`);
-        for (const acc of adAccounts) {
-          console.log(`[auth]   - ${acc.account_id || acc.id} "${acc.name}" status=${acc.account_status}`);
-        }
+        console.log(`[auth] Found ${adAccounts.length} ad accounts`);
 
         if (adAccounts.length === 0) {
           console.error("[auth] No ad accounts found for this user");
           return false;
         }
 
-        // Store ALL ad accounts — we'll figure out which has ads during sync
-        let bestAccountId = "";
         for (const adAccount of adAccounts) {
           const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
-          console.log(`[auth] Storing account ${accountId} (${adAccount.name}) status=${adAccount.account_status}`);
-
           await db.insert(accounts)
             .values({
               id: accountId,
               name: adAccount.name || "My Ad Account",
               accessToken: longLived.access_token,
               tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
-              userId: account.providerAccountId || "default",
+              userId: fbUserId || "default",
             })
             .onConflictDoUpdate({
               target: accounts.id,
               set: {
                 accessToken: longLived.access_token,
                 tokenExpiresAt: Date.now() + longLived.expires_in * 1000,
-                userId: account.providerAccountId || "default",
+                userId: fbUserId || "default",
                 updatedAt: Date.now(),
               },
             })
             .run();
-
-          // Prefer the first active account (status 1 = active)
-          if (!bestAccountId || adAccount.account_status === 1) {
-            bestAccountId = accountId;
-          }
         }
 
         return true;
@@ -87,32 +118,41 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false;
       }
     },
-    async jwt({ token, account }) {
-      // On initial sign-in, persist the provider account ID in the JWT
+    async jwt({ token, account, profile }) {
+      // On initial sign-in, persist the provider account ID + email in the JWT
       if (account?.providerAccountId) {
         token.providerAccountId = account.providerAccountId;
+      }
+      if ((profile as any)?.email) {
+        token.email = (profile as any).email.toLowerCase().trim();
       }
       return token;
     },
     async session({ session, token }) {
-      // Look up ALL accounts belonging to this user
       const providerAccountId = token.providerAccountId as string | undefined;
-      if (providerAccountId) {
-        const userAccounts = await db
-          .select()
-          .from(accounts)
-          .where(eq(accounts.userId, providerAccountId))
-          .all();
+      const email = (token.email as string | undefined) || "";
 
-        // Pick the first account (we'll sync all of them)
-        const account = userAccounts[0];
-        if (account) {
-          (session as any).accountId = account.id;
-          (session as any).accountName = account.name;
-          (session as any).allAccountIds = userAccounts.map(a => a.id);
-          (session as any).tokenExpiring =
-            account.tokenExpiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000;
-        }
+      // Owner: has accounts stored under their FB user ID.
+      let userAccounts = providerAccountId
+        ? await db.select().from(accounts).where(eq(accounts.userId, providerAccountId)).all()
+        : [];
+
+      // Invited teammate: no accounts under their ID — fall through to the shared
+      // (owner's) account so they see the same data as the owner.
+      if (userAccounts.length === 0) {
+        userAccounts = await db.select().from(accounts).all();
+      }
+
+      const account = userAccounts[0];
+      if (account) {
+        (session as any).accountId = account.id;
+        (session as any).accountName = account.name;
+        (session as any).allAccountIds = userAccounts.map(a => a.id);
+        (session as any).tokenExpiring =
+          account.tokenExpiresAt - Date.now() < 7 * 24 * 60 * 60 * 1000;
+      }
+      if (email) {
+        (session as any).email = email;
       }
       return session;
     },

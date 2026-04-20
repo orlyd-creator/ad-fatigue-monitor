@@ -90,6 +90,13 @@ export const hubspotConfig = sqliteTable("hubspot_config", {
   updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
 });
 
+export const teamInvites = sqliteTable("team_invites", {
+  email: text("email").primaryKey(),
+  invitedAt: integer("invited_at").notNull().$defaultFn(() => Date.now()),
+  invitedBy: text("invited_by"),
+  lastSeenAt: integer("last_seen_at"),
+});
+
 // Type exports
 export type Account = typeof accounts.$inferSelect;
 export type Ad = typeof ads.$inferSelect;
@@ -97,3 +104,4 @@ export type DailyMetric = typeof dailyMetrics.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type HubSpotConfig = typeof hubspotConfig.$inferSelect;
+export type TeamInvite = typeof teamInvites.$inferSelect;

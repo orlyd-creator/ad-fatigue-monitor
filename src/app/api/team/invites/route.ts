@@ -1,0 +1,63 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { teamInvites } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
+
+function validEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/** GET: list team invites */
+export async function GET() {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const invites = await db
+    .select()
+    .from(teamInvites)
+    .orderBy(desc(teamInvites.invitedAt))
+    .all();
+  return NextResponse.json({ invites });
+}
+
+/** POST: invite a teammate by email */
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const email = String(body.email || "").toLowerCase().trim();
+
+  if (!validEmail(email)) {
+    return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+  }
+
+  const inviterEmail = (session as any).email || null;
+
+  await db
+    .insert(teamInvites)
+    .values({ email, invitedBy: inviterEmail })
+    .onConflictDoUpdate({
+      target: teamInvites.email,
+      set: { invitedBy: inviterEmail },
+    })
+    .run();
+
+  return NextResponse.json({ ok: true, email });
+}
+
+/** DELETE: revoke an invite */
+export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const email = (searchParams.get("email") || "").toLowerCase().trim();
+  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+
+  await db.delete(teamInvites).where(eq(teamInvites.email, email)).run();
+  return NextResponse.json({ ok: true });
+}
