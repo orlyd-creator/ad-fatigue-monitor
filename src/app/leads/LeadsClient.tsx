@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import DateRangePicker from "@/components/DateRangePicker";
+import QuickPresets from "@/components/QuickPresets";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Cell, LineChart, Line, Legend, AreaChart, Area, ScatterChart, Scatter, ZAxis,
@@ -153,7 +154,10 @@ export default function LeadsClient({
             Meta ad performance {hasHubSpot ? "& HubSpot leads" : ""}, your source of truth
           </p>
         </div>
-        <DateRangePicker />
+        <div className="flex flex-wrap items-center gap-2">
+          <QuickPresets />
+          <DateRangePicker />
+        </div>
       </div>
 
       {/* Meta Stats */}

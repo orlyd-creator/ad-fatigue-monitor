@@ -6,6 +6,7 @@ import { format, startOfMonth } from "date-fns";
 import AdCard from "@/components/AdCard";
 import SparklineChart from "@/components/SparklineChart";
 import DateRangePicker from "@/components/DateRangePicker";
+import QuickPresets from "@/components/QuickPresets";
 import type { FatigueStage } from "@/lib/fatigue/types";
 
 interface SpendData {
@@ -410,7 +411,10 @@ export default function DashboardClient({ ads, spendData, range, lastSyncedAt }:
                 : "Hit 'Refresh Data' to pull your ads in"}
             </p>
           </div>
-          <DateRangePicker />
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            <QuickPresets />
+            <DateRangePicker />
+          </div>
         </div>
         {ads.length > 0 && (
           <div className="flex items-center gap-4 mt-3">

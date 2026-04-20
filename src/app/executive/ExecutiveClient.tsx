@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import DateRangePicker from "@/components/DateRangePicker";
+import QuickPresets from "@/components/QuickPresets";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   BarChart, Bar,
@@ -170,8 +171,9 @@ export default function ExecutiveClient({
         </button>
       </div>
 
-      {/* Date range + comparison selector (global component) */}
-      <div className="exec-no-print mb-6 flex justify-end">
+      {/* Quick presets + custom range dropdown */}
+      <div className="exec-no-print mb-6 flex flex-wrap items-center justify-between gap-3">
+        <QuickPresets />
         <DateRangePicker />
       </div>
 
