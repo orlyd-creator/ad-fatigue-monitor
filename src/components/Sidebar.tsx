@@ -100,8 +100,37 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   // transport can't be killed by navigation / Next.js action-stream quirks.
   // The AbortController is intentionally NOT tied to navigation, the sync
   // keeps running even if the user leaves the page.
+  // Verify a sync actually succeeded by checking lastSyncedAt. Used whenever
+  // the client can't trust the response (502 from the gateway, stream drop,
+  // network blip). If any ad was synced in the last 3 min, the backend
+  // finished the work, we just lost the response.
+  const didSyncActuallySucceed = async (startedAt: number) => {
+    try {
+      const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
+      if (!check.ok) return false;
+      const data = await check.json();
+      const mostRecent = Array.isArray(data?.ads)
+        ? data.ads.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0)
+        : 0;
+      // Accept either (a) anything synced after the click, or (b) anything
+      // synced in the last 3 min (for when the backend was already partway).
+      return mostRecent >= startedAt - 5000 || Date.now() - mostRecent < 180000;
+    } catch {
+      return false;
+    }
+  };
+
+  const markSyncSuccess = () => {
+    setSyncDone(true);
+    setTimeout(() => {
+      setSyncDone(false);
+      router.refresh();
+    }, 1500);
+  };
+
   const handleSync = () => {
     setSyncError(null);
+    const startedAt = Date.now();
     startTransition(async () => {
       try {
         const res = await fetch("/api/sync", {
@@ -112,17 +141,26 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         });
         let body: any = {};
         try { body = await res.json(); } catch {}
+
         if (!res.ok) {
-          // 401 = token expired or not logged in
+          // 401 is unambiguous, don't second-guess.
           if (res.status === 401 || body?.error?.match?.(/token|expired|reconnect/i)) {
             setSyncError("Meta token expired, reconnect");
             setTimeout(() => setSyncError(null), 10000);
+            return;
+          }
+          // 5xx often means the gateway timed out WHILE the backend finished
+          // successfully (we see this as 502 Bad Gateway on Railway). Verify
+          // by checking lastSyncedAt before showing a scary error.
+          if (await didSyncActuallySucceed(startedAt)) {
+            markSyncSuccess();
             return;
           }
           setSyncError(body?.error || `Sync failed (HTTP ${res.status})`);
           setTimeout(() => setSyncError(null), 8000);
           return;
         }
+
         if (body.errors && body.errors.length > 0 && body.adsFound === 0) {
           setSyncError(body.errors[0]);
           setTimeout(() => setSyncError(null), 15000);
@@ -132,31 +170,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           setSyncError(`Synced ${body.adsFound} ads, but: ${body.errors[0]}`);
           setTimeout(() => setSyncError(null), 10000);
         }
-        setSyncDone(true);
-        setTimeout(() => {
-          setSyncDone(false);
-          router.refresh();
-        }, 1500);
+        markSyncSuccess();
       } catch (err: any) {
-        // Network error, timeout, or stream drop. Peek at lastSyncedAt, if a
-        // sync completed in the background we treat it as success.
-        try {
-          const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
-          if (check.ok) {
-            const data = await check.json();
-            const mostRecent = Array.isArray(data?.ads)
-              ? data.ads.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0)
-              : 0;
-            if (Date.now() - mostRecent < 180000) {
-              setSyncDone(true);
-              setTimeout(() => {
-                setSyncDone(false);
-                router.refresh();
-              }, 1500);
-              return;
-            }
-          }
-        } catch { /* fall through */ }
+        // Network error or stream drop. Same recovery path, verify via
+        // lastSyncedAt before giving up.
+        if (await didSyncActuallySucceed(startedAt)) {
+          markSyncSuccess();
+          return;
+        }
         setSyncError(err?.message?.includes("abort") ? "Cancelled" : "Couldn't reach sync. Try again.");
         setTimeout(() => setSyncError(null), 6000);
       }
