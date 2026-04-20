@@ -283,21 +283,25 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           then holds for ~1.8s so users see confirmation. */}
       {showOverlay && (
         <div
-          className="fixed inset-0 z-[75] bg-white/60 backdrop-blur-[3px] flex items-center justify-center pointer-events-auto"
+          className="fixed inset-0 z-[75] bg-black/30 backdrop-blur-[4px] flex items-center justify-center p-5 pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-white/95 rounded-2xl shadow-xl border border-gray-100 px-6 py-5 max-w-sm mx-4">
-            <div className="flex items-center gap-3">
-              <div className="relative">
+          <div
+            className="relative bg-white rounded-3xl shadow-2xl max-w-[380px] w-[calc(100vw-40px)] overflow-hidden"
+            style={{ animation: "permFade 200ms ease-out" }}
+          >
+            <div className="pt-8 pb-6 flex flex-col items-center px-8">
+              <div className="relative mb-5">
+                <div className="absolute inset-0 rounded-full blur-2xl opacity-40 bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8]" />
                 {showOverlay === "done" ? (
-                  <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                  <div className="relative w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center ring-4 ring-emerald-500/15">
+                    <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                   </div>
                 ) : (
                   <div
-                    className="w-8 h-8 rounded-full"
+                    className="relative w-14 h-14 rounded-full"
                     style={{
                       background:
                         "conic-gradient(from 0deg, #6B93D8, #9B7ED0, #D06AB8, #F04E80, #6B93D8)",
@@ -309,15 +313,13 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
                   />
                 )}
               </div>
-              <div>
-                <div className="text-[14px] font-semibold text-foreground">
-                  {showOverlay === "done" ? "Synced!" : "Refreshing your data…"}
-                </div>
-                <div className="text-[12px] text-gray-500 mt-0.5">
-                  {showOverlay === "done"
-                    ? "Fresh Meta + HubSpot data is loading."
-                    : "Takes 30 to 60 seconds. Please wait, don't click around or the sync will cancel."}
-                </div>
+              <div className="text-[18px] font-bold text-foreground tracking-tight text-center leading-tight">
+                {showOverlay === "done" ? "Synced" : "Refreshing your data"}
+              </div>
+              <div className="text-[13.5px] text-muted-foreground mt-2 leading-relaxed text-center max-w-[300px]">
+                {showOverlay === "done"
+                  ? "Fresh Meta + HubSpot data is loading."
+                  : "Takes 30 to 60 seconds. Please wait, clicking around will cancel the sync."}
               </div>
             </div>
           </div>
