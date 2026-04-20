@@ -2,7 +2,7 @@ import { signInWithFacebook, signInWithGoogle } from "./actions";
 import { auth, isGoogleEnabled } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ fresh?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ fresh?: string; share?: string }> }) {
   const params = await searchParams;
   if (!params.fresh) {
     const session = await auth();
@@ -10,6 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       redirect("/dashboard");
     }
   }
+  const shareState = params.share || null;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-white/80 via-[#C5D9F5]/40 via-[#9B7ED0]/30 to-[#D06AB8]/20 px-4 py-12">
@@ -25,11 +26,26 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </p>
         </div>
 
+        {shareState === "pending" && (
+          <div className="mb-5 px-4 py-3 rounded-2xl bg-green-50 border border-green-200 text-[13px] text-green-800">
+            You've been invited to a shared workspace. Sign in with Facebook to get access.
+          </div>
+        )}
+        {shareState === "invalid" && (
+          <div className="mb-5 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-[13px] text-red-800">
+            This share link is expired or has been revoked. Ask the person who sent it for a new one.
+          </div>
+        )}
+
         {/* Connect */}
         <div className="lv-card p-7 mb-5">
-          <h2 className="text-[17px] font-semibold text-black mb-2">Connect your Meta account</h2>
+          <h2 className="text-[17px] font-semibold text-black mb-2">
+            {shareState === "pending" ? "Sign in to continue" : "Connect your Meta account"}
+          </h2>
           <p className="text-[14px] text-gray-600 mb-6 leading-relaxed">
-            We&apos;ll pull your ad performance and lead data into one place — so you always know what&apos;s working, what&apos;s fatigued, and where your next lead is coming from.
+            {shareState === "pending"
+              ? "Just sign in with Facebook — no integrations needed. You'll land on the shared dashboard in one click."
+              : "We'll pull your ad performance and lead data into one place — so you always know what's working, what's fatigued, and where your next lead is coming from."}
           </p>
 
           <form action={signInWithFacebook}>

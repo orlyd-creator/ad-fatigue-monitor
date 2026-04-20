@@ -97,6 +97,16 @@ export const teamInvites = sqliteTable("team_invites", {
   lastSeenAt: integer("last_seen_at"),
 });
 
+export const shareTokens = sqliteTable("share_tokens", {
+  token: text("token").primaryKey(),
+  label: text("label"),
+  createdAt: integer("created_at").notNull().$defaultFn(() => Date.now()),
+  createdBy: text("created_by"),
+  expiresAt: integer("expires_at"),
+  revokedAt: integer("revoked_at"),
+  usesCount: integer("uses_count").notNull().default(0),
+});
+
 // Type exports
 export type Account = typeof accounts.$inferSelect;
 export type Ad = typeof ads.$inferSelect;
@@ -105,3 +115,4 @@ export type Alert = typeof alerts.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type HubSpotConfig = typeof hubspotConfig.$inferSelect;
 export type TeamInvite = typeof teamInvites.$inferSelect;
+export type ShareToken = typeof shareTokens.$inferSelect;

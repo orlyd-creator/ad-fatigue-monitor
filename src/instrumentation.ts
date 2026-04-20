@@ -24,6 +24,18 @@ export async function register() {
         last_seen_at INTEGER
       )
     `);
+    // share_tokens: shareable links — click URL → FB login → auto access.
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS share_tokens (
+        token TEXT PRIMARY KEY,
+        label TEXT,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+        created_by TEXT,
+        expires_at INTEGER,
+        revoked_at INTEGER,
+        uses_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
     console.log("[instrumentation] Schema ensured");
   } catch (err) {
     // Don't crash the app — log and continue. The app still boots without this.

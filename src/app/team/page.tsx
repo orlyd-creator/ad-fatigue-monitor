@@ -1,8 +1,9 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { teamInvites } from "@/lib/db/schema";
+import { teamInvites, shareTokens } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
+import { headers } from "next/headers";
 import TeamClient from "./TeamClient";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,20 @@ export default async function TeamPage() {
     .orderBy(desc(teamInvites.invitedAt))
     .all();
 
+  const tokens = await db
+    .select()
+    .from(shareTokens)
+    .orderBy(desc(shareTokens.createdAt))
+    .all();
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const proto = h.get("x-forwarded-proto") || "https";
+  const origin = host ? `${proto}://${host}` : "";
+
   return (
     <div className="min-h-screen">
-      <TeamClient initialInvites={invites} />
+      <TeamClient initialInvites={invites} initialTokens={tokens} origin={origin} />
     </div>
   );
 }

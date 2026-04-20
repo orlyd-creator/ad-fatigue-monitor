@@ -2,9 +2,10 @@ import NextAuth from "next-auth";
 import Facebook from "next-auth/providers/facebook";
 import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
-import { accounts, teamInvites } from "@/lib/db/schema";
+import { accounts, teamInvites, shareTokens } from "@/lib/db/schema";
 import { exchangeForLongLivedToken, getAdAccounts } from "@/lib/meta/client";
 import { eq, sql } from "drizzle-orm";
+import { cookies } from "next/headers";
 
 // Google is enabled only when both env vars are set, so a missing GOOGLE_CLIENT_ID
 // won't crash the app — FB continues to work alone.
@@ -95,19 +96,62 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
+      // Check for a valid share-link cookie. If present, treat this user as invited
+      // and auto-add them to the invites list so they don't need to re-use the link.
+      let hasValidShareToken = false;
+      try {
+        const jar = await cookies();
+        const shareCookie = jar.get("share_token")?.value;
+        if (shareCookie) {
+          const record = await db
+            .select()
+            .from(shareTokens)
+            .where(eq(shareTokens.token, shareCookie))
+            .get();
+          if (
+            record &&
+            record.revokedAt === null &&
+            (record.expiresAt == null || record.expiresAt > Date.now())
+          ) {
+            hasValidShareToken = true;
+            // Consume the token (bump uses count, clear the cookie).
+            await db
+              .update(shareTokens)
+              .set({ usesCount: (record.usesCount || 0) + 1 })
+              .where(eq(shareTokens.token, shareCookie))
+              .run();
+            // Auto-add this user to the invite list by their FB email (if we got one).
+            if (email) {
+              await db
+                .insert(teamInvites)
+                .values({ email, invitedBy: "share-link", lastSeenAt: Date.now() })
+                .onConflictDoUpdate({
+                  target: teamInvites.email,
+                  set: { lastSeenAt: Date.now() },
+                })
+                .run();
+            }
+            // Clear the cookie so it's not reused on other sign-ins.
+            jar.delete("share_token");
+          }
+        }
+      } catch (err) {
+        console.error("[auth] Share token check failed:", err);
+      }
+
       // No account check possible? Let first-ever user through (bootstrapping the owner).
       const anyAccountExists = (await db.select({ n: sql<number>`count(*)` }).from(accounts).get())?.n || 0;
       const isFirstUser = anyAccountExists === 0;
 
-      if (!isOwner && !isInvitedTeammate && !isFirstUser) {
-        console.log(`[auth] Rejected sign-in from ${email || fbUserId} — not owner, not invited`);
+      if (!isOwner && !isInvitedTeammate && !hasValidShareToken && !isFirstUser) {
+        console.log(`[auth] Rejected sign-in from ${email || fbUserId} — not owner, not invited, no share token`);
         return false;
       }
 
-      // Invited teammates: grant access without triggering Meta account ingestion.
-      // They'll use the shared owner's stored Meta token.
-      if (isInvitedTeammate && !isOwner) {
-        console.log(`[auth] Invited teammate signed in: ${email}`);
+      // Invited teammates (or share-link users): grant access without triggering
+      // Meta account ingestion. They'll use the shared owner's stored Meta token.
+      if ((isInvitedTeammate || hasValidShareToken) && !isOwner) {
+        console.log(`[auth] Teammate signed in via ${hasValidShareToken ? "share link" : "email invite"}: ${email}`);
         return true;
       }
 
