@@ -151,7 +151,7 @@ export default function TeamClient({
             type="text"
             value={linkLabel}
             onChange={(e) => setLinkLabel(e.target.value)}
-            placeholder="Label (optional): e.g. Aviv, Finance team"
+            placeholder="Label (optional): e.g. Orly, Finance team"
             maxLength={80}
             className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white/50 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9b87f5]/40"
             disabled={creatingLink}
@@ -203,7 +203,7 @@ export default function TeamClient({
       <div className="lv-card p-6 mb-6">
         <h2 className="text-[15px] font-semibold text-foreground mb-1">Or invite by email</h2>
         <p className="text-[13px] text-muted-foreground mb-4">
-          Enter a specific email (<span className="font-mono text-foreground">aviv@obol.app</span>) or a whole domain
+          Enter a specific email (<span className="font-mono text-foreground">orly.d@obol.app</span>) or a whole domain
           (<span className="font-mono text-foreground">@obol.app</span>). Only works if their Facebook email matches.
         </p>
         <form onSubmit={handleInvite} className="flex gap-2">
@@ -211,7 +211,7 @@ export default function TeamClient({
             type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="aviv@obol.app  or  @obol.app"
+            placeholder="orly.d@obol.app  or  @obol.app"
             autoComplete="off"
             className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white/50 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9b87f5]/40"
             disabled={inviting}
