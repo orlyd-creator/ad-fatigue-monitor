@@ -3,6 +3,29 @@ import { sql } from "drizzle-orm";
 
 const BASE_URL = "https://api.hubapi.com";
 
+// Lightweight in-memory TTL cache so repeat page loads/preset switching don't
+// trigger new HubSpot queries. Node process is persistent on Railway so this
+// speeds things up across users too.
+const HUBSPOT_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+type CacheEntry = { expires: number; promise: Promise<any> };
+const _hsCache = new Map<string, CacheEntry>();
+
+function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = _hsCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise as Promise<T>;
+  const promise = fn().catch((err) => {
+    _hsCache.delete(key);
+    throw err;
+  });
+  _hsCache.set(key, { expires: Date.now() + ttlMs, promise });
+  return promise;
+}
+
+/** Invalidate all HubSpot funnel cache — call from Refresh / after sync. */
+export function clearHubSpotCache() {
+  _hsCache.clear();
+}
+
 interface HubSpotContact {
   id: string;
   properties: Record<string, string | null>;
@@ -200,6 +223,15 @@ export async function getLeadsFunnelLite(
   totalATM: number;
   totalSQLs: number;
 }> {
+  return cached(`lite:${fromDate}:${toDate}`, HUBSPOT_CACHE_TTL_MS, () =>
+    _getLeadsFunnelLiteUncached(fromDate, toDate),
+  );
+}
+
+async function _getLeadsFunnelLiteUncached(
+  fromDate: string,
+  toDate: string,
+) {
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
 
@@ -298,7 +330,7 @@ export async function getLeadsFunnelLite(
  */
 export async function getLeadsFunnel(
   fromDate: string,
-  toDate: string
+  toDate: string,
 ): Promise<{
   dailyATM: { date: string; atm: number; sqls: number; contacts: Array<{ id: string; name: string; email: string; company: string; stage: string; leadStatus: string; date: string; tier: string; segment: string; leadSource: string; type: "atm" | "sql" }> }[];
   dailyMQLs: { date: string; mqls: number; contacts: Array<{ id: string; name: string; email: string; company: string; stage: string; date: string; type: "mql" }> }[];
@@ -307,6 +339,12 @@ export async function getLeadsFunnel(
   totalSQLs: number;
   totalMQLs: number;
 }> {
+  return cached(`full:${fromDate}:${toDate}`, HUBSPOT_CACHE_TTL_MS, () =>
+    _getLeadsFunnelUncached(fromDate, toDate),
+  );
+}
+
+async function _getLeadsFunnelUncached(fromDate: string, toDate: string) {
   const config = await getFilterConfig();
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();

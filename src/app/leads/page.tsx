@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { ads, dailyMetrics } from "@/lib/db/schema";
 import { eq, inArray, gte } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth } from "date-fns";
 import { getLeadsFunnel } from "@/lib/hubspot/client";
@@ -10,11 +10,11 @@ import LeadsClient from "./LeadsClient";
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
+  const accountId = session.accountId;
   if (!accountId) redirect("/login");
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const allAccountIds: string[] = session.allAccountIds;
 
   const params = await searchParams;
   const now = new Date();

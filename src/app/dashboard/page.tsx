@@ -6,7 +6,7 @@ import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import DashboardClient from "./DashboardClient";
 import { format, subDays, startOfMonth } from "date-fns";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +19,12 @@ const RANGE_DAYS: Record<string, number> = {
 };
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
+  const accountId = session.accountId;
   if (!accountId) redirect("/login");
 
-  // Get all account IDs for this user (they may have multiple ad accounts)
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const allAccountIds: string[] = session.allAccountIds;
 
   const params = await searchParams;
 

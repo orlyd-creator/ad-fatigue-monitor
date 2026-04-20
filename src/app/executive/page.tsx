@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { ads, dailyMetrics } from "@/lib/db/schema";
 import { inArray, gte } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import {
   format, startOfMonth, endOfMonth, subMonths, addMonths, isBefore,
@@ -29,11 +29,11 @@ export default async function ExecutivePage({
 }: {
   searchParams: Promise<{ from?: string; to?: string; preset?: string }>;
 }) {
-  const session = await auth();
+  const session = await getSessionOrPublic();
   if (!session) redirect("/login");
-  const accountId = (session as any).accountId as string;
+  const accountId = session.accountId;
   if (!accountId) redirect("/login");
-  const allAccountIds: string[] = (session as any).allAccountIds || [accountId];
+  const allAccountIds: string[] = session.allAccountIds;
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
@@ -54,8 +54,11 @@ export default async function ExecutivePage({
       return null;
     }),
   ]);
-  const allAdIds = new Set(allAds.map(a => a.id));
-  const metrics = metricsRaw.filter(m => m.date <= rangeToStr && allAdIds.has(m.adId));
+  // Don't filter metrics by allAds.id — Meta removes ads from its list API once
+  // they're deleted, but dailyMetrics persists historical rows. Filtering them
+  // out silently drops real spend from past months. Every row in dailyMetrics
+  // was synced from one of the owner's accounts, so include it in the totals.
+  const metrics = metricsRaw.filter(m => m.date <= rangeToStr);
 
   // Month buckets covering the selected range
   type MonthBucket = {
