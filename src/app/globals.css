@@ -96,19 +96,22 @@
 body {
   background: linear-gradient(180deg,
     #F7F8FC 0%,
-    #EEF3FB 6%,
-    #DDE5F5 12%,
-    #C5D1EE 20%,
-    #ABBFE8 28%,
-    #96B0E2 36%,
-    #8FA3DD 44%,
-    #9B91D5 52%,
-    #AE85CC 60%,
-    #C176BE 68%,
-    #D16AB0 76%,
-    #E05D9C 84%,
-    #EB5388 92%,
-    #F04E80 100%);
+    #EEF3FB 5%,
+    #DDE5F5 10%,
+    #C5D1EE 17%,
+    #ABBFE8 24%,
+    #96B0E2 31%,
+    #8FA3DD 38%,
+    #9B91D5 45%,
+    #AE85CC 52%,
+    #C176BE 59%,
+    #D16AB0 66%,
+    #E05D9C 72%,
+    #EB5388 78%,
+    #F04E80 84%,
+    #F5556A 90%,
+    #F67056 95%,
+    #F58A3E 100%);
   background-attachment: fixed;
   min-height: 100vh;
   color: var(--foreground);
