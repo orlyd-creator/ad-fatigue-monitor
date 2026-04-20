@@ -58,8 +58,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       }
     : DEFAULT_SETTINGS;
 
-  // Get ads from ALL of user's ad accounts
-  const allAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
+  // Get ACTIVE ads from ALL of user's ad accounts. Dashboard is "what's
+  // running now" — paused/archived/deleted shouldn't clutter the view.
+  // Historical spend from non-active ads still counts on Executive.
+  const allAdsRaw = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
+  const allAds = allAdsRaw.filter(a => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"));
 
   const rangeStart = isCustom ? customFrom : format(subDays(now, rangeDays), "yyyy-MM-dd");
   const rangeEnd = isCustom ? customTo : format(now, "yyyy-MM-dd");

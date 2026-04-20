@@ -48,11 +48,25 @@ export default async function ExecutivePage({
   const rangeFromStr = format(fromDate, "yyyy-MM-dd");
   const rangeToStr = format(toDate, "yyyy-MM-dd");
 
-  const [allAds, metricsRaw, hubspotResult] = await Promise.all([
+  // MoM card needs this-month + last-month data regardless of selected range.
+  // Fetch from min(rangeFrom, last-month-start) so range-scoped buckets and
+  // MoM card both have their data in a single metrics query.
+  const lastMonthStartLocal = startOfMonth(subMonths(now, 1));
+  const momFromStr = format(lastMonthStartLocal, "yyyy-MM-dd");
+  const metricsFromStr = rangeFromStr < momFromStr ? rangeFromStr : momFromStr;
+
+  const [allAds, metricsRaw, hubspotResult, hubspotMoM] = await Promise.all([
     db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
-    db.select().from(dailyMetrics).where(gte(dailyMetrics.date, rangeFromStr)).all(),
+    db.select().from(dailyMetrics).where(gte(dailyMetrics.date, metricsFromStr)).all(),
     getLeadsFunnelLite(rangeFromStr, rangeToStr).catch(err => {
       console.error("[executive] HubSpot fetch failed:", err);
+      return null;
+    }),
+    // Separate HubSpot query for MoM so this-month/last-month stats are always
+    // available, even when user selected e.g. "Last month" (which would
+    // otherwise drop April from the main hubspotResult).
+    getLeadsFunnelLite(momFromStr, format(now, "yyyy-MM-dd")).catch(err => {
+      console.error("[executive] HubSpot MoM fetch failed:", err);
       return null;
     }),
   ]);
@@ -113,25 +127,42 @@ export default async function ExecutivePage({
   }
   for (const b of buckets) b.spend = Math.round(b.spend * 100) / 100;
 
-  // Current vs previous month (for top cards)
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const thisMonthKey = format(thisMonthStart, "yyyy-MM");
-  const lastMonthKey = format(lastMonthStart, "yyyy-MM");
-  const thisMonth = buckets.find(b => b.key === thisMonthKey);
-  const lastMonth = buckets.find(b => b.key === lastMonthKey);
+  // Current vs previous month (for top cards) — computed from the ALL-metrics
+  // set (metricsRaw) so the card works regardless of the selected range.
+  const lastMonthStart = lastMonthStartLocal;
+  const lastMonthEnd = endOfMonth(lastMonthStart);
+  const thisMonthEnd = endOfMonth(now);
+
+  let thisSpend = 0, lastSpend = 0;
+  for (const m of metricsRaw) {
+    if (!allAdIds.has(m.adId)) continue;
+    const d = new Date(m.date + "T00:00:00");
+    if (d >= thisMonthStart && d <= thisMonthEnd) thisSpend += m.spend ?? 0;
+    else if (d >= lastMonthStart && d <= lastMonthEnd) lastSpend += m.spend ?? 0;
+  }
+  thisSpend = Math.round(thisSpend * 100) / 100;
+  lastSpend = Math.round(lastSpend * 100) / 100;
+
+  let thisATM = 0, thisSQLs = 0, lastATM = 0, lastSQLs = 0;
+  if (hubspotMoM) {
+    for (const day of hubspotMoM.dailyATM) {
+      const d = new Date(day.date + "T00:00:00");
+      if (d >= thisMonthStart && d <= thisMonthEnd) thisATM += day.atm;
+      else if (d >= lastMonthStart && d <= lastMonthEnd) lastATM += day.atm;
+    }
+    for (const day of hubspotMoM.dailySQLDeals) {
+      const d = new Date(day.date + "T00:00:00");
+      if (d >= thisMonthStart && d <= thisMonthEnd) thisSQLs += day.sqlDeals;
+      else if (d >= lastMonthStart && d <= lastMonthEnd) lastSQLs += day.sqlDeals;
+    }
+  }
 
   const pctDelta = (curr: number, prev: number): number | null => {
     if (!prev) return null;
     return Math.round(((curr - prev) / prev) * 1000) / 10;
   };
 
-  const thisSpend = thisMonth?.spend ?? 0;
-  const thisATM = thisMonth?.atm ?? 0;
-  const thisSQLs = thisMonth?.sqls ?? 0;
   const thisCPL = thisATM > 0 ? Math.round((thisSpend / thisATM) * 100) / 100 : null;
-  const lastSpend = lastMonth?.spend ?? 0;
-  const lastATM = lastMonth?.atm ?? 0;
-  const lastSQLs = lastMonth?.sqls ?? 0;
   const lastCPL = lastATM > 0 ? Math.round((lastSpend / lastATM) * 100) / 100 : null;
   const deltas = {
     spend: pctDelta(thisSpend, lastSpend),
