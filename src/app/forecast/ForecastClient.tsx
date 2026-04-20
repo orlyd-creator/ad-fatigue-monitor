@@ -175,31 +175,56 @@ export default function ForecastClient({ forecast, atRisk, rising, budgetBreakdo
         </div>
       </section>
 
-      {/* CPL trend chart with clear solid/dashed separation */}
+      {/* CPL trend chart with explicit EOM projection callout */}
       {chartData.length > 0 && (
         <div className="lv-card p-6">
-          <div className="flex items-baseline justify-between mb-1 flex-wrap gap-2">
-            <h2 className="text-[14px] font-semibold text-foreground">CPL trajectory, month-to-date</h2>
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-4 h-[2px] rounded-full bg-[#D06AB8]" />
-                <span className="text-gray-600">Actual (so far)</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-4 h-[2px] rounded-full border-t-2 border-dashed border-[#D06AB8]" />
-                <span className="text-gray-600">Projected</span>
-              </span>
-              {lastMonth.cpl !== null && (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="w-4 h-[2px] rounded-full bg-[#9B7ED0]" />
-                  <span className="text-gray-600">{lastMonth.label} CPL</span>
-                </span>
+          <div className="flex items-baseline justify-between mb-1 flex-wrap gap-3">
+            <div>
+              <h2 className="text-[14px] font-semibold text-foreground">CPL trajectory, month-to-date</h2>
+              <p className="text-[12px] text-gray-500 mt-0.5">
+                Running total: cumulative spend ÷ cumulative ATMs through each day.
+              </p>
+            </div>
+            {/* BIG explicit EOM projection callout — answers 'so what's the projected CPL?' */}
+            <div className="flex items-center gap-4">
+              {mtd.cpl !== null && (
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-gray-500">Today's CPL</div>
+                  <div className="text-[20px] font-semibold tabular-nums text-[#D06AB8] leading-none">
+                    ${mtd.cpl.toFixed(0)}
+                  </div>
+                </div>
               )}
+              <div className="w-px h-10 bg-gray-200" />
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500">Projected EOM CPL</div>
+                <div className="text-[20px] font-semibold tabular-nums leading-none" style={{ color: pace.projectedCPL !== null ? "#7E69AB" : "#9CA3AF" }}>
+                  {pace.projectedCPL !== null ? `$${pace.projectedCPL.toFixed(0)}` : "—"}
+                </div>
+                {lastMonth.cpl !== null && pace.projectedCPL !== null && (
+                  <div className="text-[10px] mt-0.5" style={{ color: pace.projectedCPL < lastMonth.cpl ? "#059669" : pace.projectedCPL > lastMonth.cpl ? "#dc2626" : "#7E69AB" }}>
+                    {pace.projectedCPL < lastMonth.cpl ? "↓" : pace.projectedCPL > lastMonth.cpl ? "↑" : ""} vs {lastMonth.label} ${lastMonth.cpl.toFixed(0)}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <p className="text-[12px] text-gray-500 mb-4">
-            Running total: cumulative spend ÷ cumulative ATMs through each day. Projection holds today's CPL flat through month end.
-          </p>
+          <div className="flex items-center gap-3 text-[11px] mb-3">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-4 h-[2px] rounded-full bg-[#D06AB8]" />
+              <span className="text-gray-600">Actual (so far)</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-4 h-[2px] rounded-full border-t-2 border-dashed border-[#D06AB8]" />
+              <span className="text-gray-600">Projected (flat at today's rate)</span>
+            </span>
+            {lastMonth.cpl !== null && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-4 h-[2px] rounded-full bg-[#9B7ED0]" />
+                <span className="text-gray-600">{lastMonth.label} final CPL</span>
+              </span>
+            )}
+          </div>
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 10 }}>

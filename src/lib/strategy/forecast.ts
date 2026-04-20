@@ -362,6 +362,13 @@ export function buildStrategicForecast(input: {
     narrative.push(`Current CPL is $${mtdCPL.toFixed(0)}.`);
   }
 
+  // Explicit EOM CPL prediction
+  if (projectedCPL !== null) {
+    narrative.push(
+      `Projected end-of-month CPL: $${projectedCPL.toFixed(0)} (assumes current rate holds for the remaining ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}).`,
+    );
+  }
+
   if (projectedATM > 0 && lastMonthATM > 0) {
     const leadDelta = projectedATM - lastMonthATM;
     const ahead = leadDelta > 0 ? "ahead of" : leadDelta < 0 ? "behind" : "matching";
