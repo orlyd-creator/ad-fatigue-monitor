@@ -167,12 +167,11 @@ export async function GET(req: NextRequest) {
   const mode: "full" | "quick" = modeParam === "full" ? "full" : "quick";
 
   const result = await runSync(allAccountIds, mode);
-  // Kick off a full sync in the background after a quick refresh so the
-  // next page load has fresh historical data too. Fire-and-forget, doesn't
-  // block the response.
-  if (mode === "quick") {
-    runSync(allAccountIds, "full").catch(() => {});
-  }
+  // NOTE: historical backfill is handled by the 10-min auto-sync in
+  // instrumentation.ts, NOT by a fire-and-forget from this route. On
+  // Railway, the runtime can hold the response open until pending
+  // microtasks resolve, which manifests as a 502 gateway timeout even
+  // though the quick sync itself finished in 5s. Keep this handler lean.
   return NextResponse.json({ ...result, mode });
 }
 

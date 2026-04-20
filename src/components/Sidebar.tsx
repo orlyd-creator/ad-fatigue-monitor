@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { useState, useTransition, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { signOutUser } from "@/app/login/actions";
 
 const links = [
@@ -85,6 +86,12 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
   // Public viewers clicking write-actions get a permissions prompt instead
   // of a confusing auth error.
   const [showPermPrompt, setShowPermPrompt] = useState(false);
+  // Portals to document.body so the fixed backdrops aren't broken by the
+  // mobile drawer's CSS transform on an ancestor (transforms break position:
+  // fixed for descendant elements, popups would render relative to the
+  // off-screen sidebar instead of the viewport).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Clear the "navigating" highlight as soon as the route actually changes.
   // Without this, clicking a button set navigating forever → the old page's
@@ -218,9 +225,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
 
   return (
     <>
-      {/* Permissions prompt, shown when a public viewer clicks Refresh /
-          Share workspace / Switch Account. Guides them back to the owner. */}
-      {showPermPrompt && (
+      {/* Permissions prompt — portaled to body so the mobile drawer's
+          CSS transform on our ancestor doesn't break the fixed centering */}
+      {mounted && showPermPrompt && createPortal(
         <div
           className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[4px] flex items-center justify-center p-5"
           onClick={() => setShowPermPrompt(false)}
@@ -275,13 +282,13 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
               to { opacity: 1; transform: scale(1) translateY(0); }
             }
           `}</style>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Sync lock overlay, covers the page (but not the sidebar) while a
-          sync is running. Stays visible until markSyncSuccess flips to 'done'
-          then holds for ~1.8s so users see confirmation. */}
-      {showOverlay && (
+      {/* Sync overlay — also portaled so it centers relative to the viewport
+          regardless of mobile drawer transforms on ancestors. */}
+      {mounted && showOverlay && createPortal(
         <div
           className="fixed inset-0 z-[75] bg-black/30 backdrop-blur-[4px] flex items-center justify-center p-5 pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
@@ -326,7 +333,8 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           <style jsx>{`
             @keyframes spin { to { transform: rotate(360deg); } }
           `}</style>
-        </div>
+        </div>,
+        document.body
       )}
       <aside
         className={clsx(
