@@ -1,9 +1,34 @@
 import NextAuth from "next-auth";
 import Facebook from "next-auth/providers/facebook";
+import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { accounts, teamInvites } from "@/lib/db/schema";
 import { exchangeForLongLivedToken, getAdAccounts } from "@/lib/meta/client";
 import { eq, sql } from "drizzle-orm";
+
+// Google is enabled only when both env vars are set, so a missing GOOGLE_CLIENT_ID
+// won't crash the app — FB continues to work alone.
+const googleEnabled = !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
+const providers: any[] = [
+  Facebook({
+    clientId: process.env.META_APP_ID!,
+    clientSecret: process.env.META_APP_SECRET!,
+    authorization: {
+      params: {
+        scope: "email,ads_read,ads_management",
+      },
+    },
+  }),
+];
+if (googleEnabled) {
+  providers.push(
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    })
+  );
+}
+export const isGoogleEnabled = googleEnabled;
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
