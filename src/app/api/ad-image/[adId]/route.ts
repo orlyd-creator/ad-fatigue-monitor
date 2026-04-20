@@ -44,16 +44,19 @@ async function resolveImageUrl(adId: string, token: string): Promise<string | nu
     if (!res.ok) return null;
     const data = await res.json();
     const creative = data.creative || {};
+    const thumb1440 = creative.thumbnail_url; // already includes .width(1440).height(1440) via fields param
     const assetFeed = creative.asset_feed_spec?.images?.[0]?.url;
     const storyLink = creative.object_story_spec?.link_data?.picture;
     const storyPhoto = creative.object_story_spec?.photo_data?.picture;
-    // Priority: stable CDN URLs first, then the high-res signed thumbnail_url.
-    // This call happens on-demand so the signed URL is fresh every 30 min.
+    // Priority: the explicitly-sized 1440×1440 thumbnail_url WINS. story_spec
+    // and link_data pictures are stable but often only ~400px, which looks
+    // mushy on retina cards. We re-resolve every 30 min so the signed URL
+    // never has a chance to expire in the browser cache.
     const url =
+      thumb1440 ||
       assetFeed ||
       storyLink ||
       storyPhoto ||
-      creative.thumbnail_url ||
       creative.image_url ||
       null;
     if (url) {
