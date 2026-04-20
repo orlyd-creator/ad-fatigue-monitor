@@ -1,11 +1,12 @@
 import { db } from "@/lib/db";
-import { ads, dailyMetrics } from "@/lib/db/schema";
+import { ads, dailyMetrics, accounts } from "@/lib/db/schema";
 import { inArray, gte } from "drizzle-orm";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { getLeadsFunnelLite } from "@/lib/hubspot/client";
 import { buildStrategicForecast, type DailyPoint } from "@/lib/strategy/forecast";
+import { getTotalBudget } from "@/lib/meta/budgets";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import { DEFAULT_SETTINGS, type FatigueStage } from "@/lib/fatigue/types";
 import ForecastClient from "./ForecastClient";
@@ -36,11 +37,18 @@ export default async function ForecastPage() {
   // Range 3: 90 days for daily history chart (smoothing)
   const ninetyDaysAgo = format(subDays(now, 89), "yyyy-MM-dd");
 
-  const [allAdsRaw, metricsRaw, hsMTD, hsLast] = await Promise.all([
+  const accountRows = await db.select().from(accounts).where(inArray(accounts.id, allAccountIds)).all();
+
+  const [allAdsRaw, metricsRaw, hsMTD, hsLast, liveBudget] = await Promise.all([
     db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all(),
     db.select().from(dailyMetrics).where(gte(dailyMetrics.date, ninetyDaysAgo)).all(),
     getLeadsFunnelLite(thisMonthStart, today).catch(() => null),
     getLeadsFunnelLite(lastMonthStart, lastMonthEnd).catch(() => null),
+    getTotalBudget(accountRows.map(a => ({
+      id: a.id,
+      accessToken: a.accessToken,
+      tokenExpiresAt: a.tokenExpiresAt,
+    }))).catch(() => null),
   ]);
 
   const allAdIds = new Set(allAdsRaw.map((a) => a.id));
@@ -85,9 +93,15 @@ export default async function ForecastPage() {
     dailySpend,
     dailyATM,
     dailySQLs,
+    metaDailyBudget: liveBudget?.dailyBudget ?? null,
   });
 
-  // At-risk + rising ad lists (unchanged from v1 but still useful)
+  // Per-ad EOM projections: for each active ad, take its MTD spend and
+  // project to month-end using the ad's own daily spend rate, not the
+  // account-wide one. Includes fatigue + a projected EOM spend number.
+  const dayOfMonth = now.getDate();
+  const daysInMonth = endOfMonth(now).getDate();
+  const daysRemaining = Math.max(0, daysInMonth - dayOfMonth);
   const activeAds = allAdsRaw.filter(
     (a) => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"),
   );
@@ -99,6 +113,8 @@ export default async function ForecastPage() {
       const fatigue = calculateFatigueScore(adMetrics, DEFAULT_SETTINGS);
       const monthMetrics = adMetrics.filter((m) => m.date >= thisMonthStart);
       const monthSpend = monthMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
+      const adDailyRate = dayOfMonth > 0 ? monthSpend / dayOfMonth : 0;
+      const projectedEomSpend = Math.round((monthSpend + adDailyRate * daysRemaining) * 100) / 100;
       return {
         id: ad.id,
         adName: ad.adName,
@@ -108,6 +124,7 @@ export default async function ForecastPage() {
         predictedDaysToFatigue: fatigue.predictedDaysToFatigue,
         fatigueVelocity: fatigue.fatigueVelocity,
         monthSpend: Math.round(monthSpend * 100) / 100,
+        projectedEomSpend,
       };
     }),
   );
@@ -132,6 +149,11 @@ export default async function ForecastPage() {
         forecast={forecast}
         atRisk={atRisk}
         rising={rising}
+        budgetBreakdown={liveBudget ? {
+          total: liveBudget.dailyBudget,
+          currency: liveBudget.currency,
+          campaigns: liveBudget.campaigns,
+        } : null}
       />
     </div>
   );
