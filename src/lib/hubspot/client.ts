@@ -408,7 +408,13 @@ async function _getClosedWonRevenueUncached(fromDate: string, toDate: string) {
             { propertyName: "associatedcompanyid", operator: "IN", values: chunk },
           ],
         }],
-        properties: ["utm_campaign", "hs_analytics_source_data_2", "associatedcompanyid", "createdate"],
+        properties: [
+          "hs_analytics_source_data_2",
+          "hs_analytics_last_touch_converting_campaign",
+          "hs_analytics_first_touch_converting_campaign",
+          "associatedcompanyid",
+          "createdate",
+        ],
         limit: 100,
         sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
       }),
@@ -416,9 +422,10 @@ async function _getClosedWonRevenueUncached(fromDate: string, toDate: string) {
     for (const c of r.results || []) {
       const cid = c.properties.associatedcompanyid;
       if (!cid || companyToUtm.has(cid)) continue;
-      const utm = (c.properties.utm_campaign || "").trim();
-      const auto = (c.properties.hs_analytics_source_data_2 || "").trim();
-      companyToUtm.set(cid, utm || auto || "(no utm)");
+      const a = (c.properties.hs_analytics_source_data_2 || "").trim();
+      const b = (c.properties.hs_analytics_last_touch_converting_campaign || "").trim();
+      const d = (c.properties.hs_analytics_first_touch_converting_campaign || "").trim();
+      companyToUtm.set(cid, a || b || d || "(unattributed)");
     }
   }
 
@@ -440,13 +447,18 @@ async function _getClosedWonRevenueUncached(fromDate: string, toDate: string) {
 }
 
 /**
- * Lean attribution query: returns ATM lead counts grouped by utm_campaign value.
- * Used to compute per-campaign CPL by joining against Meta campaign spend.
+ * Lean attribution query: returns ATM lead counts grouped by the contact's
+ * best-available campaign label. Used to compute per-campaign CPL by joining
+ * against Meta campaign spend.
+ *
+ * NOTE: Orly's HubSpot does NOT have `utm_campaign` as a contact property
+ * (confirmed via schema inspection 2026-04-20). HS stores the Meta campaign
+ * name on `hs_analytics_source_data_2` for PAID_SOCIAL contacts — usually
+ * lowercased but otherwise matching the Meta campaign name verbatim.
+ * Fallbacks: hs_analytics_last_touch_converting_campaign → first_touch.
  *
  * Deduped per company (so one contact per company counts once, matching the
- * native "ATM by company" methodology). If a contact has no utm_campaign we
- * fall back to hs_analytics_source_data_2 (HubSpot's auto-tracked campaign
- * label), then to "(no utm)" so spend still lines up against a bucket.
+ * native "ATM by company" methodology).
  */
 export async function getATMLeadsByCampaign(
   fromDate: string,
@@ -461,9 +473,8 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
 
-  // Pull ATM contacts directly — single search, no association fan-out. We
-  // query the same ATM contact property used elsewhere and then dedupe by
-  // associated company to mirror the company-primary native report's counts.
+  // Pull ATM contacts directly — single search, no association fan-out.
+  // Requested properties must all exist in HS or the whole search 400s.
   const contactSearchBody = {
     filterGroups: [{
       filters: [
@@ -472,8 +483,9 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
       ],
     }],
     properties: [
-      "utm_campaign",
       "hs_analytics_source_data_2",
+      "hs_analytics_last_touch_converting_campaign",
+      "hs_analytics_first_touch_converting_campaign",
       "agreed_to_meet_date___test_",
       "associatedcompanyid",
     ],
@@ -494,10 +506,11 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
   // Dedupe by company — pick one contact per company (earliest ATM date wins).
   const byCompany = new Map<string, { contactId: string; campaign: string; atm: number }>();
   for (const c of contacts) {
-    const companyId = c.properties.associatedcompanyid || c.id; // fallback to contact id if no company
-    const utm = (c.properties.utm_campaign || "").trim();
-    const auto = (c.properties.hs_analytics_source_data_2 || "").trim();
-    const campaign = utm || auto || "(no utm)";
+    const companyId = c.properties.associatedcompanyid || c.id;
+    const a = (c.properties.hs_analytics_source_data_2 || "").trim();
+    const b = (c.properties.hs_analytics_last_touch_converting_campaign || "").trim();
+    const d = (c.properties.hs_analytics_first_touch_converting_campaign || "").trim();
+    const campaign = a || b || d || "(unattributed)";
     const atmRaw = c.properties.agreed_to_meet_date___test_;
     const atm = atmRaw ? new Date(atmRaw).getTime() : 0;
     const existing = byCompany.get(companyId);
