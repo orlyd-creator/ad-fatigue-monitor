@@ -82,6 +82,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
   // overlay would disappear the instant fetch resolved.
   const [showOverlay, setShowOverlay] = useState<"syncing" | "done" | null>(null);
   const [navigating, setNavigating] = useState<string | null>(null);
+  // Public viewers clicking write-actions get a permissions prompt instead
+  // of a confusing auth error.
+  const [showPermPrompt, setShowPermPrompt] = useState(false);
 
   // Clear the "navigating" highlight as soon as the route actually changes.
   // Without this, clicking a button set navigating forever → the old page's
@@ -95,6 +98,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
   if (pathname === "/login" || pathname === "/") return null;
 
   const handleNav = (href: string) => {
+    // Block navigation while a sync is in flight, Orly kept losing mid-sync
+    // state by clicking into Dashboard/Executive before the overlay cleared.
+    if (showOverlay === "syncing") return;
     if (pathname === href) return;
     setNavigating(href);
     onMobileClose?.();
@@ -148,6 +154,10 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
   };
 
   const handleSync = () => {
+    if (isPublic) {
+      setShowPermPrompt(true);
+      return;
+    }
     setSyncError(null);
     setShowOverlay("syncing");
     const startedAt = Date.now();
@@ -208,12 +218,46 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
 
   return (
     <>
+      {/* Permissions prompt, shown when a public viewer clicks Refresh /
+          Share workspace / Switch Account. Guides them back to the owner. */}
+      {showPermPrompt && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-[2px] flex items-center justify-center p-4"
+          onClick={() => setShowPermPrompt(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#6B93D8]/20 via-[#9B7ED0]/20 to-[#D06AB8]/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-[#7E69AB]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold text-foreground">Sorry, you can't access this</h3>
+                <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
+                  You're on a view-only link. Request permissions from the person who shared it with you if you need this action.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPermPrompt(false)}
+              className="w-full py-2.5 rounded-lg bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] text-white text-[13px] font-semibold hover:opacity-90 transition"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sync lock overlay, covers the page (but not the sidebar) while a
           sync is running. Stays visible until markSyncSuccess flips to 'done'
           then holds for ~1.8s so users see confirmation. */}
       {showOverlay && (
         <div
-          className="fixed inset-0 z-[55] bg-white/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-auto"
+          className="fixed inset-0 z-[75] bg-white/60 backdrop-blur-[3px] flex items-center justify-center pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="bg-white/95 rounded-2xl shadow-xl border border-gray-100 px-6 py-5 max-w-sm mx-4">
@@ -319,8 +363,8 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           </div>
         )}
 
-        {/* Refresh, hidden for public viewers (they'd get 401 on sync anyway) */}
-        {!isPublic && <button
+        {/* Refresh, visible to everyone including public viewers */}
+        <button
           onClick={handleSync}
           disabled={isPending}
           title={collapsed ? (isPending ? "Syncing..." : "Refresh") : undefined}
@@ -349,11 +393,14 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           {!collapsed && (
             syncDone ? "Synced" : isPending ? "Syncing..." : syncError ? "Retry" : "Refresh"
           )}
-        </button>}
+        </button>
 
-        {/* Share workspace, hidden for public viewers */}
-        {!isPublic && <button
-          onClick={() => handleNav("/team")}
+        {/* Share workspace, visible to everyone (public viewers get a prompt) */}
+        <button
+          onClick={() => {
+            if (isPublic) { setShowPermPrompt(true); return; }
+            handleNav("/team");
+          }}
           title={collapsed ? "Share workspace" : undefined}
           className={clsx(
             "cursor-pointer w-full flex items-center gap-2 rounded-md text-[12px] font-medium text-gray-400 hover:text-gray-900 hover:bg-gray-200/40",
@@ -364,7 +411,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72M18 18.72v-.094c0-1.34-.296-2.61-.826-3.748M18 18.72v.002A12 12 0 0112 21a12 12 0 01-6-1.278v-.002m0 0a3 3 0 00-4.681-2.72 9.094 9.094 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M6 18.719a5.971 5.971 0 01.94-3.197m5.06-1.523a3 3 0 11-6 0 3 3 0 016 0zm6-3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
           {!collapsed && "Share workspace"}
-        </button>}
+        </button>
 
         {/* Collapse toggle */}
         <button
@@ -385,9 +432,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           {!collapsed && "Collapse"}
         </button>
 
-        {/* Logout, hidden for public viewers (they don't have an account) */}
-        {!isPublic && <div className="pt-1 border-t border-gray-100">
-          <form action={signOutUser}>
+        {/* Switch Account, visible to everyone (public viewers get a prompt) */}
+        <div className="pt-1 border-t border-gray-100">
+          <form action={isPublic ? undefined : signOutUser} onSubmit={isPublic ? (e) => { e.preventDefault(); setShowPermPrompt(true); } : undefined}>
             <button
               type="submit"
               title={collapsed ? "Switch Account" : undefined}
@@ -402,7 +449,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
               {!collapsed && "Switch Account"}
             </button>
           </form>
-        </div>}
+        </div>
       </div>
     </aside>
     </>
