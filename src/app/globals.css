@@ -10,7 +10,7 @@
   /* Surfaces. Canvas keeps Orly's gradient background but app content lives
      on layered white cards so the UI doesn't feel like a wash of color. */
   --background: transparent;
-  --foreground: #0B0B16;
+  --foreground: #111827;
   --foreground-subtle: #1f2937;
   --muted: #6b7280;
   --muted-foreground: #4b5563;
@@ -274,19 +274,28 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .animate-slide-up { animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
-/* Large display heading, used on page titles (h1) */
+/* Large display heading, used on page titles (h1).
+   Sets weight 800 + very tight tracking to get the Graphik-style
+   'Build something' bold Orly referenced. */
 .display-heading {
-  font-size: 30px;
-  line-height: 1.1;
-  font-weight: 700;
-  letter-spacing: -0.028em;
+  font-size: 32px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: #111827;
 }
 .display-heading-sm {
-  font-size: 22px;
-  line-height: 1.15;
-  font-weight: 700;
-  letter-spacing: -0.022em;
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #111827;
 }
+
+/* Apply the same feel globally to h1/h2/h3 so every page heading matches. */
+h1 { font-weight: 800; letter-spacing: -0.028em; color: #111827; }
+h2 { font-weight: 700; letter-spacing: -0.018em; color: #111827; }
+h3 { font-weight: 700; letter-spacing: -0.012em; color: #111827; }
 
 /* Print */
 @media print {
