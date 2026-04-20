@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { refreshData } from "@/app/dashboard/actions";
 import { signOutUser } from "@/app/login/actions";
 
@@ -86,6 +86,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [navigating, setNavigating] = useState<string | null>(null);
 
+  // Clear the "navigating" highlight as soon as the route actually changes.
+  // Without this, clicking a button set navigating forever → the old page's
+  // link AND the target link both showed as active during the transition.
+  useEffect(() => {
+    if (navigating && pathname.startsWith(navigating)) {
+      setNavigating(null);
+    }
+  }, [pathname, navigating]);
+
   if (pathname === "/login" || pathname === "/") return null;
 
   const handleNav = (href: string) => {
@@ -158,8 +167,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className={clsx("flex-1 py-1 space-y-0.5", collapsed ? "px-1.5" : "px-2.5")}>
+        {/* During a navigation transition, treat the destination as active
+            rather than the current path, so the UI never shows two buttons
+            highlighted at the same time. Falls back to pathname once the
+            navigation finishes (navigating is cleared by the effect above). */}
         {links.map((link) => {
-          const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+          const effectivePath = navigating || pathname;
+          const isActive = effectivePath === link.href || effectivePath.startsWith(link.href + "/");
           const isNavigating = navigating === link.href;
           return (
             <button
