@@ -249,15 +249,16 @@ export async function getLeadsFunnel(
   });
   console.log(`[hubspot] ATM after tier filter: ${tierFilteredATM.length}`);
 
-  // Dedupe by company — HubSpot native report counts unique companies, not contacts.
-  // When multiple contacts at the same company have ATM dates in range, count once (earliest).
+  // Dedupe by company — HubSpot native "Inbound Leads By Tier" report counts unique companies.
+  // It filters on COMPANY properties (tier, lead source, agreed to meet date), so contacts
+  // without a company association are excluded from the count entirely.
   const companyToEarliest = new Map<string, HubSpotContact>();
-  const contactsWithoutCompany: HubSpotContact[] = [];
+  let droppedNoCompany = 0;
   for (const c of tierFilteredATM) {
     const companyId = contactToCompanyGlobal.get(c.id);
     if (!companyId) {
-      contactsWithoutCompany.push(c); // no company association — keep as-is
-      continue;
+      droppedNoCompany++;
+      continue; // exclude — native report requires company
     }
     const existing = companyToEarliest.get(companyId);
     const curDate = parseInt(c.properties[config.atmProperty] || "0", 10);
@@ -268,8 +269,8 @@ export async function getLeadsFunnel(
       if (curDate < existingDate) companyToEarliest.set(companyId, c);
     }
   }
-  const filteredATM = [...companyToEarliest.values(), ...contactsWithoutCompany];
-  console.log(`[hubspot] ATM after company dedupe: ${filteredATM.length} (${companyToEarliest.size} unique companies + ${contactsWithoutCompany.length} contacts w/o company)`);
+  const filteredATM = [...companyToEarliest.values()];
+  console.log(`[hubspot] ATM after company dedupe: ${filteredATM.length} unique companies (dropped ${droppedNoCompany} contacts w/o company association)`);
 
   // Query 2: MQLs (optional — non-fatal)
   let mqlContacts: HubSpotContact[] = [];
