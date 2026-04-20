@@ -167,7 +167,7 @@ export default function ExecutiveClient({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Ad spend" value={formatMoney(thisMonth.spend)} delta={deltas.spend} />
         <StatCard label="Demos booked" value={thisMonth.atm.toLocaleString()} delta={deltas.atm} />
-        <StatCard label="Qualified" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} />
+        <StatCard label="SQLs" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} />
         <StatCard
           label="Cost per demo"
           value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "—"}
@@ -181,7 +181,7 @@ export default function ExecutiveClient({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-[15px] font-semibold text-foreground">Six-month trend</h2>
-            <p className="text-[12px] text-muted-foreground">Spend, demos booked, and qualified over time.</p>
+            <p className="text-[12px] text-muted-foreground">Spend, demos booked, and SQLs over time.</p>
           </div>
         </div>
         {hasTrendData ? (
@@ -207,7 +207,7 @@ export default function ExecutiveClient({
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
                 <Line yAxisId="left" type="monotone" dataKey="spend" name="Spend" stroke="#6B93D8" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                 <Line yAxisId="right" type="monotone" dataKey="atm" name="Demos booked" stroke="#9B7ED0" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                <Line yAxisId="right" type="monotone" dataKey="sqls" name="Qualified" stroke="#D06AB8" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line yAxisId="right" type="monotone" dataKey="sqls" name="SQLs" stroke="#D06AB8" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

@@ -203,6 +203,7 @@ export async function getLeadsFunnel(
 ): Promise<{
   dailyATM: { date: string; atm: number; sqls: number; contacts: Array<{ id: string; name: string; email: string; company: string; stage: string; leadStatus: string; date: string; tier: string; segment: string; leadSource: string; type: "atm" | "sql" }> }[];
   dailyMQLs: { date: string; mqls: number; contacts: Array<{ id: string; name: string; email: string; company: string; stage: string; date: string; type: "mql" }> }[];
+  dailySQLDeals: { date: string; sqlDeals: number }[];
   totalATM: number;
   totalSQLs: number;
   totalMQLs: number;
@@ -417,8 +418,19 @@ export async function getLeadsFunnel(
     .map(([date, data]) => ({ date, ...data }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Daily SQL deals bucketed by their OWN createdate (not tied to ATM companies).
+  // This matches the native "SQLs Monthly" report's grouping and keeps totals in sync.
+  const sqlByDate = new Map<string, number>();
+  for (const d of sqlDeals) {
+    if (!d.createdate) continue;
+    sqlByDate.set(d.createdate, (sqlByDate.get(d.createdate) || 0) + 1);
+  }
+  const dailySQLDeals = Array.from(sqlByDate.entries())
+    .map(([date, sqlDeals]) => ({ date, sqlDeals }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   return {
-    dailyATM, dailyMQLs,
+    dailyATM, dailyMQLs, dailySQLDeals,
     totalATM: dailyATM.reduce((s, d) => s + d.atm, 0),
     // totalSQLs = count of deals in "Obol Sales Funnel (NEW)" pipeline created in range
     // (matches native "SQLs Monthly (No rejects)" report). Not derived from dailyATM because

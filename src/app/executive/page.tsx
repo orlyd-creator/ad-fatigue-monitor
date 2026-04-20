@@ -76,15 +76,18 @@ export default async function ExecutivePage() {
     if (bucket) bucket.spend += m.spend ?? 0;
   }
 
-  // Aggregate HubSpot ATM + SQL by month
+  // Aggregate HubSpot ATM by month (from the 49 ATM companies)
+  // and SQL deals by month (from the 21 SQL deals by createdate — matches native report).
   if (hubspotResult) {
     for (const day of hubspotResult.dailyATM) {
       const d = new Date(day.date + "T00:00:00");
       const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
-      if (bucket) {
-        bucket.atm += day.atm;
-        bucket.sqls += day.sqls;
-      }
+      if (bucket) bucket.atm += day.atm;
+    }
+    for (const day of hubspotResult.dailySQLDeals) {
+      const d = new Date(day.date + "T00:00:00");
+      const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
+      if (bucket) bucket.sqls += day.sqlDeals;
     }
   }
 
