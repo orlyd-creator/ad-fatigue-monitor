@@ -42,15 +42,24 @@ async function paginateAll(url: string, token: string, params: Record<string, st
   all.push(...(first.data || []));
   let next = first.paging?.next;
   let page = 1;
-  while (next && page < 20) {
+  // Safety cap raised to 100 pages (50k items at limit=500). Previous hard cap
+  // of 20 would silently drop ads on accounts with >10k items. If we hit 100,
+  // log loudly so we notice before data gets missed.
+  while (next && page < 100) {
     await delay(300);
     page++;
     console.log(`[meta] Paginating page ${page}...`);
     const res = await fetch(next);
-    if (!res.ok) break;
+    if (!res.ok) {
+      console.warn(`[meta] Pagination stopped at page ${page} (HTTP ${res.status}) — some data may be missing`);
+      break;
+    }
     const data = await res.json();
     all.push(...(data.data || []));
     next = data.paging?.next;
+  }
+  if (next) {
+    console.error(`[meta] WARNING: Hit 100-page pagination cap. Account has more than ~50k items — data is being truncated.`);
   }
   return all;
 }

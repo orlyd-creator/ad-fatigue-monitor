@@ -64,10 +64,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
 
   // Per-campaign breakdown
   const campaignMap = new Map<string, { spend: number; clicks: number; conversions: number; impressions: number; reach: number }>();
+  // Build a lookup map once instead of O(n) find() per metric row
+  const adById = new Map(allAds.map(a => [a.id, a]));
   for (const m of metrics) {
-    const ad = allAds.find(a => a.id === m.adId);
-    if (!ad) continue;
-    const key = ad.campaignName;
+    const ad = adById.get(m.adId);
+    // Fall back to a "Deleted / archived ads" bucket rather than dropping the
+    // spend silently — historical spend still matters for totals.
+    const key = ad?.campaignName || "Deleted / archived ads";
     const c = campaignMap.get(key) ?? { spend: 0, clicks: 0, conversions: 0, impressions: 0, reach: 0 };
     c.spend += m.spend ?? 0;
     c.clicks += m.clicks ?? 0;

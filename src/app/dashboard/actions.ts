@@ -63,10 +63,15 @@ export async function refreshData() {
       }
     }
 
+    // Invalidate every cached data-dependent page so both Meta metrics (re-synced
+    // above) AND HubSpot data (re-fetched on next render via getLeadsFunnel) get
+    // refreshed. revalidatePath clears the Next.js cache for that route.
     revalidatePath("/dashboard");
     revalidatePath("/alerts");
     revalidatePath("/leads");
     revalidatePath("/strategy");
+    revalidatePath("/executive");
+    revalidatePath("/ads");
 
     return {
       success: totalAds > 0 || allErrors.length === 0,

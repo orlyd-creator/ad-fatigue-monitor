@@ -320,11 +320,17 @@ export async function getLeadsFunnel(
     for (const c of contacts) atmContactIds.add(c.id);
   }
 
-  // Filter MQLs: exclude contacts already attached to an ATM company and contacts with their own ATM date.
+  // Filter MQLs: exclude contacts already attached to an ATM company, contacts
+  // with their own ATM date, and any duplicate contact IDs (HS can return the
+  // same contact across multiple filter-group matches — e.g. lifecycle = lead
+  // AND lifecycle = marketingqualifiedlead would double count the same person).
+  const seenMqlIds = new Set<string>();
   const pureMQLs = mqlContacts.filter(c => {
     if (atmContactIds.has(c.id)) return false;
+    if (seenMqlIds.has(c.id)) return false;
     const atm = c.properties[config.atmProperty];
     if (atm && atm !== "" && atm !== "null") return false;
+    seenMqlIds.add(c.id);
     return true;
   });
 
