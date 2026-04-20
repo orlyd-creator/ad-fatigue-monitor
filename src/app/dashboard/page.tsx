@@ -5,6 +5,7 @@ import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import DashboardClient from "./DashboardClient";
+import FreshnessGuard from "@/components/FreshnessGuard";
 import { format, subDays, startOfMonth } from "date-fns";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
@@ -229,6 +230,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-6 pt-4">
+        <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
+      </div>
       <DashboardClient ads={results} spendData={spendData} range={range} lastSyncedAt={lastSyncedAt} />
     </div>
   );

@@ -12,6 +12,7 @@ interface Insight {
   adName?: string;
   adId?: string;
   campaignName?: string;
+  adsetName?: string;
   impact?: string;
 }
 
@@ -260,7 +261,18 @@ export default function InsightsPanel() {
                         </span>
                       )}
                     </div>
-                    <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
+                    {(insight.campaignName || insight.adsetName) && (
+                      <div className="text-[11px] text-muted-foreground mt-1 flex flex-wrap gap-x-1.5 gap-y-0.5">
+                        {insight.campaignName && (
+                          <span><span className="uppercase tracking-wide opacity-70">Campaign</span> <span className="font-medium text-foreground">{insight.campaignName}</span></span>
+                        )}
+                        {insight.campaignName && insight.adsetName && <span className="opacity-40">·</span>}
+                        {insight.adsetName && (
+                          <span><span className="uppercase tracking-wide opacity-70">Ad Set</span> <span className="font-medium text-foreground">{insight.adsetName}</span></span>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
                       {insight.body}
                     </p>
                     <p className="text-[12px] font-medium text-[#7E69AB] mt-2 leading-relaxed">

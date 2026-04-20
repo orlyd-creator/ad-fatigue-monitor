@@ -5,7 +5,9 @@ import { STAGE_COLORS, STAGE_LABELS, STAGE_BG, type FatigueStage } from "@/lib/f
 import { format } from "date-fns";
 
 interface AlertItem {
-  id: number; adId: string; adName?: string; createdAt: number;
+  id: number; adId: string; adName?: string;
+  campaignName?: string; adsetName?: string;
+  createdAt: number;
   fatigueScore: number; stage: string; signals: string; dismissed: number;
 }
 
@@ -48,6 +50,17 @@ export default function AlertFeed({ alerts }: { alerts: AlertItem[] }) {
                   {label}
                 </span>
               </div>
+              {(alert.campaignName || alert.adsetName) && (
+                <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1.5">
+                  {alert.campaignName && (
+                    <span><span className="uppercase tracking-wide opacity-70">Campaign</span> <span className="font-medium text-foreground">{alert.campaignName}</span></span>
+                  )}
+                  {alert.campaignName && alert.adsetName && <span className="opacity-40">·</span>}
+                  {alert.adsetName && (
+                    <span><span className="uppercase tracking-wide opacity-70">Ad Set</span> <span className="font-medium text-foreground">{alert.adsetName}</span></span>
+                  )}
+                </div>
+              )}
               {parsedSignals.length > 0 && (
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
                   {parsedSignals.filter((s) => s.score > 25).slice(0, 3).map((s) => (

@@ -51,10 +51,19 @@ export default async function AlertsPage() {
     .limit(50)
     .all();
 
-  // Attach ad names
+  // Attach ad names + campaign / ad set context
   const alertsWithNames = await Promise.all(allAlerts.map(async (alert) => {
-    const ad = await db.select({ adName: ads.adName }).from(ads).where(eq(ads.id, alert.adId)).get();
-    return { ...alert, adName: ad?.adName || `Ad ${alert.adId}` };
+    const ad = await db
+      .select({ adName: ads.adName, campaignName: ads.campaignName, adsetName: ads.adsetName })
+      .from(ads)
+      .where(eq(ads.id, alert.adId))
+      .get();
+    return {
+      ...alert,
+      adName: ad?.adName || `Ad ${alert.adId}`,
+      campaignName: ad?.campaignName,
+      adsetName: ad?.adsetName,
+    };
   }));
 
   return (

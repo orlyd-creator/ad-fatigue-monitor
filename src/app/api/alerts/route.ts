@@ -21,6 +21,8 @@ export async function GET() {
       signals: alerts.signals,
       dismissed: alerts.dismissed,
       adName: ads.adName,
+      campaignName: ads.campaignName,
+      adsetName: ads.adsetName,
     })
     .from(alerts)
     .leftJoin(ads, eq(alerts.adId, ads.id))

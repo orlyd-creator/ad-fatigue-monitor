@@ -15,6 +15,7 @@ interface Insight {
   action: string;
   adName?: string;
   campaignName?: string;
+  adsetName?: string;
   impact?: string;
   adId?: string;
 }
@@ -171,6 +172,7 @@ function generateInsights(adData: AdData[]): Insight[] {
       adId: worst.adId,
       adName: worst.adName,
       campaignName: worst.campaignName,
+      adsetName: worst.adsetName,
       impact: `Save $${wastedDaily.toFixed(0)}/day`,
     });
   }
@@ -202,6 +204,7 @@ function generateInsights(adData: AdData[]): Insight[] {
         adId: ad.adId,
         adName: ad.adName,
         campaignName: ad.campaignName,
+        adsetName: ad.adsetName,
       });
     }
   }
@@ -221,6 +224,7 @@ function generateInsights(adData: AdData[]): Insight[] {
         adId: ad.adId,
         adName: ad.adName,
         campaignName: ad.campaignName,
+        adsetName: ad.adsetName,
         impact: `Grow conversions at $${ad.recentAvgCPC.toFixed(2)} CPC`,
       });
     }
