@@ -299,6 +299,83 @@ async function _getLeadsFunnelLiteUncached(
   };
 }
 
+/**
+ * Lean attribution query: returns ATM lead counts grouped by utm_campaign value.
+ * Used to compute per-campaign CPL by joining against Meta campaign spend.
+ *
+ * Deduped per company (so one contact per company counts once, matching the
+ * native "ATM by company" methodology). If a contact has no utm_campaign we
+ * fall back to hs_analytics_source_data_2 (HubSpot's auto-tracked campaign
+ * label), then to "(no utm)" so spend still lines up against a bucket.
+ */
+export async function getATMLeadsByCampaign(
+  fromDate: string,
+  toDate: string,
+): Promise<Array<{ campaign: string; count: number }>> {
+  return cached(`byCampaign:${fromDate}:${toDate}`, HUBSPOT_CACHE_TTL_MS, () =>
+    _getATMLeadsByCampaignUncached(fromDate, toDate),
+  );
+}
+
+async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) {
+  const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
+  const toTs = new Date(toDate + "T23:59:59Z").getTime();
+
+  // Pull ATM contacts directly — single search, no association fan-out. We
+  // query the same ATM contact property used elsewhere and then dedupe by
+  // associated company to mirror the company-primary native report's counts.
+  const contactSearchBody = {
+    filterGroups: [{
+      filters: [
+        { propertyName: "agreed_to_meet_date___test_", operator: "GTE", value: String(fromTs) },
+        { propertyName: "agreed_to_meet_date___test_", operator: "LTE", value: String(toTs) },
+      ],
+    }],
+    properties: [
+      "utm_campaign",
+      "hs_analytics_source_data_2",
+      "agreed_to_meet_date___test_",
+      "associatedcompanyid",
+    ],
+    limit: 100,
+  };
+
+  const contacts: Array<{ id: string; properties: Record<string, string | null> }> = [];
+  let after: string | undefined;
+  do {
+    const r = await hubspotFetch("/crm/v3/objects/contacts/search", {
+      method: "POST",
+      body: JSON.stringify({ ...contactSearchBody, ...(after ? { after } : {}) }),
+    });
+    contacts.push(...(r.results || []));
+    after = r.paging?.next?.after;
+  } while (after);
+
+  // Dedupe by company — pick one contact per company (earliest ATM date wins).
+  const byCompany = new Map<string, { contactId: string; campaign: string; atm: number }>();
+  for (const c of contacts) {
+    const companyId = c.properties.associatedcompanyid || c.id; // fallback to contact id if no company
+    const utm = (c.properties.utm_campaign || "").trim();
+    const auto = (c.properties.hs_analytics_source_data_2 || "").trim();
+    const campaign = utm || auto || "(no utm)";
+    const atmRaw = c.properties.agreed_to_meet_date___test_;
+    const atm = atmRaw ? new Date(atmRaw).getTime() : 0;
+    const existing = byCompany.get(companyId);
+    if (!existing || atm < existing.atm) {
+      byCompany.set(companyId, { contactId: c.id, campaign, atm });
+    }
+  }
+
+  const counts = new Map<string, number>();
+  for (const { campaign } of byCompany.values()) {
+    counts.set(campaign, (counts.get(campaign) || 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .map(([campaign, count]) => ({ campaign, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 async function _fetchLiteATM(fromDate: string, toDate: string): Promise<string[]> {
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();

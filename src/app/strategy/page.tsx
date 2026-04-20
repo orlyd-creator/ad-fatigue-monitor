@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
 import { getSessionOrPublic } from "@/lib/sessionOrPublic";
 import { redirect } from "next/navigation";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { getLeadsFunnelLite } from "@/lib/hubspot/client";
+import { getLeadsFunnelLite, getATMLeadsByCampaign } from "@/lib/hubspot/client";
 import StrategyClient from "./StrategyClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
 
@@ -186,16 +186,62 @@ export default async function StrategyPage() {
   // HUBSPOT FUNNEL: pull ATM + SQL counts for the range so we can compute
   // Meta-driven cost-per-demo and cost-per-SQL — the numbers that actually
   // matter for growth decisions.
-  const hs = await getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
-    console.error("[strategy] HubSpot fetch failed:", err);
-    return null;
-  });
+  const [hs, utmLeads] = await Promise.all([
+    getLeadsFunnelLite(rangeStart, rangeEnd).catch((err) => {
+      console.error("[strategy] HubSpot fetch failed:", err);
+      return null;
+    }),
+    getATMLeadsByCampaign(rangeStart, rangeEnd).catch((err) => {
+      console.error("[strategy] HubSpot utm-campaign fetch failed:", err);
+      return [] as Array<{ campaign: string; count: number }>;
+    }),
+  ]);
   const totalATM = hs?.totalATM ?? 0;
   const totalSQLs = hs?.totalSQLs ?? 0;
   const costPerDemo = totalATM > 0 ? totalSpend / totalATM : null;
   const costPerSQL = totalSQLs > 0 ? totalSpend / totalSQLs : null;
   const demoToSQLRate = totalATM > 0 ? (totalSQLs / totalATM) * 100 : null;
   const clickToLeadRate = totalClicks > 0 ? (totalATM / totalClicks) * 100 : null;
+
+  // PER-CAMPAIGN CPL: join Meta campaign spend to HS ATM counts via utm_campaign.
+  // Match is best-effort (normalize: lowercase, strip non-alphanumerics, substring
+  // both ways) because Meta campaign names rarely match UTMs verbatim.
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const utmNormMap = new Map(utmLeads.map(u => [normalize(u.campaign), u] as const));
+  const utmClaimed = new Set<string>();
+  const campaignCPL = campaignSpend.map(c => {
+    const nameNorm = normalize(c.campaignName);
+    let matchedLeads = 0;
+    let matchedUtm: string | null = null;
+    // Exact normalized match first
+    const exact = utmNormMap.get(nameNorm);
+    if (exact && !utmClaimed.has(exact.campaign)) {
+      matchedLeads = exact.count;
+      matchedUtm = exact.campaign;
+      utmClaimed.add(exact.campaign);
+    } else {
+      // Fall back to substring match (longest first, unclaimed only)
+      const candidates = [...utmNormMap.entries()]
+        .filter(([k, v]) => !utmClaimed.has(v.campaign) && (k.includes(nameNorm) || nameNorm.includes(k)) && k.length > 2)
+        .sort((a, b) => b[0].length - a[0].length);
+      if (candidates.length > 0) {
+        matchedLeads = candidates[0][1].count;
+        matchedUtm = candidates[0][1].campaign;
+        utmClaimed.add(matchedUtm);
+      }
+    }
+    const cpl = matchedLeads > 0 ? Math.round((c.spend / matchedLeads) * 100) / 100 : null;
+    return {
+      campaignName: c.campaignName,
+      spend: c.spend,
+      leads: matchedLeads,
+      cpl,
+      matchedUtm,
+    };
+  });
+  const unmatchedUtm = utmLeads
+    .filter(u => !utmClaimed.has(u.campaign))
+    .map(u => ({ campaign: u.campaign, count: u.count }));
 
   // DAY-OF-WEEK PERFORMANCE: aggregate spend + clicks + CTR by weekday to
   // expose when campaigns are most efficient.
@@ -239,6 +285,8 @@ export default async function StrategyPage() {
         demoToSQLRate={demoToSQLRate !== null ? Math.round(demoToSQLRate * 10) / 10 : null}
         clickToLeadRate={clickToLeadRate !== null ? Math.round(clickToLeadRate * 100) / 100 : null}
         dayOfWeek={dayOfWeek}
+        campaignCPL={campaignCPL}
+        unmatchedUtm={unmatchedUtm}
         rangeLabel={`${format(startOfMonth(now), "MMM d")} – ${format(now, "MMM d, yyyy")}`}
       />
     </div>

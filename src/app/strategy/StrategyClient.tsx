@@ -54,6 +54,8 @@ interface StrategyClientProps {
   demoToSQLRate: number | null;
   clickToLeadRate: number | null;
   dayOfWeek: Array<{ day: string; spend: number; clicks: number; ctr: number }>;
+  campaignCPL: Array<{ campaignName: string; spend: number; leads: number; cpl: number | null; matchedUtm: string | null }>;
+  unmatchedUtm: Array<{ campaign: string; count: number }>;
   rangeLabel: string;
 }
 
@@ -83,7 +85,7 @@ export default function StrategyClient({
   ads, dailySpendByAd, campaignSpend, accountHealth,
   totalSpend, totalReach, totalClicks, totalImpressions,
   totalATM, totalSQLs, costPerDemo, costPerSQL, demoToSQLRate, clickToLeadRate,
-  dayOfWeek, rangeLabel,
+  dayOfWeek, campaignCPL, unmatchedUtm, rangeLabel,
 }: StrategyClientProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -318,6 +320,72 @@ export default function StrategyClient({
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* Per-Campaign CPL — Meta spend × HubSpot ATM leads */}
+          <div className="lv-card p-6">
+            <h2 className="text-[16px] font-semibold mb-1">Cost per Demo by Campaign</h2>
+            <p className="text-[12px] text-gray-500 mb-4">
+              Spend ÷ ATM leads matched via utm_campaign. Unmatched leads shown below.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                    <th className="py-2 pr-4 font-medium">Campaign</th>
+                    <th className="py-2 pr-4 font-medium text-right">Spend</th>
+                    <th className="py-2 pr-4 font-medium text-right">ATM Leads</th>
+                    <th className="py-2 pr-4 font-medium text-right">Cost / Demo</th>
+                    <th className="py-2 pr-4 font-medium">Matched UTM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...campaignCPL].sort((a, b) => {
+                    if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+                    if (a.cpl === null) return 1;
+                    if (b.cpl === null) return -1;
+                    return a.cpl - b.cpl;
+                  }).map((row) => (
+                    <tr key={row.campaignName} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2 pr-4 font-medium text-foreground">
+                        {row.campaignName.length > 40
+                          ? row.campaignName.slice(0, 40) + "…"
+                          : row.campaignName}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        ${row.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {row.leads > 0 ? row.leads : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums font-semibold">
+                        {row.cpl !== null
+                          ? `$${row.cpl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : <span className="text-gray-400 font-normal">no match</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-[11px] text-gray-500 truncate max-w-[240px]">
+                        {row.matchedUtm || <span className="text-gray-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {unmatchedUtm.length > 0 && (
+              <details className="mt-4 text-[12px]">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                  {unmatchedUtm.reduce((s, u) => s + u.count, 0)} leads from utm_campaigns we couldn't match to a Meta campaign
+                </summary>
+                <div className="mt-2 space-y-1 pl-4">
+                  {unmatchedUtm.map((u) => (
+                    <div key={u.campaign} className="flex justify-between text-gray-600">
+                      <span className="font-mono text-[11px]">{u.campaign}</span>
+                      <span>{u.count} leads</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
 
           {/* Daily Spend Trend (top ads) */}
