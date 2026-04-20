@@ -37,12 +37,12 @@ async function refreshOneAccount(accountId: string, token: string): Promise<void
       )}&limit=200&access_token=${token}`;
     let pages = 0;
     while (url && pages < 25) {
-      const res = await fetch(url);
+      const res: Response = await fetch(url);
       if (!res.ok) {
         console.warn(`[statusRefresh] ${accountId} page ${pages} HTTP ${res.status}`);
         break;
       }
-      const body = await res.json();
+      const body: { data?: Array<{ id: string; status?: string; effective_status?: string }>; paging?: { next?: string } } = await res.json();
       for (const row of body.data || []) all.push(row);
       url = body.paging?.next || null;
       pages++;
