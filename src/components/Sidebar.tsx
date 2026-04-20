@@ -76,6 +76,10 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
   const [isPending, startTransition] = useTransition();
   const [syncDone, setSyncDone] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  // Dedicated overlay state: stays visible for the whole sync AND shows a
+  // brief "Synced" confirmation afterwards. Prevents the flicker where the
+  // overlay would disappear the instant fetch resolved.
+  const [showOverlay, setShowOverlay] = useState<"syncing" | "done" | null>(null);
   const [navigating, setNavigating] = useState<string | null>(null);
 
   // Clear the "navigating" highlight as soon as the route actually changes.
@@ -134,14 +138,17 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
 
   const markSyncSuccess = () => {
     setSyncDone(true);
+    setShowOverlay("done");
     setTimeout(() => {
       setSyncDone(false);
+      setShowOverlay(null);
       router.refresh();
-    }, 1500);
+    }, 1800);
   };
 
   const handleSync = () => {
     setSyncError(null);
+    setShowOverlay("syncing");
     const startedAt = Date.now();
     startTransition(async () => {
       try {
@@ -158,6 +165,7 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
           // 401 is unambiguous, don't second-guess.
           if (res.status === 401 || body?.error?.match?.(/token|expired|reconnect/i)) {
             setSyncError("Meta token expired, reconnect");
+            setShowOverlay(null);
             setTimeout(() => setSyncError(null), 10000);
             return;
           }
@@ -169,12 +177,14 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
             return;
           }
           setSyncError(body?.error || `Sync failed (HTTP ${res.status})`);
+          setShowOverlay(null);
           setTimeout(() => setSyncError(null), 8000);
           return;
         }
 
         if (body.errors && body.errors.length > 0 && body.adsFound === 0) {
           setSyncError(body.errors[0]);
+          setShowOverlay(null);
           setTimeout(() => setSyncError(null), 15000);
           return;
         }
@@ -184,13 +194,12 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
         }
         markSyncSuccess();
       } catch (err: any) {
-        // Network error or stream drop. Same recovery path, verify via
-        // lastSyncedAt before giving up.
         if (await didSyncActuallySucceed(startedAt)) {
           markSyncSuccess();
           return;
         }
         setSyncError(err?.message?.includes("abort") ? "Cancelled" : "Couldn't reach sync. Try again.");
+        setShowOverlay(null);
         setTimeout(() => setSyncError(null), 6000);
       }
     });
@@ -199,8 +208,9 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
   return (
     <>
       {/* Sync lock overlay, covers the page (but not the sidebar) while a
-          sync is running so clicks can't cancel the long-running action. */}
-      {isPending && !syncDone && (
+          sync is running. Stays visible until markSyncSuccess flips to 'done'
+          then holds for ~1.8s so users see confirmation. */}
+      {showOverlay && (
         <div
           className="fixed inset-0 z-[55] bg-white/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
@@ -208,25 +218,34 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarP
           <div className="bg-white/95 rounded-2xl shadow-xl border border-gray-100 px-6 py-5 max-w-sm mx-4">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div
-                  className="w-8 h-8 rounded-full"
-                  style={{
-                    background:
-                      "conic-gradient(from 0deg, #6B93D8, #9B7ED0, #D06AB8, #F04E80, #6B93D8)",
-                    animation: "spin 1.2s linear infinite",
-                    mask: "radial-gradient(closest-side, transparent 55%, black 56%)",
-                    WebkitMask:
-                      "radial-gradient(closest-side, transparent 55%, black 56%)",
-                  }}
-                />
+                {showOverlay === "done" ? (
+                  <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div
+                    className="w-8 h-8 rounded-full"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, #6B93D8, #9B7ED0, #D06AB8, #F04E80, #6B93D8)",
+                      animation: "spin 1.2s linear infinite",
+                      mask: "radial-gradient(closest-side, transparent 55%, black 56%)",
+                      WebkitMask:
+                        "radial-gradient(closest-side, transparent 55%, black 56%)",
+                    }}
+                  />
+                )}
               </div>
               <div>
                 <div className="text-[14px] font-semibold text-foreground">
-                  Refreshing your data…
+                  {showOverlay === "done" ? "Synced!" : "Refreshing your data…"}
                 </div>
                 <div className="text-[12px] text-gray-500 mt-0.5">
-                  Takes 30–60 seconds. Please wait, don't click around or the
-                  sync will cancel.
+                  {showOverlay === "done"
+                    ? "Fresh Meta + HubSpot data is loading."
+                    : "Takes 30 to 60 seconds. Please wait, don't click around or the sync will cancel."}
                 </div>
               </div>
             </div>

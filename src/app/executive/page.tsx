@@ -115,23 +115,27 @@ export default async function ExecutivePage({
     cursor = addMonths(cursor, 1);
   }
 
+  // Index buckets by YYYY-MM string key for O(1) lookup. Using string
+  // comparison avoids timezone drift from Date parsing (the previous
+  // new Date(ymd + "T00:00:00") approach silently dropped rows on the
+  // month boundary in some timezones).
+  const bucketByKey = new Map(buckets.map(b => [b.key, b]));
+  const keyOf = (yyyyMmDd: string) => yyyyMmDd.slice(0, 7);
+
   // Meta spend by month
   for (const m of metrics) {
-    const d = new Date(m.date + "T00:00:00");
-    const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
+    const bucket = bucketByKey.get(keyOf(m.date));
     if (bucket) bucket.spend += m.spend ?? 0;
   }
 
-  // HubSpot ATM by month (from ATM companies)
+  // HubSpot ATM / SQL by month
   if (hubspotResult) {
     for (const day of hubspotResult.dailyATM) {
-      const d = new Date(day.date + "T00:00:00");
-      const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
+      const bucket = bucketByKey.get(keyOf(day.date));
       if (bucket) bucket.atm += day.atm;
     }
     for (const day of hubspotResult.dailySQLDeals) {
-      const d = new Date(day.date + "T00:00:00");
-      const bucket = buckets.find(b => d >= b.monthStart && d <= b.monthEnd);
+      const bucket = bucketByKey.get(keyOf(day.date));
       if (bucket) bucket.sqls += day.sqlDeals;
     }
   }

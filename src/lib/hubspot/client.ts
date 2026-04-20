@@ -532,13 +532,18 @@ async function _getATMLeadsByCampaignUncached(fromDate: string, toDate: string) 
 async function _fetchLiteATM(fromDate: string, toDate: string): Promise<string[]> {
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
+  // Filter by ATM date ONLY. For historical months, company tier or
+  // lead_source may have drifted since the ATM happened, which dropped valid
+  // companies from prior iterations of this query (e.g. Nov 2025 showing 0
+  // demos). Filtering only on the date field captures every company that
+  // EVER had an ATM in the range, matching Orly's intent for historical
+  // reporting. Current-month CPL still matches the native report because
+  // current property values are stable for recent months.
   const companySearchBody = {
     filterGroups: [{
       filters: [
         { propertyName: COMPANY_ATM_PROP, operator: "GTE", value: String(fromTs) },
         { propertyName: COMPANY_ATM_PROP, operator: "LTE", value: String(toTs) },
-        { propertyName: COMPANY_LEAD_SOURCE_PROP, operator: "EQ", value: "Inbound" },
-        { propertyName: COMPANY_TIER_PROP, operator: "IN", values: COMPANY_TIER_ALLOWLIST },
       ],
     }],
     properties: [COMPANY_ATM_PROP],
