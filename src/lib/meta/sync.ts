@@ -36,6 +36,26 @@ async function metaFetch(url: string, token: string, params: Record<string, stri
   return body;
 }
 
+/** Split [since, until] (YYYY-MM-DD inclusive) into consecutive windows of up to `days` days. */
+function chunkDateRange(since: string, until: string, days: number): Array<[string, string]> {
+  const chunks: Array<[string, string]> = [];
+  const start = new Date(since + "T00:00:00Z");
+  const end = new Date(until + "T00:00:00Z");
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + days - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push([
+      cursor.toISOString().slice(0, 10),
+      chunkEnd.toISOString().slice(0, 10),
+    ]);
+    cursor = new Date(chunkEnd);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return chunks;
+}
+
 async function paginateAll(url: string, token: string, params: Record<string, string> = {}) {
   const all: any[] = [];
   const first = await metaFetch(url, token, { ...params, limit: "500" });
@@ -207,13 +227,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       const adHeadline = creative.title || creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null;
       const adLinkUrl = creative.link_url || creative.object_story_spec?.link_data?.link || null;
 
-      // Prefer the highest-resolution image URL available. Meta's creative.image_url
-      // is often a tiny (~100px) thumbnail; asset_feed_spec and object_story_spec
-      // frequently have much larger source URLs. Broad campaigns (static images
-      // authored via the Ads Manager image uploader) commonly only expose the
-      // big URL via thumbnail_url.width(1080).height(1080) — which we request above.
-      // Fall through in priority order, and critically: prefer the 1080-sized
-      // thumbnail_url over creative.image_url.
+      // Prefer STABLE Facebook CDN URLs over Meta's parameterized thumbnail_url.
+      // thumbnail_url.width(1080).height(1080) returns a signed URL that expires
+      // within hours, so once the DB row ages the image 404s. asset_feed_spec
+      // and object_story_spec URLs are long-lived scontent.* CDN URLs.
+      // creative.image_url is smaller (~100-400px) but also stable.
       const assetFeedImage = creative.asset_feed_spec?.images?.[0]?.url;
       const storyPictureLink = creative.object_story_spec?.link_data?.picture;
       const storyPicturePhoto = creative.object_story_spec?.photo_data?.picture;
@@ -221,9 +239,10 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
         assetFeedImage ||
         storyPictureLink ||
         storyPicturePhoto ||
-        creative.thumbnail_url ||   // 1080x1080 because we requested it as such
-        creative.image_url ||       // last-resort small (~100px) fallback
+        creative.image_url ||
         null;
+      // thumbnailUrl is ONLY used if imageUrl is missing. It's signed/expiring,
+      // so refreshed on every sync.
 
       await db.insert(ads)
         .values({
@@ -273,17 +292,24 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       "inline_post_engagement",
     ].join(",");
 
-    try {
-      // Fetch ALL insights (including archived/deleted) — spend from any ad counts toward totals
-      // No status filter so we capture every dollar spent in the period
-      insights = await paginateAll(`/${actId}/insights`, token, {
-        fields: insightFields,
-        time_range: JSON.stringify({ since, until }),
-        time_increment: "1",
-        level: "ad",
-      });
-    } catch (e: any) {
-      result.errors.push(`Insights fetch failed: ${e.message}`);
+    // Chunk the date range into 30-day windows. Meta's Insights API rejects or
+    // silently truncates giant responses; a 90-day ad-level daily query can
+    // easily exceed what it will return in one pagination loop. Chunking also
+    // gives us resilience — one failed chunk doesn't lose the whole sync.
+    const chunks = chunkDateRange(since, until, 30);
+    for (const [cSince, cUntil] of chunks) {
+      try {
+        const chunkInsights = await paginateAll(`/${actId}/insights`, token, {
+          fields: insightFields,
+          time_range: JSON.stringify({ since: cSince, until: cUntil }),
+          time_increment: "1",
+          level: "ad",
+        });
+        insights.push(...chunkInsights);
+        console.log(`[sync] Insights chunk ${cSince}→${cUntil}: ${chunkInsights.length} rows`);
+      } catch (e: any) {
+        result.errors.push(`Insights fetch failed for ${cSince}→${cUntil}: ${e.message}`);
+      }
     }
 
     // First, clear any stale synthetic "unattributed" rows from previous syncs in this window.
@@ -298,11 +324,15 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     // Ground-truth cross-check: account-level spend vs ad-level spend sum.
     // Account-level is what Ads Manager shows; ad-level can miss rows for deleted creative.
     try {
-      const acctDaily = await paginateAll(`/${actId}/insights`, token, {
-        fields: "spend,impressions,clicks",
-        time_range: JSON.stringify({ since, until }),
-        time_increment: "1",
-      });
+      const acctDaily: any[] = [];
+      for (const [cSince, cUntil] of chunks) {
+        const chunkDaily = await paginateAll(`/${actId}/insights`, token, {
+          fields: "spend,impressions,clicks",
+          time_range: JSON.stringify({ since: cSince, until: cUntil }),
+          time_increment: "1",
+        });
+        acctDaily.push(...chunkDaily);
+      }
       console.log(`[sync] Account-level daily spend rows: ${acctDaily.length}`);
       const totalAcct = acctDaily.reduce((s: number, d: any) => s + parseFloat(d.spend || "0"), 0);
       const totalAdLevel = insights.reduce((s: number, r: any) => s + parseFloat(r.spend || "0"), 0);
