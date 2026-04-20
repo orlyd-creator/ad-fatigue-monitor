@@ -55,19 +55,24 @@ export async function register() {
     console.error("[instrumentation] Schema bootstrap failed:", err);
   }
 
-  // ── Hourly auto-sync ──
-  // Railway doesn't read vercel.json crons and we've seen syncs go 5+ days
-  // stale. This in-process interval guarantees that as long as the server is
-  // running, every connected Meta account is re-synced every 60 min.
-  // Single global interval so multiple imports don't create duplicates.
-  // We guard on a global to survive Next.js hot-reload in dev.
+  // ── 10-minute auto-sync ──
+  // Railway doesn't read vercel.json crons, so this in-process interval keeps
+  // Meta data close to live. Orly asked for ~live numbers, 10 min is the
+  // sweet spot between freshness and API rate limits (Meta's insights have
+  // 6-12h lag for same-day spend anyway, so tighter than 10 min doesn't help).
+  // Guarded on a global to survive Next.js hot-reload in dev.
   try {
-    const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+    const SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 min (was 1 hour)
     const g = globalThis as any;
     if (!g.__metaAutoSyncStarted) {
       g.__metaAutoSyncStarted = true;
-      // Delay first run so it doesn't fight the initial deploy warm-up.
-      const schedule = () => setTimeout(runAutoSync, SYNC_INTERVAL_MS);
+      // First run 60s after boot so we don't fight deploy warm-up, then every
+      // SYNC_INTERVAL_MS.
+      let firstRun = true;
+      const schedule = () => {
+        setTimeout(runAutoSync, firstRun ? 60000 : SYNC_INTERVAL_MS);
+        firstRun = false;
+      };
       const runAutoSync = async () => {
         try {
           const { db } = await import("@/lib/db");
@@ -96,7 +101,7 @@ export async function register() {
         }
       };
       schedule();
-      console.log("[instrumentation] Hourly auto-sync registered");
+      console.log("[instrumentation] 10-min auto-sync registered");
     }
   } catch (err) {
     console.error("[instrumentation] Auto-sync registration failed:", err);

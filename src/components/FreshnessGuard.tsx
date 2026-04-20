@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
  */
 export default function FreshnessGuard({
   lastSyncedAt,
-  staleAfterMinutes = 10,
+  staleAfterMinutes = 5,
   isPublic = false,
 }: {
   lastSyncedAt: number | null;
