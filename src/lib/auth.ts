@@ -14,11 +14,12 @@ const providers: any[] = [
   Facebook({
     clientId: process.env.META_APP_ID!,
     clientSecret: process.env.META_APP_SECRET!,
-    authorization: {
-      params: {
-        scope: "email,ads_read,ads_management",
-      },
-    },
+    // No explicit scope → defaults to public_profile only. This lets ANY FB user
+    // log in (ads_read/ads_management would require them to be added as a dev on
+    // Orly's FB app or the app to pass FB review). The owner's Meta token was
+    // already stored on her first login and is still valid in the DB — we don't
+    // try to refresh it on subsequent sign-ins. If she ever needs to refresh,
+    // that can be a separate admin-only "Reconnect Meta" flow.
   }),
 ];
 if (googleEnabled) {
@@ -155,28 +156,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return true;
       }
 
-      // Owner (or first-ever user): run full Meta ingestion flow.
+      // Owner (or first-ever user): try to refresh Meta ad-account token, but
+      // don't block the login if it fails. The FB app scope no longer requests
+      // ads_read/ads_management (that scope blocks non-dev-team users), so
+      // most logins won't have a token usable for Meta Graph — and that's fine,
+      // the owner's existing stored token keeps working.
       try {
+        const permsRes = await fetch(
+          `https://graph.facebook.com/v21.0/me/permissions?access_token=${account.access_token}`
+        );
+        const permsData = await permsRes.json();
+        const granted: string[] = (permsData.data || [])
+          .filter((p: any) => p.status === "granted")
+          .map((p: any) => p.permission);
+        const hasAds = granted.includes("ads_read") || granted.includes("ads_management");
+        if (!hasAds) {
+          console.log(`[auth] Owner signed in without ads permissions — keeping existing stored Meta token`);
+          return true;
+        }
+
         const longLived = await exchangeForLongLivedToken(
           account.access_token,
           process.env.META_APP_ID!,
           process.env.META_APP_SECRET!
         );
-
-        try {
-          const permsRes = await fetch(`https://graph.facebook.com/v21.0/me/permissions?access_token=${longLived.access_token}`);
-          const permsData = await permsRes.json();
-          const granted = (permsData.data || []).filter((p: any) => p.status === "granted").map((p: any) => p.permission);
-          console.log(`[auth] Granted permissions: ${granted.join(", ")}`);
-        } catch { /* ignore */ }
-
         const adAccounts = await getAdAccounts(longLived.access_token);
-        console.log(`[auth] Found ${adAccounts.length} ad accounts`);
-
-        if (adAccounts.length === 0) {
-          console.error("[auth] No ad accounts found for this user");
-          return false;
-        }
+        console.log(`[auth] Found ${adAccounts.length} ad accounts — refreshing stored tokens`);
 
         for (const adAccount of adAccounts) {
           const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
@@ -199,11 +204,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             })
             .run();
         }
-
         return true;
       } catch (err) {
-        console.error("[auth] OAuth callback error:", err);
-        return false;
+        // Non-fatal — fall through and let the owner log in on existing token.
+        console.error("[auth] Meta refresh failed (non-fatal):", err);
+        return true;
       }
     },
     async jwt({ token, account, profile }) {
