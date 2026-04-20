@@ -49,6 +49,23 @@ export async function register() {
         views_count INTEGER NOT NULL DEFAULT 0
       )
     `);
+    // HARDENING: remove any legacy duplicate (ad_id, date) rows in
+    // daily_metrics left over from pre-unique-index syncs. The app's JS
+    // dedupe handles this at read time, but keeping the DB clean prevents
+    // surprises in ad-hoc SQL / diagnostics.
+    try {
+      const delRes = await client.execute(`
+        DELETE FROM daily_metrics WHERE id NOT IN (
+          SELECT MAX(id) FROM daily_metrics GROUP BY ad_id, date
+        )
+      `);
+      if (delRes.rowsAffected && delRes.rowsAffected > 0) {
+        console.log(`[instrumentation] Removed ${delRes.rowsAffected} duplicate daily_metrics rows`);
+      }
+    } catch (e) {
+      console.warn("[instrumentation] daily_metrics dedupe failed (non-fatal):", e);
+    }
+
     console.log("[instrumentation] Schema ensured");
   } catch (err) {
     // Don't crash the app, log and continue. The app still boots without this.
