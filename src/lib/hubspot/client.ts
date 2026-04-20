@@ -159,6 +159,8 @@ export async function getLeadsFunnel(
   // The Company "tier" property (SMB/Mid-Market/Enterprise) is the real filter,
   // not employee count — micro SMBs get re-tiered to SMB when qualified
   const companyTierMap = new Map<string, string>();
+  // Company's own lead_source — the native report filters on this (Company.lead_source = Inbound)
+  const companyLeadSourceMap = new Map<string, string>();
   // Persistent contact → company ID map so we can dedupe by company at the end
   // (HubSpot native "Inbound Leads By Tier" report counts UNIQUE companies, not contacts)
   const contactToCompanyGlobal = new Map<string, string>();
@@ -195,14 +197,18 @@ export async function getLeadsFunnel(
             method: "POST",
             body: JSON.stringify({
               inputs: compBatch.map(id => ({ id })),
-              properties: ["tier"],
+              properties: ["tier", "lead_source", "hs_lead_source"],
             }),
           });
           for (const comp of (compData.results || [])) {
             const tier = comp.properties?.tier || "";
+            const companyLeadSource = comp.properties?.lead_source || comp.properties?.hs_lead_source || "";
             // Map back to contacts
             for (const [cId, coId] of contactToCompany.entries()) {
-              if (coId === comp.id) companyTierMap.set(cId, tier);
+              if (coId === comp.id) {
+                companyTierMap.set(cId, tier);
+                companyLeadSourceMap.set(cId, companyLeadSource);
+              }
             }
           }
         }
@@ -242,12 +248,22 @@ export async function getLeadsFunnel(
     const leadStatus = c.properties.hs_lead_status || "";
     const isReTiered = config.sqlStages.includes(stage) || config.sqlStatuses.includes(leadStatus);
 
-    if (validTiers.has(normalized)) return true;
-    if (isReTiered) return true;
+    // Tier API call totally failed — fall back to keep all
     if (companyTierMap.size === 0) return true;
-    return false;
+
+    // Re-tiered carve-out — always keep
+    if (isReTiered) return true;
+
+    // Tier must be SMB / Mid-Market / Enterprise
+    if (!validTiers.has(normalized)) return false;
+
+    // Company's lead_source must be Inbound (matches native report's Lead Source filter)
+    const companyLeadSource = (companyLeadSourceMap.get(c.id) || "").toLowerCase().trim();
+    if (companyLeadSource && companyLeadSource !== "inbound") return false;
+
+    return true;
   });
-  console.log(`[hubspot] ATM after tier filter: ${tierFilteredATM.length}`);
+  console.log(`[hubspot] ATM after tier + lead_source filter: ${tierFilteredATM.length}`);
 
   // Dedupe by company — HubSpot native "Inbound Leads By Tier" report counts unique companies.
   // It filters on COMPANY properties (tier, lead source, agreed to meet date), so contacts
