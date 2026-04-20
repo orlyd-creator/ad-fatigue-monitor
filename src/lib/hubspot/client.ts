@@ -232,6 +232,60 @@ async function _getLeadsFunnelLiteUncached(
   fromDate: string,
   toDate: string,
 ) {
+  // Chunk the requested window into month-sized slices, run slices in parallel,
+  // and merge. Single-shot 6-month queries intermittently timed out on Railway
+  // and the whole Executive view fell back to 0s across every month. Monthly
+  // slices run in < 1s each and bubble up partial data if one slice fails.
+  const slices: Array<[string, string]> = [];
+  const start = new Date(fromDate + "T00:00:00Z");
+  const end = new Date(toDate + "T23:59:59Z");
+  let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  while (cur <= end) {
+    const sliceStart = cur < start ? start : cur;
+    const nextMonth = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+    const sliceEnd = nextMonth > end ? end : new Date(nextMonth.getTime() - 1);
+    slices.push([
+      sliceStart.toISOString().slice(0, 10),
+      sliceEnd.toISOString().slice(0, 10),
+    ]);
+    cur = nextMonth;
+  }
+
+  const allAtmDates: string[] = [];
+  const allSqlDates: string[] = [];
+  await Promise.all(
+    slices.map(async ([sliceFrom, sliceTo]) => {
+      try {
+        const r = await _fetchLiteSlice(sliceFrom, sliceTo);
+        allAtmDates.push(...r.atmDates);
+        allSqlDates.push(...r.sqlDates);
+      } catch (err) {
+        console.error(`[hubspot-lite] slice ${sliceFrom}→${sliceTo} failed:`, err);
+      }
+    }),
+  );
+
+  const atmMap = new Map<string, number>();
+  for (const d of allAtmDates) atmMap.set(d, (atmMap.get(d) || 0) + 1);
+  const dailyATM = Array.from(atmMap.entries())
+    .map(([date, atm]) => ({ date, atm }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const sqlMap = new Map<string, number>();
+  for (const d of allSqlDates) sqlMap.set(d, (sqlMap.get(d) || 0) + 1);
+  const dailySQLDeals = Array.from(sqlMap.entries())
+    .map(([date, sqlDeals]) => ({ date, sqlDeals }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    dailyATM,
+    dailySQLDeals,
+    totalATM: allAtmDates.length,
+    totalSQLs: allSqlDates.length,
+  };
+}
+
+async function _fetchLiteSlice(fromDate: string, toDate: string) {
   const fromTs = new Date(fromDate + "T00:00:00Z").getTime();
   const toTs = new Date(toDate + "T23:59:59Z").getTime();
 
@@ -248,7 +302,6 @@ async function _getLeadsFunnelLiteUncached(
     limit: 100,
   };
 
-  // Run ATM companies + SQL deals in parallel — both are independent queries
   const [atmDates, sqlDates] = await Promise.all([
     (async () => {
       const dates: string[] = [];
@@ -297,24 +350,7 @@ async function _getLeadsFunnelLiteUncached(
     })(),
   ]);
 
-  const atmMap = new Map<string, number>();
-  for (const d of atmDates) atmMap.set(d, (atmMap.get(d) || 0) + 1);
-  const dailyATM = Array.from(atmMap.entries())
-    .map(([date, atm]) => ({ date, atm }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const sqlMap = new Map<string, number>();
-  for (const d of sqlDates) sqlMap.set(d, (sqlMap.get(d) || 0) + 1);
-  const dailySQLDeals = Array.from(sqlMap.entries())
-    .map(([date, sqlDeals]) => ({ date, sqlDeals }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  return {
-    dailyATM,
-    dailySQLDeals,
-    totalATM: atmDates.length,
-    totalSQLs: sqlDates.length,
-  };
+  return { atmDates, sqlDates };
 }
 
 /**

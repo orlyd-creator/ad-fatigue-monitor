@@ -127,19 +127,18 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     }
   }
 
-  // Determine lookback window — pull a rolling 90-day window on every sync so
-  // last month's numbers stay accurate as Meta retro-attributes conversions and
-  // adjusts spend. First sync goes back 180d so historical charts have depth
-  // from day one. Previously we only pulled "days since start of current month"
-  // which meant March data was captured once on first sync and never refreshed,
-  // causing the Executive view to drift from Ads Manager.
+  // Determine lookback window — pull a rolling 180-day (~6mo) window on every
+  // sync. The Executive view has a "Last 6 months" preset and partial months
+  // at the far edge cause investor-facing charts to look wrong (e.g. Jan
+  // showing $13.8k when only Jan 20-31 was captured). 180d covers the widest
+  // default preset we offer.
   const existingAds = await db.select({ id: ads.id }).from(ads).where(eq(ads.accountId, accountId)).limit(1).all();
   const isFirstSync = existingAds.length === 0;
-  const lookbackDays = isFirstSync ? 180 : 90;
+  const lookbackDays = isFirstSync ? 365 : 180;
   const since = format(subDays(now, lookbackDays), "yyyy-MM-dd");
   const until = format(now, "yyyy-MM-dd");
 
-  console.log(`[sync] Account: ${actId} | ${isFirstSync ? "First sync (180d)" : "Incremental (90d)"}: ${since} → ${until}`);
+  console.log(`[sync] Account: ${actId} | ${isFirstSync ? "First sync (365d)" : "Incremental (180d)"}: ${since} → ${until}`);
 
   try {
     // ── Step 1: Verify account access ────────────────────────────
