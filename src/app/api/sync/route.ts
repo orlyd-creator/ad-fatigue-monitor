@@ -17,6 +17,24 @@ export const maxDuration = 300;
 // row-lock contention in Turso when user mashes Refresh + auto-sync fires.
 const activeSyncs = new Map<string, Promise<any>>();
 
+// Progress map, readable via /api/sync/status so the Sidebar can show live
+// progress instead of a generic 60-second spinner.
+type SyncProgress = {
+  mode: "full" | "quick";
+  accountIds: string[];
+  startedAt: number;
+  finishedAt: number | null;
+  success: boolean | null;
+  adsFound: number;
+  metricsUpserted: number;
+  errors: string[];
+};
+const progressByKey = new Map<string, SyncProgress>();
+export function getSyncProgress(accountIds: string[], mode: "full" | "quick") {
+  const key = `${mode}:${accountIds.slice().sort().join(",")}`;
+  return progressByKey.get(key) || null;
+}
+
 async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
   const lockKey = `${mode}:${accountIds.slice().sort().join(",")}`;
   const existing = activeSyncs.get(lockKey);
@@ -24,7 +42,34 @@ async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
     console.log(`[sync] Joining in-flight ${mode} sync for ${lockKey}`);
     return existing;
   }
-  const p = _runSyncInner(accountIds, mode).finally(() => activeSyncs.delete(lockKey));
+  // Record progress so /api/sync/status can report while work is in flight.
+  const progress: SyncProgress = {
+    mode,
+    accountIds,
+    startedAt: Date.now(),
+    finishedAt: null,
+    success: null,
+    adsFound: 0,
+    metricsUpserted: 0,
+    errors: [],
+  };
+  progressByKey.set(lockKey, progress);
+  const p = _runSyncInner(accountIds, mode)
+    .then((result: any) => {
+      progress.finishedAt = Date.now();
+      progress.success = result.success ?? (result.adsFound > 0 || (result.errors?.length ?? 0) === 0);
+      progress.adsFound = result.adsFound ?? 0;
+      progress.metricsUpserted = result.metricsUpserted ?? 0;
+      progress.errors = result.errors ?? [];
+      return result;
+    })
+    .catch((err: any) => {
+      progress.finishedAt = Date.now();
+      progress.success = false;
+      progress.errors = [err?.message || String(err)];
+      throw err;
+    })
+    .finally(() => activeSyncs.delete(lockKey));
   activeSyncs.set(lockKey, p);
   return p;
 }
@@ -158,19 +203,34 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Default = "full" (the original slow, thorough 180-day sync).
+  // Default = "full" (the original thorough 180-day sync).
   // Opt in to ?mode=quick for the 5-second today-only version.
   const url = new URL(req.url);
   const modeParam = url.searchParams.get("mode");
   const mode: "full" | "quick" = modeParam === "quick" ? "quick" : "full";
 
-  const result = await runSync(allAccountIds, mode);
-  // NOTE: historical backfill is handled by the 10-min auto-sync in
-  // instrumentation.ts, NOT by a fire-and-forget from this route. On
-  // Railway, the runtime can hold the response open until pending
-  // microtasks resolve, which manifests as a 502 gateway timeout even
-  // though the quick sync itself finished in 5s. Keep this handler lean.
-  return NextResponse.json({ ...result, mode });
+  // QUICK mode: run synchronously and return the result (it's fast, ~5s).
+  if (mode === "quick") {
+    const result = await runSync(allAccountIds, mode);
+    return NextResponse.json({ ...result, mode, started: false });
+  }
+
+  // FULL mode: 30-120s. Don't block the HTTP response or Railway's gateway
+  // kills the connection at ~60s, stranding the client forever. Fire the
+  // sync into the background and return immediately. Client polls
+  // /api/sync/status to detect completion.
+  const lockKey = `${mode}:${allAccountIds.slice().sort().join(",")}`;
+  const already = activeSyncs.get(lockKey);
+  if (!already) {
+    // Swallow errors, they're recorded in the progress map anyway
+    runSync(allAccountIds, mode).catch(() => {});
+  }
+  return NextResponse.json({
+    mode,
+    started: true,
+    startedAt: Date.now(),
+    joinedExisting: Boolean(already),
+  });
 }
 
 export async function POST(req: NextRequest) {

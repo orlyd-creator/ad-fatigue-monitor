@@ -201,6 +201,44 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           return;
         }
 
+        // Full-mode sync returns `started: true` immediately; actual work
+        // runs in the background. Poll /api/sync/status until finishedAt
+        // is populated (or 4-minute ceiling), so the overlay reflects the
+        // real progress instead of hanging until Railway's gateway kills
+        // the connection at ~60s.
+        if (body?.started && mode === "full") {
+          const pollUntil = Date.now() + 4 * 60 * 1000; // 4-minute ceiling
+          let pollErrors: string[] = [];
+          let adsFound = 0;
+          while (Date.now() < pollUntil) {
+            await new Promise(r => setTimeout(r, 2500));
+            try {
+              const sr = await fetch("/api/sync/status?mode=full", { cache: "no-store" });
+              if (!sr.ok) continue;
+              const sb = await sr.json();
+              const p = sb?.progress;
+              if (!p) continue;
+              if (!p.running) {
+                pollErrors = p.errors || [];
+                adsFound = p.adsFound || 0;
+                break;
+              }
+            } catch {}
+          }
+          if (pollErrors.length > 0 && adsFound === 0) {
+            setSyncError(pollErrors[0]);
+            setShowOverlay(null);
+            setTimeout(() => setSyncError(null), 15000);
+            return;
+          }
+          if (pollErrors.length > 0) {
+            setSyncError(`Synced ${adsFound} ads, but: ${pollErrors[0]}`);
+            setTimeout(() => setSyncError(null), 10000);
+          }
+          markSyncSuccess();
+          return;
+        }
+
         if (body.errors && body.errors.length > 0 && body.adsFound === 0) {
           setSyncError(body.errors[0]);
           setShowOverlay(null);
