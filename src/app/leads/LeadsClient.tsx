@@ -89,16 +89,27 @@ export default function LeadsClient({
   const costPerClick = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const hasHubSpot = (hubspotATM && hubspotATM.length > 0) || (hubspotMQLs && hubspotMQLs.length > 0);
 
-  // Cumulative / "running" CPL day-over-day.
-  // Orly: "I want CPL day over day with spend adding up, inbound ATMs adding
-  // up, and at some point CPL freezes and continues". So each point is
-  // cumulative spend to that day ÷ cumulative ATMs to that day. Flat on
-  // zero-lead days instead of spiking.
+  // Month-to-date "running" CPL day-over-day.
+  // Totals RESET at the first of every month so you can compare e.g.
+  // March 21 vs April 21 at the same point in the month. Within a month,
+  // each day is cumulative spend / cumulative ATMs through that day.
+  // Flat on zero-lead days instead of spiking.
   const runningSeries = (dailyCPL ?? []).slice().sort((a, b) => a.date.localeCompare(b.date));
   let cumSpend = 0, cumAtm = 0, cumSqls = 0;
   let lastCPL: number | null = null;
   let lastCostPerSQL: number | null = null;
+  let currentMonth = "";
   const runningData = runningSeries.map((d) => {
+    const monthKey = d.date.slice(0, 7); // YYYY-MM
+    if (monthKey !== currentMonth) {
+      // New month, reset accumulators and the carried-forward CPL line.
+      currentMonth = monthKey;
+      cumSpend = 0;
+      cumAtm = 0;
+      cumSqls = 0;
+      lastCPL = null;
+      lastCostPerSQL = null;
+    }
     cumSpend += d.spend || 0;
     cumAtm += d.atm || 0;
     cumSqls += d.sqls || 0;
@@ -305,9 +316,9 @@ export default function LeadsClient({
       {/* Running CPL vs Cumulative Spend */}
       {runningData.length > 0 && hasHubSpot && (
         <div className="lv-card p-6 mb-8">
-          <h2 className="text-[16px] font-semibold mb-1">Running CPL vs Cumulative Spend</h2>
+          <h2 className="text-[16px] font-semibold mb-1">MTD CPL vs MTD Spend</h2>
           <p className="text-[12px] text-gray-500 mb-4">
-            Each day's CPL = cumulative spend ÷ cumulative ATMs through that day. Holds flat on zero-lead days.
+            Each day's CPL = month-to-date spend ÷ month-to-date ATMs. Both reset at the 1st of every month so you can compare the same day across months.
           </p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -321,13 +332,13 @@ export default function LeadsClient({
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
                     if (value === null || value === undefined) return ["-", name];
-                    if (name === "Cumulative spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "MTD spend") return [`$${Number(value).toFixed(0)}`, name];
                     if (name === "Running CPL") return [`$${Number(value).toFixed(0)}`, name];
                     return [value, name];
                   }}
                 />
                 <Legend />
-                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Cumulative spend" />
+                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" stroke="#6B93D8" strokeWidth={2} dot={false} name="MTD spend" />
                 <Line yAxisId="cpl" type="monotone" dataKey="cpl" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 3, fill: "#F04E80" }} connectNulls name="Running CPL" />
               </LineChart>
             </ResponsiveContainer>
@@ -338,9 +349,9 @@ export default function LeadsClient({
       {/* Running Cost per SQL vs Cumulative Spend */}
       {runningData.length > 0 && hasHubSpot && (
         <div className="lv-card p-6 mb-8">
-          <h2 className="text-[16px] font-semibold mb-1">Running Cost per SQL vs Cumulative Spend</h2>
+          <h2 className="text-[16px] font-semibold mb-1">MTD Cost per SQL vs MTD Spend</h2>
           <p className="text-[12px] text-gray-500 mb-4">
-            Each day's cost per SQL = cumulative spend ÷ cumulative SQLs. Flat on zero-SQL days.
+            Each day's cost per SQL = month-to-date spend ÷ month-to-date SQLs. Both reset at the 1st of every month.
           </p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -354,13 +365,13 @@ export default function LeadsClient({
                   labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
                   formatter={(value: any, name: string) => {
                     if (value === null || value === undefined) return ["-", name];
-                    if (name === "Cumulative spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "MTD spend") return [`$${Number(value).toFixed(0)}`, name];
                     if (name === "Running cost per SQL") return [`$${Number(value).toFixed(0)}`, name];
                     return [value, name];
                   }}
                 />
                 <Legend />
-                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" stroke="#6B93D8" strokeWidth={2} dot={false} name="Cumulative spend" />
+                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" stroke="#6B93D8" strokeWidth={2} dot={false} name="MTD spend" />
                 <Line yAxisId="cps" type="monotone" dataKey="costPerSql" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3, fill: "#8b5cf6" }} connectNulls name="Running cost per SQL" />
               </LineChart>
             </ResponsiveContainer>

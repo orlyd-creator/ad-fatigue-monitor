@@ -285,6 +285,48 @@ export default async function PublicExecutivePage({
           costPerSQL: b.sqls > 0 ? Math.round((b.spend / b.sqls) * 100) / 100 : 0,
           sqlRate: b.atm > 0 ? Math.round((b.sqls / b.atm) * 1000) / 10 : 0,
         }))}
+        dailyMTD={(() => {
+          const spendByDate = new Map<string, number>();
+          for (const m of metrics) {
+            spendByDate.set(m.date, (spendByDate.get(m.date) || 0) + (m.spend ?? 0));
+          }
+          const atmByDate = new Map<string, number>();
+          const sqlByDate = new Map<string, number>();
+          if (hubspotResult) {
+            for (const d of hubspotResult.dailyATM) atmByDate.set(d.date, (atmByDate.get(d.date) || 0) + d.atm);
+            for (const d of hubspotResult.dailySQLDeals) sqlByDate.set(d.date, (sqlByDate.get(d.date) || 0) + d.sqlDeals);
+          }
+          const allDates = Array.from(new Set<string>([
+            ...spendByDate.keys(), ...atmByDate.keys(), ...sqlByDate.keys(),
+          ])).sort();
+          let cumSpend = 0, cumAtm = 0, cumSqls = 0;
+          let lastCPL: number | null = null;
+          let lastCostPerSQL: number | null = null;
+          let currentMonth = "";
+          const out: Array<{ date: string; cumSpend: number; cumAtm: number; cumSqls: number; cpl: number | null; costPerSql: number | null }> = [];
+          for (const date of allDates) {
+            const monthKey = date.slice(0, 7);
+            if (monthKey !== currentMonth) {
+              currentMonth = monthKey;
+              cumSpend = 0; cumAtm = 0; cumSqls = 0;
+              lastCPL = null; lastCostPerSQL = null;
+            }
+            cumSpend += spendByDate.get(date) || 0;
+            cumAtm += atmByDate.get(date) || 0;
+            cumSqls += sqlByDate.get(date) || 0;
+            if (cumAtm > 0) lastCPL = Math.round((cumSpend / cumAtm) * 100) / 100;
+            if (cumSqls > 0) lastCostPerSQL = Math.round((cumSpend / cumSqls) * 100) / 100;
+            out.push({
+              date,
+              cumSpend: Math.round(cumSpend * 100) / 100,
+              cumAtm,
+              cumSqls,
+              cpl: lastCPL,
+              costPerSql: lastCostPerSQL,
+            });
+          }
+          return out;
+        })()}
         monthlyTable={buckets.map(b => ({
           label: b.label,
           spend: b.spend,
