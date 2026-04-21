@@ -7,7 +7,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (!params.fresh) {
     const session = await auth();
     if (session && (session as any).accountId) {
-      redirect("/dashboard");
+      redirect("/executive");
     }
   }
   const shareState = params.share || null;

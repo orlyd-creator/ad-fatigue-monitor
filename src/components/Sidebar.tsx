@@ -415,11 +415,11 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
                 "cursor-pointer w-full flex items-center gap-2.5 rounded-lg text-[13px] font-medium text-left select-none transition-all duration-75 active:scale-[0.97]",
                 collapsed ? "justify-center px-0 py-3.5 min-h-[44px]" : "px-3 py-3 min-h-[44px]",
                 isActive || isNavigating
-                  ? "bg-gray-200/70 text-gray-900"
-                  : "text-gray-500 hover:text-gray-900 hover:bg-gray-200/40"
+                  ? "bg-gray-200/70 text-gray-900 font-semibold"
+                  : "text-gray-900 hover:bg-gray-200/40"
               )}
             >
-              <span className={clsx("pointer-events-none flex-shrink-0", isActive || isNavigating ? "text-gray-900" : "text-gray-400")}>
+              <span className={clsx("pointer-events-none flex-shrink-0", isActive || isNavigating ? "text-gray-900" : "text-gray-700")}>
                 {link.icon}
               </span>
               {!collapsed && <span className="pointer-events-none">{link.label}</span>}

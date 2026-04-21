@@ -6,13 +6,19 @@ import Sidebar from "./Sidebar";
 
 export default function SidebarLayout({
   children,
-  isPublic = false,
+  isPublic: isPublicFromServer = false,
 }: {
   children: React.ReactNode;
   isPublic?: boolean;
 }) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login" || pathname === "/";
+  // Treat any /public/* URL as a public-viewer route. The server-level
+  // cookie check misses cases where a stakeholder lands directly on
+  // /public/executive/<token> (shared link) without going through the
+  // /public/<token> entry that sets the cookie. Pathname is always fresh
+  // client-side, so it's the most reliable signal.
+  const isPublic = isPublicFromServer || pathname.startsWith("/public/");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
