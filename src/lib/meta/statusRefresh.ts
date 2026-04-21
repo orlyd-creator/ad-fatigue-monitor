@@ -10,11 +10,10 @@
  * hammer Meta.
  */
 import { db } from "@/lib/db";
-import { accounts } from "@/lib/db/schema";
-import { inArray, sql } from "drizzle-orm";
+import { accounts, ads } from "@/lib/db/schema";
+import { eq, inArray, sql } from "drizzle-orm";
 
-const MAX_AGE_MS = 90 * 1000;               // 90 sec freshness ceiling
-const MIN_INTERVAL_MS = 30 * 1000;          // at most once per 30s per account
+const MIN_INTERVAL_MS = 15 * 1000;          // at most once per 15s per account
 
 // in-process dedupe
 const lastRunByAccount = new Map<string, number>();
@@ -77,18 +76,48 @@ async function refreshOneAccount(accountId: string, token: string): Promise<void
       console.warn(`[statusRefresh] ${accountId} truncated at page cap (>20k ads, increase cap if this account ever reaches it)`);
     }
 
-    // Unconditional update: always write status + lastSyncedAt so even
-    // same-status rows refresh their timestamp. Avoids the bug where a
-    // "no-op" WHERE clause skips the write and the row looks stale forever.
+    // PASS 1: Write the status we got from Meta for every returned ad.
+    // Unconditional UPDATE so same-status rows still refresh last_synced_at.
     const now = Date.now();
+    const seenIds = new Set<string>();
     let changed = 0;
     for (const row of all) {
       const newStatus = row.effective_status || row.status;
       if (!row.id || !newStatus) continue;
+      seenIds.add(row.id);
       await db.run(sql`UPDATE ads SET status = ${newStatus}, last_synced_at = ${now} WHERE id = ${row.id}`);
       changed++;
     }
-    console.log(`[statusRefresh] ${accountId}: scanned ${all.length} ads, wrote ${changed}`);
+
+    // PASS 2: RECONCILIATION. Meta sometimes drops deleted/archived ads
+    // from /ads responses entirely, so our DB keeps the last-known ACTIVE
+    // status forever. For every ad in OUR DB for this account that Meta
+    // did NOT mention, if we think it's ACTIVE, demote it to ARCHIVED.
+    // This is the missing piece: the audit earlier said filter was
+    // comprehensive, but Meta's behaviour on deleted ads is to simply
+    // omit them, not return them with effective_status=DELETED.
+    const dbAds = await db
+      .select({ id: ads.id, status: ads.status })
+      .from(ads)
+      .where(eq(ads.accountId, accountId))
+      .all();
+    const staleIds: string[] = [];
+    for (const a of dbAds) {
+      if (seenIds.has(a.id)) continue;
+      // Already known-non-running, leave alone.
+      if (a.status === "ARCHIVED" || a.status === "DELETED") continue;
+      staleIds.push(a.id);
+    }
+    let reconciled = 0;
+    if (staleIds.length > 0) {
+      // Batch update so we don't hammer the DB with N UPDATEs.
+      await db.run(sql`
+        UPDATE ads SET status = 'ARCHIVED', last_synced_at = ${now}
+        WHERE id IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})
+      `);
+      reconciled = staleIds.length;
+    }
+    console.log(`[statusRefresh] ${accountId}: scanned ${all.length} ads, wrote ${changed}, reconciled ${reconciled} missing → ARCHIVED`);
   } catch (err) {
     console.warn(`[statusRefresh] ${accountId} failed:`, err);
   }
