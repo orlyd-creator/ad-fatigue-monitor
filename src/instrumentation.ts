@@ -15,6 +15,25 @@ export async function register() {
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
 
+    // sync_runs: durable record of every auto-sync tick so the dashboard
+    // can show "last refresh succeeded / failed at HH:MM" and the actual
+    // error message instead of a silent empty state.
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS sync_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mode TEXT NOT NULL,
+        source TEXT NOT NULL,
+        account_id TEXT,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER NOT NULL,
+        success INTEGER NOT NULL,
+        ads_found INTEGER NOT NULL DEFAULT 0,
+        metrics_upserted INTEGER NOT NULL DEFAULT 0,
+        errors TEXT
+      )
+    `);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_sync_runs_finished ON sync_runs(finished_at DESC)`);
+
     // team_invites: added 2026-04-20 for in-app team workspace sharing.
     await client.execute(`
       CREATE TABLE IF NOT EXISTS team_invites (
@@ -93,7 +112,32 @@ export async function register() {
         setTimeout(runAutoSync, firstRun ? 60000 : FULL_SYNC_MS);
         firstRun = false;
       };
+      const recordRun = async (
+        mode: string,
+        source: string,
+        accountId: string | null,
+        startedAt: number,
+        success: boolean,
+        adsFound: number,
+        metricsUpserted: number,
+        errors: string[],
+      ) => {
+        try {
+          const { createClient } = await import("@libsql/client");
+          const c = createClient({
+            url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
+            authToken: process.env.TURSO_AUTH_TOKEN,
+          });
+          await c.execute({
+            sql: `INSERT INTO sync_runs (mode, source, account_id, started_at, finished_at, success, ads_found, metrics_upserted, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [mode, source, accountId, startedAt, Date.now(), success ? 1 : 0, adsFound, metricsUpserted, errors.length ? JSON.stringify(errors) : null],
+          });
+        } catch (e) {
+          console.error("[sync_runs] insert failed:", e);
+        }
+      };
       const runAutoSync = async () => {
+        const tickStarted = Date.now();
         try {
           const { db } = await import("@/lib/db");
           const { accounts } = await import("@/lib/db/schema");
@@ -102,20 +146,26 @@ export async function register() {
           const rows = await db.select().from(accounts).all();
           console.log(`[auto-sync] starting, ${rows.length} accounts`);
           for (const account of rows) {
+            const accStart = Date.now();
             if (account.tokenExpiresAt < Date.now()) {
               console.warn(`[auto-sync] skipping ${account.id} (token expired)`);
+              await recordRun("full", "auto", account.id, accStart, false, 0, 0, ["Token expired, reconnect Meta at /login"]);
               continue;
             }
             try {
               const res = await syncAccount(account.id);
               console.log(`[auto-sync] ${account.id}: ${res.adsFound} ads, ${res.metricsUpserted} metrics`);
+              const ok = (res.errors?.length ?? 0) === 0;
+              await recordRun("full", "auto", account.id, accStart, ok, res.adsFound, res.metricsUpserted, res.errors || []);
             } catch (err: any) {
               console.error(`[auto-sync] ${account.id} failed:`, err?.message || err);
+              await recordRun("full", "auto", account.id, accStart, false, 0, 0, [err?.message || String(err)]);
             }
           }
           clearHubSpotCache();
         } catch (err: any) {
           console.error("[auto-sync] tick failed:", err?.message || err);
+          await recordRun("full", "auto", null, tickStarted, false, 0, 0, [err?.message || String(err)]);
         } finally {
           schedule();
         }
