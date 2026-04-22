@@ -183,7 +183,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const adAccounts = await getAdAccounts(longLived.access_token);
         console.log(`[auth] Found ${adAccounts.length} ad accounts, refreshing stored tokens`);
 
-        for (const adAccount of adAccounts) {
+        // If META_AD_ACCOUNT_ID is configured, ONLY store that account. Prevents
+        // the OAuth flow from pulling in personal/test ad accounts that have no
+        // campaigns (which then fail sync and confuse the dashboard).
+        const configuredId = (process.env.META_AD_ACCOUNT_ID || "")
+          .replace(/^act_/, "")
+          .trim();
+        const filteredAdAccounts = configuredId
+          ? adAccounts.filter((a: any) => {
+              const id = a.account_id || String(a.id).replace("act_", "");
+              return id === configuredId;
+            })
+          : adAccounts;
+        if (configuredId && filteredAdAccounts.length === 0) {
+          console.error(`[auth] META_AD_ACCOUNT_ID=${configuredId} not in user's ad accounts list`);
+        } else if (configuredId) {
+          console.log(`[auth] Filtered to configured ad account: ${configuredId}`);
+        }
+
+        for (const adAccount of filteredAdAccounts) {
           const accountId = adAccount.account_id || adAccount.id.replace("act_", "");
           await db.insert(accounts)
             .values({
@@ -234,6 +252,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // (owner's) account so they see the same data as the owner.
       if (userAccounts.length === 0) {
         userAccounts = await db.select().from(accounts).all();
+      }
+
+      // If META_AD_ACCOUNT_ID is configured, only expose that account to the
+      // session. Stops the app from trying to sync / display stale personal
+      // ad accounts that crept in from earlier OAuth flows.
+      const sessionConfiguredId = (process.env.META_AD_ACCOUNT_ID || "")
+        .replace(/^act_/, "")
+        .trim();
+      if (sessionConfiguredId) {
+        const filtered = userAccounts.filter((a) => a.id === sessionConfiguredId);
+        if (filtered.length > 0) userAccounts = filtered;
       }
 
       const account = userAccounts[0];

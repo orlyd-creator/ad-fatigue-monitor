@@ -68,6 +68,37 @@ export async function register() {
         views_count INTEGER NOT NULL DEFAULT 0
       )
     `);
+    // ACCOUNT HYGIENE: if META_AD_ACCOUNT_ID is set, delete any stored
+    // account rows that don't match. Earlier OAuth flows pulled in the
+    // user's personal ad account alongside the configured Obol one, and
+    // the auto-sync kept hitting the empty personal account and raising
+    // "no campaigns" errors. One-time cleanup on boot.
+    try {
+      const configured = (process.env.META_AD_ACCOUNT_ID || "").replace(/^act_/, "").trim();
+      if (configured) {
+        // Only delete stale rows if the configured account actually exists
+        // in the DB. Otherwise we'd wipe the only account row, leaving the
+        // user unable to use the app until they re-OAuth.
+        const check = await client.execute({
+          sql: `SELECT id FROM accounts WHERE id = ? LIMIT 1`,
+          args: [configured],
+        });
+        if (check.rows.length > 0) {
+          const del = await client.execute({
+            sql: `DELETE FROM accounts WHERE id != ?`,
+            args: [configured],
+          });
+          if (del.rowsAffected && del.rowsAffected > 0) {
+            console.log(`[instrumentation] Removed ${del.rowsAffected} stale account row(s), kept only act_${configured}`);
+          }
+        } else {
+          console.log(`[instrumentation] Configured account ${configured} not in DB yet, skipping hygiene`);
+        }
+      }
+    } catch (e) {
+      console.warn("[instrumentation] account hygiene failed (non-fatal):", e);
+    }
+
     // HARDENING: remove any legacy duplicate (ad_id, date) rows in
     // daily_metrics left over from pre-unique-index syncs. The app's JS
     // dedupe handles this at read time, but keeping the DB clean prevents
