@@ -106,8 +106,32 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
 
   // Process accounts in parallel, isolated try/catch per account so a single
   // broken account doesn't kill the whole refresh.
+  const recordRun = async (
+    accountId: string,
+    startedAt: number,
+    success: boolean,
+    adsFound: number,
+    metricsUpserted: number,
+    errors: string[],
+  ) => {
+    try {
+      const { createClient } = await import("@libsql/client");
+      const c = createClient({
+        url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
+        authToken: process.env.TURSO_AUTH_TOKEN,
+      });
+      await c.execute({
+        sql: `INSERT INTO sync_runs (mode, source, account_id, started_at, finished_at, success, ads_found, metrics_upserted, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [mode, "manual", accountId, startedAt, Date.now(), success ? 1 : 0, adsFound, metricsUpserted, errors.length ? JSON.stringify(errors) : null],
+      });
+    } catch (e) {
+      console.error("[sync_runs] insert failed (manual):", e);
+    }
+  };
+
   await Promise.all(
     allAccounts.map(async (account) => {
+      const accStart = Date.now();
       const entry = {
         accountId: account.id,
         accountName: account.name,
@@ -120,6 +144,7 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
       if (account.tokenExpiresAt < Date.now()) {
         entry.errors.push("Meta token expired, reconnect on login page.");
         Object.assign(entry, { tokenExpired: true });
+        await recordRun(account.id, accStart, false, 0, 0, entry.errors);
         return;
       }
 
@@ -136,6 +161,7 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
           );
           entry.errors.push(...realErrors);
           allErrors.push(...realErrors.map((e) => `${account.name}: ${e}`));
+          await recordRun(account.id, accStart, realErrors.length === 0, 0, result.rowsUpdated, realErrors);
           return;
         }
         const result = await syncAccount(account.id);
@@ -149,11 +175,13 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
         );
         entry.errors.push(...realErrors);
         allErrors.push(...realErrors.map((e) => `${account.name}: ${e}`));
+        await recordRun(account.id, accStart, realErrors.length === 0, result.adsFound, result.metricsUpserted, realErrors);
       } catch (err: any) {
         const msg = err?.message || String(err);
         console.error(`[sync] Account ${account.id} threw:`, msg);
         entry.errors.push(`Sync crashed: ${msg}`);
         allErrors.push(`${account.name}: ${msg}`);
+        await recordRun(account.id, accStart, false, 0, 0, [msg]);
       }
     }),
   );
