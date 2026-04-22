@@ -25,6 +25,7 @@ type SyncProgress = {
   startedAt: number;
   finishedAt: number | null;
   success: boolean | null;
+  tokenExpired: boolean;
   adsFound: number;
   metricsUpserted: number;
   errors: string[];
@@ -49,6 +50,7 @@ async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
     startedAt: Date.now(),
     finishedAt: null,
     success: null,
+    tokenExpired: false,
     adsFound: 0,
     metricsUpserted: 0,
     errors: [],
@@ -58,6 +60,7 @@ async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
     .then((result: any) => {
       progress.finishedAt = Date.now();
       progress.success = result.success ?? (result.adsFound > 0 || (result.errors?.length ?? 0) === 0);
+      progress.tokenExpired = Boolean(result.tokenExpired);
       progress.adsFound = result.adsFound ?? 0;
       progress.metricsUpserted = result.metricsUpserted ?? 0;
       progress.errors = result.errors ?? [];
@@ -164,8 +167,10 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
   revalidatePath("/executive");
   revalidatePath("/ads");
 
+  const tokenExpired = perAccount.some((a: any) => a.tokenExpired);
   return {
-    success: totalAds > 0 || allErrors.length === 0,
+    success: totalAds > 0 && allErrors.length === 0 && !tokenExpired,
+    tokenExpired,
     adsFound: totalAds,
     metricsUpserted: totalMetrics,
     alertsGenerated: totalAlerts,

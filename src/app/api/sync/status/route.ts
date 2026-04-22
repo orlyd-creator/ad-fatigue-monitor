@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       running: progress.finishedAt === null,
       elapsedMs: (progress.finishedAt ?? now) - progress.startedAt,
       success: progress.success,
+      tokenExpired: progress.tokenExpired,
       adsFound: progress.adsFound,
       metricsUpserted: progress.metricsUpserted,
       errors: progress.errors,

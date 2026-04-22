@@ -10,6 +10,7 @@ import {
 import { getLeadsFunnelLite } from "@/lib/hubspot/client";
 import ExecutiveClient from "./ExecutiveClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
+import MetaTokenBanner from "@/components/MetaTokenBanner";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -260,6 +261,7 @@ export default async function ExecutivePage({
   return (
     <div className="min-h-screen">
       <div className="px-8 pt-6">
+        {!session.isPublic && <MetaTokenBanner accountIds={allAccountIds} />}
         <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
       </div>
       <ExecutiveClient
