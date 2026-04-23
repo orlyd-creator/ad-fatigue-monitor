@@ -129,7 +129,21 @@ export async function POST(req: Request) {
     const first = resp.content[0];
     if (first && first.type === "text") text = first.text.trim();
   } catch (e: any) {
-    return NextResponse.json({ error: `Claude call failed: ${e?.message || e}` }, { status: 502 });
+    const msg = e?.message || String(e);
+    // Common: user's Anthropic balance is empty. Surface a friendly,
+    // actionable message instead of a raw 400 JSON dump.
+    if (/credit balance is too low|insufficient.*credit|billing/i.test(msg)) {
+      return NextResponse.json({
+        error: "Anthropic credits are empty — add credits at https://console.anthropic.com/settings/billing and try again.",
+        needsCredits: true,
+      }, { status: 402 });
+    }
+    if (/rate.?limit/i.test(msg)) {
+      return NextResponse.json({
+        error: "Hit Anthropic rate limit — wait a minute and retry.",
+      }, { status: 429 });
+    }
+    return NextResponse.json({ error: `Claude call failed: ${msg}` }, { status: 502 });
   }
 
   // Tolerate the model wrapping output in ```json fences

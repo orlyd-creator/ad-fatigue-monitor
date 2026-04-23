@@ -26,6 +26,7 @@ type Response = {
   recommendations: Recommendation[];
   note?: string;
   error?: string;
+  needsCredits?: boolean;
 };
 
 const PRIORITY_COLORS: Record<Action["priority"], string> = {
@@ -49,6 +50,7 @@ export default function ForecastPlanSection({ isPublic = false }: { isPublic?: b
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Response | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsCredits, setNeedsCredits] = useState(false);
   const [range, setRange] = useState<"mtd" | "30d" | "7d">("mtd");
   const router = useRouter();
 
@@ -56,6 +58,7 @@ export default function ForecastPlanSection({ isPublic = false }: { isPublic?: b
     if (isPublic) return;
     setLoading(true);
     setError(null);
+    setNeedsCredits(false);
     try {
       const res = await fetch(`/api/strategy/plan?range=${range}`, {
         method: "POST",
@@ -64,6 +67,7 @@ export default function ForecastPlanSection({ isPublic = false }: { isPublic?: b
       const json = (await res.json()) as Response;
       if (!res.ok) {
         setError(json.error || `Request failed (HTTP ${res.status})`);
+        if (json.needsCredits) setNeedsCredits(true);
       } else {
         setData(json);
       }
@@ -127,9 +131,35 @@ export default function ForecastPlanSection({ isPublic = false }: { isPublic?: b
         </div>
       )}
 
-      {error && (
+      {error && !needsCredits && (
         <div className="mt-6 rounded-2xl bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-[13px] text-rose-700">
           {error}
+        </div>
+      )}
+
+      {needsCredits && (
+        <div className="mt-6 rounded-2xl ring-1 ring-amber-200 bg-gradient-to-br from-amber-50 via-white to-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+              <svg className="h-5 w-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <div className="text-[14px] font-semibold text-foreground">Anthropic credits are empty</div>
+              <div className="mt-1 text-[13px] text-muted-foreground">
+                Top up once and this feature is live for every future plan. ~$0.03 per generation, so even $5 covers months.
+              </div>
+              <a
+                href="https://console.anthropic.com/settings/billing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[#6B93D8] via-[#9B7ED0] to-[#D06AB8] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:shadow-md active:scale-[0.98]"
+              >
+                Add credits → Anthropic Console
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
