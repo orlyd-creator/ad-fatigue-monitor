@@ -8,43 +8,35 @@ import { eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 
 // Google is enabled only when both env vars are set, so a missing GOOGLE_CLIENT_ID
-// won't crash the app, FB continues to work alone.
+// won't crash the app, FB continues to work alone. The actual provider list
+// passed to NextAuth below is built dynamically below; this flag is exported
+// for login-page UI to decide whether to render the "Sign in with Google" button.
 const googleEnabled = !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
-const providers: any[] = [
+export const isGoogleEnabled = googleEnabled;
+
+const nextAuthProviders: any[] = [
   Facebook({
     clientId: process.env.META_APP_ID!,
     clientSecret: process.env.META_APP_SECRET!,
-    // No explicit scope → defaults to public_profile only. This lets ANY FB user
-    // log in (ads_read/ads_management would require them to be added as a dev on
-    // Orly's FB app or the app to pass FB review). The owner's Meta token was
-    // already stored on her first login and is still valid in the DB, we don't
-    // try to refresh it on subsequent sign-ins. If she ever needs to refresh,
-    // that can be a separate admin-only "Reconnect Meta" flow.
+    authorization: {
+      params: {
+        scope: "ads_read,ads_management",
+      },
+    },
   }),
 ];
 if (googleEnabled) {
-  providers.push(
+  nextAuthProviders.push(
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    })
+    }),
   );
 }
-export const isGoogleEnabled = googleEnabled;
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
-  providers: [
-    Facebook({
-      clientId: process.env.META_APP_ID!,
-      clientSecret: process.env.META_APP_SECRET!,
-      authorization: {
-        params: {
-          scope: "ads_read,ads_management",
-        },
-      },
-    }),
-  ],
+  providers: nextAuthProviders,
   callbacks: {
     async signIn({ account, profile }) {
       if (!account?.access_token) return false;

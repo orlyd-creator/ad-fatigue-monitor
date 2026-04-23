@@ -139,9 +139,10 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
       const check = await fetch("/api/ads?cb=" + Date.now(), { cache: "no-store" });
       if (!check.ok) return false;
       const data = await check.json();
-      const mostRecent = Array.isArray(data?.ads)
-        ? data.ads.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0)
-        : 0;
+      // /api/ads returns a bare array, not { ads: [...] }. Handle both in
+      // case the shape ever changes.
+      const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.ads) ? data.ads : [];
+      const mostRecent = list.reduce((m: number, a: any) => Math.max(m, a.lastSyncedAt ?? 0), 0);
       // Accept either (a) anything synced after the click, or (b) anything
       // synced in the last 3 min (for when the backend was already partway).
       return mostRecent >= startedAt - 5000 || Date.now() - mostRecent < 180000;
@@ -210,6 +211,12 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
           const pollUntil = Date.now() + 4 * 60 * 1000; // 4-minute ceiling
           let pollErrors: string[] = [];
           let adsFound = 0;
+          let tokenExpired = false;
+          let finishedCleanly = false;
+          // If the server restarts mid-sync, progress becomes null and never
+          // recovers. Track consecutive nulls so we can fall back to
+          // didSyncActuallySucceed rather than spin for the full 4 min.
+          let consecutiveNulls = 0;
           while (Date.now() < pollUntil) {
             await new Promise(r => setTimeout(r, 2500));
             try {
@@ -217,13 +224,47 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
               if (!sr.ok) continue;
               const sb = await sr.json();
               const p = sb?.progress;
-              if (!p) continue;
+              if (!p) {
+                consecutiveNulls++;
+                // After ~25s of nulls, check if the DB shows a successful sync
+                // and exit the poll either way.
+                if (consecutiveNulls >= 10) {
+                  if (await didSyncActuallySucceed(startedAt)) {
+                    markSyncSuccess();
+                    return;
+                  }
+                  break;
+                }
+                continue;
+              }
+              consecutiveNulls = 0;
               if (!p.running) {
                 pollErrors = p.errors || [];
                 adsFound = p.adsFound || 0;
+                tokenExpired = Boolean(p.tokenExpired);
+                finishedCleanly = true;
                 break;
               }
             } catch {}
+          }
+          if (tokenExpired) {
+            setSyncError("Meta token expired, reconnect on /login");
+            setShowOverlay(null);
+            setTimeout(() => setSyncError(null), 15000);
+            return;
+          }
+          // Poll timed out without ever seeing finishedAt and DB fallback
+          // didn't confirm success — tell the user to retry rather than
+          // faking "Synced".
+          if (!finishedCleanly) {
+            if (await didSyncActuallySucceed(startedAt)) {
+              markSyncSuccess();
+              return;
+            }
+            setSyncError("Sync is taking longer than expected. Try again in a minute.");
+            setShowOverlay(null);
+            setTimeout(() => setSyncError(null), 10000);
+            return;
           }
           if (pollErrors.length > 0 && adsFound === 0) {
             setSyncError(pollErrors[0]);
