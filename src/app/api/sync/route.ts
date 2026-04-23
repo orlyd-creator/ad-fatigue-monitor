@@ -214,8 +214,14 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
   revalidatePath("/ads");
 
   const tokenExpired = perAccount.some((a: any) => a.tokenExpired);
+  // Quick mode doesn't count ads (it only refreshes today's metrics on
+  // existing ads) so success is judged on errors + token validity only.
+  // Full mode requires at least one ad fetched to count as success.
+  const success = mode === "quick"
+    ? allErrors.length === 0 && !tokenExpired
+    : totalAds > 0 && allErrors.length === 0 && !tokenExpired;
   return {
-    success: totalAds > 0 && allErrors.length === 0 && !tokenExpired,
+    success,
     tokenExpired,
     adsFound: totalAds,
     metricsUpserted: totalMetrics,
