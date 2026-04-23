@@ -40,7 +40,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.META_APP_SECRET!,
       authorization: {
         params: {
-          scope: "email,ads_read,ads_management",
+          scope: "ads_read,ads_management",
         },
       },
     }),
