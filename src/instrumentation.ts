@@ -68,22 +68,71 @@ export async function register() {
         views_count INTEGER NOT NULL DEFAULT 0
       )
     `);
-    // ACCOUNT HYGIENE: if META_AD_ACCOUNT_ID is set, delete any stored
-    // account rows that don't match. Earlier OAuth flows pulled in the
-    // user's personal ad account alongside the configured Obol one, and
-    // the auto-sync kept hitting the empty personal account and raising
-    // "no campaigns" errors. One-time cleanup on boot.
+    // ACCOUNT HYGIENE + BOOTSTRAP: if META_AD_ACCOUNT_ID is set and it's
+    // NOT in the DB yet, we use whatever valid token we already have
+    // stored (from a previous OAuth on any of the user's other accounts)
+    // to call /me/adaccounts, confirm the configured account exists, and
+    // insert it with that same long-lived token. A single long-lived
+    // token is valid for every ad account the user admins, so swapping
+    // the row over is enough — no re-OAuth required.
+    //
+    // Then: delete any stored account rows that don't match the
+    // configured ID, so auto-sync stops hitting the empty personal
+    // account and silently failing.
     try {
       const configured = (process.env.META_AD_ACCOUNT_ID || "").replace(/^act_/, "").trim();
       if (configured) {
-        // Only delete stale rows if the configured account actually exists
-        // in the DB. Otherwise we'd wipe the only account row, leaving the
-        // user unable to use the app until they re-OAuth.
         const check = await client.execute({
           sql: `SELECT id FROM accounts WHERE id = ? LIMIT 1`,
           args: [configured],
         });
-        if (check.rows.length > 0) {
+        if (check.rows.length === 0) {
+          // Configured account missing — try to bootstrap it from any
+          // existing token row.
+          const tokenRow = await client.execute(
+            `SELECT id, access_token, token_expires_at, user_id FROM accounts ORDER BY updated_at DESC LIMIT 1`,
+          );
+          const t = tokenRow.rows[0] as any;
+          if (t && t.access_token && Number(t.token_expires_at) > Date.now()) {
+            try {
+              const res = await fetch(
+                `https://graph.facebook.com/v21.0/me/adaccounts?fields=name,account_id,account_status&limit=200&access_token=${t.access_token}`,
+              );
+              const data: any = await res.json();
+              if (Array.isArray(data?.data)) {
+                const match = data.data.find(
+                  (a: any) => String(a.account_id || "").replace(/^act_/, "") === configured,
+                );
+                if (match) {
+                  await client.execute({
+                    sql: `INSERT INTO accounts (id, name, access_token, token_expires_at, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+                          ON CONFLICT(id) DO UPDATE SET access_token = excluded.access_token, token_expires_at = excluded.token_expires_at, updated_at = excluded.updated_at`,
+                    args: [
+                      configured,
+                      match.name || "Ad Account",
+                      t.access_token,
+                      Number(t.token_expires_at),
+                      t.user_id,
+                      Date.now(),
+                      Date.now(),
+                    ],
+                  });
+                  console.log(`[instrumentation] Bootstrapped configured account act_${configured} from existing token`);
+                } else {
+                  console.warn(`[instrumentation] Configured act_${configured} NOT in /me/adaccounts for this token. Owner probably not admin on that account.`);
+                }
+              }
+            } catch (e: any) {
+              console.warn("[instrumentation] bootstrap /me/adaccounts failed:", e?.message || e);
+            }
+          }
+        }
+        // Re-check after possible bootstrap, then delete mismatched rows
+        const recheck = await client.execute({
+          sql: `SELECT id FROM accounts WHERE id = ? LIMIT 1`,
+          args: [configured],
+        });
+        if (recheck.rows.length > 0) {
           const del = await client.execute({
             sql: `DELETE FROM accounts WHERE id != ?`,
             args: [configured],
@@ -92,7 +141,7 @@ export async function register() {
             console.log(`[instrumentation] Removed ${del.rowsAffected} stale account row(s), kept only act_${configured}`);
           }
         } else {
-          console.log(`[instrumentation] Configured account ${configured} not in DB yet, skipping hygiene`);
+          console.log(`[instrumentation] Configured account ${configured} still not in DB after bootstrap attempt`);
         }
       }
     } catch (e) {

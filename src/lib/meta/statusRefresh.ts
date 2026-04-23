@@ -89,33 +89,39 @@ async function refreshOneAccount(accountId: string, token: string): Promise<void
       changed++;
     }
 
-    // PASS 2: RECONCILIATION. Meta sometimes drops deleted/archived ads
-    // from /ads responses entirely, so our DB keeps the last-known ACTIVE
-    // status forever. For every ad in OUR DB for this account that Meta
-    // did NOT mention, if we think it's ACTIVE, demote it to ARCHIVED.
-    // This is the missing piece: the audit earlier said filter was
-    // comprehensive, but Meta's behaviour on deleted ads is to simply
-    // omit them, not return them with effective_status=DELETED.
+    // PASS 2: RECONCILIATION — SAFEGUARDED.
+    // Previous version auto-archived every ad missing from Meta's response.
+    // That silently nuked Orly's entire dashboard when Meta paginated oddly
+    // or rate-limited mid-fetch. Now we skip reconciliation unless we're
+    // confident Meta returned a complete picture:
+    //   1. Pagination did NOT hit the 100-page cap (url is falsy after loop)
+    //   2. Meta returned at least 50% of the ads we have in DB for this account
+    // If either check fails, leave statuses alone — the next /api/sync run
+    // will write authoritative status from the fuller fetch.
     const dbAds = await db
       .select({ id: ads.id, status: ads.status })
       .from(ads)
       .where(eq(ads.accountId, accountId))
       .all();
-    const staleIds: string[] = [];
-    for (const a of dbAds) {
-      if (seenIds.has(a.id)) continue;
-      // Already known-non-running, leave alone.
-      if (a.status === "ARCHIVED" || a.status === "DELETED") continue;
-      staleIds.push(a.id);
-    }
+    const truncated = Boolean(url);
+    const coverage = dbAds.length > 0 ? all.length / dbAds.length : 1;
     let reconciled = 0;
-    if (staleIds.length > 0) {
-      // Batch update so we don't hammer the DB with N UPDATEs.
-      await db.run(sql`
-        UPDATE ads SET status = 'ARCHIVED', last_synced_at = ${now}
-        WHERE id IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})
-      `);
-      reconciled = staleIds.length;
+    if (truncated || coverage < 0.5) {
+      console.warn(`[statusRefresh] ${accountId}: SKIPPING reconciliation (truncated=${truncated}, coverage=${coverage.toFixed(2)}, Meta=${all.length}/DB=${dbAds.length}). Will rely on next full sync.`);
+    } else {
+      const staleIds: string[] = [];
+      for (const a of dbAds) {
+        if (seenIds.has(a.id)) continue;
+        if (a.status === "ARCHIVED" || a.status === "DELETED") continue;
+        staleIds.push(a.id);
+      }
+      if (staleIds.length > 0) {
+        await db.run(sql`
+          UPDATE ads SET status = 'ARCHIVED', last_synced_at = ${now}
+          WHERE id IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})
+        `);
+        reconciled = staleIds.length;
+      }
     }
     console.log(`[statusRefresh] ${accountId}: scanned ${all.length} ads, wrote ${changed}, reconciled ${reconciled} missing → ARCHIVED`);
   } catch (err) {
