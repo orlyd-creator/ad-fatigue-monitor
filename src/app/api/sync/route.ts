@@ -36,7 +36,7 @@ export function getSyncProgress(accountIds: string[], mode: "full" | "quick") {
   return progressByKey.get(key) || null;
 }
 
-async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
+async function runSync(accountIds: string[], mode: "full" | "quick" = "full", resetStatuses = false) {
   const lockKey = `${mode}:${accountIds.slice().sort().join(",")}`;
   const existing = activeSyncs.get(lockKey);
   if (existing) {
@@ -56,7 +56,7 @@ async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
     errors: [],
   };
   progressByKey.set(lockKey, progress);
-  const p = _runSyncInner(accountIds, mode)
+  const p = _runSyncInner(accountIds, mode, resetStatuses)
     .then((result: any) => {
       progress.finishedAt = Date.now();
       progress.success = result.success ?? (result.adsFound > 0 || (result.errors?.length ?? 0) === 0);
@@ -77,7 +77,7 @@ async function runSync(accountIds: string[], mode: "full" | "quick" = "full") {
   return p;
 }
 
-async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "full") {
+async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "full", resetStatuses = false) {
   const allAccounts = await db
     .select()
     .from(accounts)
@@ -89,6 +89,24 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
       success: false,
       error: "No account connected. Please click 'Connect with Facebook' on the login page first.",
     } as const;
+  }
+
+  // Optional one-shot heal: zero out every ad's status for these accounts
+  // before syncing, so the upsert below rewrites each one from Meta's current
+  // truth. Use when the DB is suspected to have stale ARCHIVED flags from a
+  // prior buggy reconciliation pass. Metrics rows are NOT touched — spend,
+  // CTR etc. are preserved.
+  if (resetStatuses && mode === "full") {
+    try {
+      const { sql } = await import("drizzle-orm");
+      const { ads } = await import("@/lib/db/schema");
+      for (const acctId of accountIds) {
+        await db.run(sql`UPDATE ads SET status = 'UNKNOWN' WHERE account_id = ${acctId}`);
+      }
+      console.log(`[sync] Reset statuses for ${accountIds.length} account(s) before resync`);
+    } catch (e: any) {
+      console.warn(`[sync] reset-statuses failed (non-fatal):`, e?.message || e);
+    }
   }
 
   let totalAds = 0;
@@ -241,6 +259,10 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const modeParam = url.searchParams.get("mode");
   const mode: "full" | "quick" = modeParam === "quick" ? "quick" : "full";
+  // ?reset=1 — one-shot heal: wipe every ad's status to UNKNOWN before
+  // the sync writes Meta's current truth back. Use when the DB is stale
+  // from a prior buggy archival pass. Metrics are untouched.
+  const resetStatuses = url.searchParams.get("reset") === "1";
 
   // QUICK mode: run synchronously and return the result (it's fast, ~5s).
   if (mode === "quick") {
@@ -256,7 +278,7 @@ export async function GET(req: NextRequest) {
   const already = activeSyncs.get(lockKey);
   if (!already) {
     // Swallow errors, they're recorded in the progress map anyway
-    runSync(allAccountIds, mode).catch(() => {});
+    runSync(allAccountIds, mode, resetStatuses).catch(() => {});
   }
   return NextResponse.json({
     mode,
