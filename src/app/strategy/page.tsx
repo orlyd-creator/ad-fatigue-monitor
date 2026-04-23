@@ -71,48 +71,52 @@ export default async function StrategyPage({
 
   // Process each ACTIVE ad, summaries use ALL-TIME metrics for fatigue scoring
   // (fatigue needs history) but display numbers are range-scoped to this month.
-  const adSummaries = await Promise.all(
-    allAds.map(async (ad) => {
-      const allMetrics = await db
-        .select()
-        .from(dailyMetrics)
-        .where(eq(dailyMetrics.adId, ad.id))
-        .orderBy(dailyMetrics.date)
-        .all();
+  //
+  // Batch-fetch all metrics in one query + group in memory. Previous N+1
+  // fired one query per ad which made Strategy take 10s+ on large accounts.
+  const allAdIdsStr = allAds.map(a => a.id);
+  const allMetricsForAds = allAdIdsStr.length === 0
+    ? []
+    : await db.select().from(dailyMetrics).where(inArray(dailyMetrics.adId, allAdIdsStr)).all();
+  const metricsByAdId = new Map<string, typeof allMetricsForAds>();
+  for (const m of allMetricsForAds) {
+    const arr = metricsByAdId.get(m.adId);
+    if (arr) arr.push(m);
+    else metricsByAdId.set(m.adId, [m]);
+  }
+  for (const arr of metricsByAdId.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
 
-      const fatigue = calculateFatigueScore(allMetrics, scoringSettings);
-
-      // Range-scoped totals so the numbers match Dashboard's this-month view.
-      const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
-      const totalSpend = rangeMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
-      const totalReach = rangeMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
-      const totalImpressions = rangeMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
-      const totalClicks = rangeMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
-      const avgCTR = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.ctr, 0) / rangeMetrics.length : 0;
-      const avgCPM = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpm, 0) / rangeMetrics.length : 0;
-      const avgFrequency = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.frequency, 0) / rangeMetrics.length : 0;
-      const avgCPC = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpc, 0) / rangeMetrics.length : 0;
-      const costPerResult = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.costPerAction, 0) / rangeMetrics.length : 0;
-
-      return {
-        id: ad.id,
-        adName: ad.adName,
-        campaignName: ad.campaignName,
-        status: ad.status,
-        fatigueScore: fatigue.fatigueScore,
-        stage: fatigue.stage,
-        totalSpend: Math.round(totalSpend * 100) / 100,
-        totalReach,
-        totalImpressions,
-        totalClicks,
-        avgCTR: Math.round(avgCTR * 100) / 100,
-        avgCPM: Math.round(avgCPM * 100) / 100,
-        avgFrequency: Math.round(avgFrequency * 100) / 100,
-        avgCPC: Math.round(avgCPC * 100) / 100,
-        costPerResult: Math.round(costPerResult * 100) / 100,
-      };
-    })
-  );
+  const adSummaries = allAds.map((ad) => {
+    const allMetrics = metricsByAdId.get(ad.id) ?? [];
+    const fatigue = calculateFatigueScore(allMetrics, scoringSettings);
+    const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
+    const totalSpend = rangeMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
+    const totalReach = rangeMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
+    const totalImpressions = rangeMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
+    const totalClicks = rangeMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
+    const avgCTR = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.ctr, 0) / rangeMetrics.length : 0;
+    const avgCPM = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpm, 0) / rangeMetrics.length : 0;
+    const avgFrequency = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.frequency, 0) / rangeMetrics.length : 0;
+    const avgCPC = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.cpc, 0) / rangeMetrics.length : 0;
+    const costPerResult = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.costPerAction, 0) / rangeMetrics.length : 0;
+    return {
+      id: ad.id,
+      adName: ad.adName,
+      campaignName: ad.campaignName,
+      status: ad.status,
+      fatigueScore: fatigue.fatigueScore,
+      stage: fatigue.stage,
+      totalSpend: Math.round(totalSpend * 100) / 100,
+      totalReach,
+      totalImpressions,
+      totalClicks,
+      avgCTR: Math.round(avgCTR * 100) / 100,
+      avgCPM: Math.round(avgCPM * 100) / 100,
+      avgFrequency: Math.round(avgFrequency * 100) / 100,
+      avgCPC: Math.round(avgCPC * 100) / 100,
+      costPerResult: Math.round(costPerResult * 100) / 100,
+    };
+  });
 
   // Build daily spend by ad (top 6 by total spend, last 30 days)
   const topAds = [...adSummaries].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 6);

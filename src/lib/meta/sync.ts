@@ -23,17 +23,37 @@ async function metaFetch(url: string, token: string, params: Record<string, stri
 
   console.log(`[meta] GET ${u.pathname}${u.search.replace(/access_token=[^&]+/, "access_token=***")}`);
 
-  const res = await fetch(u.toString());
-  const body = await res.json().catch(() => ({ error: { message: res.statusText } }));
-
-  if (!res.ok) {
-    const msg = body?.error?.message || res.statusText;
-    console.error(`[meta] ERROR ${res.status}: ${msg}`);
-    throw new Error(`Meta API ${res.status}: ${msg}`);
+  // Retry on transient failures (429 rate limit, 5xx server errors) with
+  // exponential backoff. Previous version threw on first 429 and broke the
+  // whole sync whenever Meta throttled briefly.
+  let lastBody: any = null;
+  let lastStatus = 0;
+  const maxAttempts = 4;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(u.toString()).catch(() => null);
+    if (!res) {
+      lastStatus = 0;
+    } else {
+      const body = await res.json().catch(() => ({ error: { message: res.statusText } }));
+      if (res.ok) {
+        console.log(`[meta] OK, ${Array.isArray(body?.data) ? body.data.length + " items" : "object"}`);
+        return body;
+      }
+      lastStatus = res.status;
+      lastBody = body;
+      const subCode = body?.error?.code;
+      const transient = res.status === 429 || res.status >= 500 || subCode === 4 || subCode === 17 || subCode === 32 || subCode === 613;
+      if (!transient) break;
+    }
+    if (attempt < maxAttempts - 1) {
+      const backoff = 500 * Math.pow(2, attempt);
+      console.warn(`[meta] transient failure (status ${lastStatus}), retry ${attempt + 1}/${maxAttempts - 1} in ${backoff}ms`);
+      await delay(backoff);
+    }
   }
-
-  console.log(`[meta] OK, ${Array.isArray(body?.data) ? body.data.length + " items" : "object"}`);
-  return body;
+  const msg = lastBody?.error?.message || `HTTP ${lastStatus}`;
+  console.error(`[meta] ERROR ${lastStatus} after ${maxAttempts} attempts: ${msg}`);
+  throw new Error(`Meta API ${lastStatus}: ${msg}`);
 }
 
 /** Split [since, until] (YYYY-MM-DD inclusive) into consecutive windows of up to `days` days. */
@@ -69,12 +89,21 @@ async function paginateAll(url: string, token: string, params: Record<string, st
     await delay(300);
     page++;
     console.log(`[meta] Paginating page ${page}...`);
-    const res = await fetch(next);
-    if (!res.ok) {
-      console.warn(`[meta] Pagination stopped at page ${page} (HTTP ${res.status}), some data may be missing`);
+    // Retry each page on transient failures so a single 429 doesn't
+    // silently drop the rest of a large account's ads/insights.
+    let pageRes: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const r = await fetch(next).catch(() => null);
+      if (r && r.ok) { pageRes = r; break; }
+      const status = r?.status ?? 0;
+      if (r && status !== 429 && status < 500) { pageRes = r; break; }
+      if (attempt < 2) await delay(500 * Math.pow(2, attempt));
+    }
+    if (!pageRes || !pageRes.ok) {
+      console.warn(`[meta] Pagination stopped at page ${page} (HTTP ${pageRes?.status ?? "network"}), some data may be missing`);
       break;
     }
-    const data = await res.json();
+    const data = await pageRes.json();
     all.push(...(data.data || []));
     next = data.paging?.next;
   }

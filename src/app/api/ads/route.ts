@@ -33,26 +33,32 @@ export async function GET() {
   // Get ads from ALL of user's accounts
   const allAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();
 
-  const results = await Promise.all(allAds.map(async (ad) => {
-    const metrics = await db
-      .select()
-      .from(dailyMetrics)
-      .where(eq(dailyMetrics.adId, ad.id))
-      .orderBy(dailyMetrics.date)
-      .all();
+  // Batch-load metrics for every ad in ONE query, group in memory. Previous
+  // N+1 fired one query per ad which made this route 5-10x slower on
+  // accounts with 1000+ ads.
+  const adIds = allAds.map(a => a.id);
+  const metricsAll = adIds.length === 0
+    ? []
+    : await db.select().from(dailyMetrics).where(inArray(dailyMetrics.adId, adIds)).all();
+  const metricsByAd = new Map<string, typeof metricsAll>();
+  for (const m of metricsAll) {
+    const arr = metricsByAd.get(m.adId);
+    if (arr) arr.push(m);
+    else metricsByAd.set(m.adId, [m]);
+  }
+  for (const arr of metricsByAd.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
 
+  const results = allAds.map((ad) => {
+    const metrics = metricsByAd.get(ad.id) ?? [];
     const fatigue = calculateFatigueScore(metrics, scoringSettings);
-
-    // Get last 7 days of metrics for sparklines
     const recentMetrics = metrics.slice(-7);
-
     return {
       ...ad,
       fatigue,
       recentMetrics,
       totalDays: metrics.length,
     };
-  }));
+  });
 
   // Sort by fatigue score descending (worst first)
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);

@@ -72,15 +72,22 @@ async function loadAdDataForInsights(accountIds: string[]): Promise<AdData[]> {
 
   const activeAds = allAds.filter((a) => a.status === "ACTIVE");
 
-  const adDataList: AdData[] = await Promise.all(
-    activeAds.map(async (ad) => {
-      const metrics = await db
-        .select()
-        .from(dailyMetrics)
-        .where(eq(dailyMetrics.adId, ad.id))
-        .orderBy(dailyMetrics.date)
-        .all();
+  // Batch-load metrics for all active ads in one query. Previous N+1 would
+  // fire one query per ad.
+  const activeAdIds = activeAds.map(a => a.id);
+  const metricsBulk = activeAdIds.length === 0
+    ? []
+    : await db.select().from(dailyMetrics).where(inArray(dailyMetrics.adId, activeAdIds)).all();
+  const metricsByAdId = new Map<string, typeof metricsBulk>();
+  for (const m of metricsBulk) {
+    const arr = metricsByAdId.get(m.adId);
+    if (arr) arr.push(m);
+    else metricsByAdId.set(m.adId, [m]);
+  }
+  for (const arr of metricsByAdId.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
 
+  const adDataList: AdData[] = activeAds.map((ad) => {
+      const metrics = metricsByAdId.get(ad.id) ?? [];
       const fatigue = calculateFatigueScore(metrics, scoringSettings);
 
       const recent = metrics.slice(-7);
@@ -137,8 +144,7 @@ async function loadAdDataForInsights(accountIds: string[]): Promise<AdData[]> {
         baselineCPM: Math.round(baselineCPM * 100) / 100,
         recentCTRs,
       };
-    })
-  );
+    });
 
   return adDataList;
 }

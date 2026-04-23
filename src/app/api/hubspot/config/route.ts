@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
+import { auth } from "@/lib/auth";
 
 // Ensure table exists with all columns
 async function ensureTable() {
@@ -32,6 +33,8 @@ async function ensureTable() {
 }
 
 export async function GET() {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await ensureTable();
   try {
     const row = await db.get<Record<string, any>>(sql`SELECT * FROM hubspot_config WHERE id = 1`);
@@ -58,6 +61,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await ensureTable();
     const body = await req.json();

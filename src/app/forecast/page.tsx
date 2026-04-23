@@ -108,29 +108,34 @@ export default async function ForecastPage() {
   const activeAds = allAdsRaw.filter(
     (a) => a.status === "ACTIVE" && !a.id.startsWith("__unattributed_"),
   );
-  const adProjections = await Promise.all(
-    activeAds.map(async (ad) => {
-      const adMetrics = metricsRaw
-        .filter((m) => m.adId === ad.id)
-        .sort((a, b) => a.date.localeCompare(b.date));
-      const fatigue = calculateFatigueScore(adMetrics, DEFAULT_SETTINGS);
-      const monthMetrics = adMetrics.filter((m) => m.date >= thisMonthStart);
-      const monthSpend = monthMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
-      const adDailyRate = dayOfMonth > 0 ? monthSpend / dayOfMonth : 0;
-      const projectedEomSpend = Math.round((monthSpend + adDailyRate * daysRemaining) * 100) / 100;
-      return {
-        id: ad.id,
-        adName: ad.adName,
-        campaignName: ad.campaignName,
-        fatigueScore: fatigue.fatigueScore,
-        stage: fatigue.stage as FatigueStage,
-        predictedDaysToFatigue: fatigue.predictedDaysToFatigue,
-        fatigueVelocity: fatigue.fatigueVelocity,
-        monthSpend: Math.round(monthSpend * 100) / 100,
-        projectedEomSpend,
-      };
-    }),
-  );
+  // Pre-group metrics by ad to turn O(ads × metrics) into O(metrics).
+  const metricsByAd = new Map<string, typeof metricsRaw>();
+  for (const m of metricsRaw) {
+    const arr = metricsByAd.get(m.adId);
+    if (arr) arr.push(m);
+    else metricsByAd.set(m.adId, [m]);
+  }
+  for (const arr of metricsByAd.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
+
+  const adProjections = activeAds.map((ad) => {
+    const adMetrics = metricsByAd.get(ad.id) ?? [];
+    const fatigue = calculateFatigueScore(adMetrics, DEFAULT_SETTINGS);
+    const monthMetrics = adMetrics.filter((m) => m.date >= thisMonthStart);
+    const monthSpend = monthMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
+    const adDailyRate = dayOfMonth > 0 ? monthSpend / dayOfMonth : 0;
+    const projectedEomSpend = Math.round((monthSpend + adDailyRate * daysRemaining) * 100) / 100;
+    return {
+      id: ad.id,
+      adName: ad.adName,
+      campaignName: ad.campaignName,
+      fatigueScore: fatigue.fatigueScore,
+      stage: fatigue.stage as FatigueStage,
+      predictedDaysToFatigue: fatigue.predictedDaysToFatigue,
+      fatigueVelocity: fatigue.fatigueVelocity,
+      monthSpend: Math.round(monthSpend * 100) / 100,
+      projectedEomSpend,
+    };
+  });
 
   const atRisk = [...adProjections]
     .filter((a) => a.fatigueScore >= 50 || (a.fatigueScore >= 30 && a.fatigueVelocity > 0.5))

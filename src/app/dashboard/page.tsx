@@ -78,27 +78,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Get last synced time from ads
   const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
 
-  const results = await Promise.all(allAds.map(async (ad) => {
-    const allMetrics = await db
-      .select()
-      .from(dailyMetrics)
-      .where(eq(dailyMetrics.adId, ad.id))
-      .orderBy(dailyMetrics.date)
-      .all();
+  // Batch-load metrics for all active ads in one query, then group in
+  // memory. Previous version fired one query per ad (1000+ round-trips to
+  // Turso on large accounts) which multiplied page latency by ~5-10x.
+  const activeAdIds = allAds.map(a => a.id);
+  const allMetricsForAds = activeAdIds.length === 0
+    ? []
+    : await db.select().from(dailyMetrics).where(inArray(dailyMetrics.adId, activeAdIds)).all();
+  const metricsByAdId = new Map<string, typeof allMetricsForAds>();
+  for (const m of allMetricsForAds) {
+    const arr = metricsByAdId.get(m.adId);
+    if (arr) arr.push(m);
+    else metricsByAdId.set(m.adId, [m]);
+  }
+  // Sort once per ad for the fatigue calculator's date-based logic.
+  for (const arr of metricsByAdId.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
 
-    // Use all metrics for fatigue scoring (needs full history)
+  const results = allAds.map((ad) => {
+    const allMetrics = metricsByAdId.get(ad.id) ?? [];
     const fatigue = calculateFatigueScore(allMetrics, scoringSettings);
-
-    // Filter to range for display metrics
     const rangeMetrics = allMetrics.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
     const recentMetrics = rangeMetrics.slice(-7);
-
-    // Compute summary stats for the range
     const totalSpend = rangeMetrics.reduce((s, m) => s + (m.spend ?? 0), 0);
     const totalImpressions = rangeMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
     const totalClicks = rangeMetrics.reduce((s, m) => s + (m.clicks ?? 0), 0);
     const avgCTR = rangeMetrics.length > 0 ? rangeMetrics.reduce((s, m) => s + m.ctr, 0) / rangeMetrics.length : 0;
-
     return {
       id: ad.id,
       adName: ad.adName,
@@ -117,7 +121,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       rangeClicks: totalClicks,
       rangeAvgCTR: Math.round(avgCTR * 100) / 100,
     };
-  }));
+  });
 
   // Sort worst first
   results.sort((a, b) => b.fatigue.fatigueScore - a.fatigue.fatigueScore);
