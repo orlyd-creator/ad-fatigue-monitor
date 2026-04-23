@@ -11,6 +11,7 @@ import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import { DEFAULT_SETTINGS, type FatigueStage } from "@/lib/fatigue/types";
 import ForecastClient from "./ForecastClient";
 import FreshnessGuard from "@/components/FreshnessGuard";
+import ForecastPlanSection from "@/components/ForecastPlanSection";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -157,6 +158,9 @@ export default async function ForecastPage() {
           campaigns: liveBudget.campaigns,
         } : null}
       />
+      <div className="px-8 pb-12 max-w-6xl mx-auto">
+        <ForecastPlanSection isPublic={!!session.isPublic} />
+      </div>
     </div>
   );
 }

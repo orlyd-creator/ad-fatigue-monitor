@@ -180,8 +180,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const dailySpend = Array.from(dailySpendMap.entries()).map(([date, spend]) => ({ date, spend }));
 
   // --- Period-over-period comparison ---
-  const prevRangeEnd = isCustom ? format(subDays(new Date(customFrom), 1), "yyyy-MM-dd") : format(subDays(now, rangeDays), "yyyy-MM-dd");
-  const prevRangeStart = format(subDays(new Date(prevRangeEnd), rangeDays - 1), "yyyy-MM-dd");
+  // Parse YYYY-MM-DD with explicit midday time so timezone offsets can't
+  // push the boundary off by one day. Otherwise new Date("2026-04-01") is
+  // UTC midnight, which renders as 2026-03-31 in any negative offset.
+  const prevRangeEnd = isCustom
+    ? format(subDays(new Date(customFrom + "T12:00:00"), 1), "yyyy-MM-dd")
+    : format(subDays(now, rangeDays), "yyyy-MM-dd");
+  const prevRangeStart = format(subDays(new Date(prevRangeEnd + "T12:00:00"), rangeDays - 1), "yyyy-MM-dd");
   const allMetricsPrev = (await db
     .select()
     .from(dailyMetrics)
