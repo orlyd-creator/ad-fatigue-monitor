@@ -68,6 +68,25 @@ export async function register() {
         views_count INTEGER NOT NULL DEFAULT 0
       )
     `);
+
+    // ads: backfill creative columns onto pre-existing local dev databases
+    // bootstrapped before the schema added them. Prod (Turso) already has
+    // these. We catch "duplicate column" errors so this stays idempotent.
+    for (const col of [
+      `image_url TEXT`,
+      `ad_body TEXT`,
+      `ad_headline TEXT`,
+      `ad_link_url TEXT`,
+    ]) {
+      try {
+        await client.execute(`ALTER TABLE ads ADD COLUMN ${col}`);
+        console.log(`[instrumentation] Added ads.${col.split(" ")[0]}`);
+      } catch (e: any) {
+        if (!/duplicate column/i.test(e?.message ?? "")) {
+          console.warn(`[instrumentation] ALTER TABLE ads ADD ${col} failed:`, e?.message || e);
+        }
+      }
+    }
     // ACCOUNT HYGIENE + BOOTSTRAP: if META_AD_ACCOUNT_ID is set and it's
     // NOT in the DB yet, we use whatever valid token we already have
     // stored (from a previous OAuth on any of the user's other accounts)

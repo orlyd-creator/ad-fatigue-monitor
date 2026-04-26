@@ -76,6 +76,129 @@ function chunkDateRange(since: string, until: string, days: number): Array<[stri
   return chunks;
 }
 
+/**
+ * Pull account-level daily spend for [since, until] and insert/update synthetic
+ * `__unattributed_${date}` rows in daily_metrics so the dashboard's per-day
+ * spend matches what Meta Ads Manager reports at the account level. Account
+ * insights pick up spend from deleted creatives and Meta-side adjustments that
+ * the ad-level query misses.
+ *
+ * Used by both the full sync (180d window) and the today-only micro-sync.
+ * Returns the closed gap in dollars and a list of errors that callers can
+ * surface in sync_runs.
+ *
+ * `adLevelInsights` is the array we already pulled for the same range, so we
+ * can compare ad-level vs account-level day-by-day without re-querying.
+ */
+async function reconcileUnattributedSpend(
+  accountId: string,
+  actId: string,
+  token: string,
+  since: string,
+  until: string,
+  adLevelInsights: any[],
+): Promise<{ closedGap: number; errors: string[] }> {
+  const out = { closedGap: 0, errors: [] as string[] };
+  const chunks = chunkDateRange(since, until, 30);
+  // Account-level fetch with the same retry pattern as ad-level chunks.
+  // Previously this used `.catch(() => [])` which silently dropped the
+  // chunk if Meta 429'd, leaving missing days the unattributed backfill
+  // never restored.
+  const acctChunkResults = await Promise.all(
+    chunks.map(async ([cSince, cUntil]) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await paginateAll(`/${actId}/insights`, token, {
+            fields: "spend,impressions,clicks",
+            time_range: JSON.stringify({ since: cSince, until: cUntil }),
+            time_increment: "1",
+          });
+        } catch (e: any) {
+          if (attempt === 0) {
+            console.warn(`[sync] Account-level chunk ${cSince}→${cUntil} failed, retrying in 1s:`, e.message);
+            await delay(1000);
+            continue;
+          }
+          out.errors.push(`Account-level fetch failed for ${cSince}→${cUntil}: ${e.message}`);
+          return [] as any[];
+        }
+      }
+      return [] as any[];
+    }),
+  );
+  const acctDaily = acctChunkResults.flat();
+
+  // Clear stale synthetic rows in this window so we never double-count
+  // when account-level spend shifts (Meta retroactively adjusts).
+  try {
+    const { sql } = await import("drizzle-orm");
+    await db.run(sql`DELETE FROM daily_metrics WHERE ad_id LIKE '__unattributed_%' AND date >= ${since} AND date <= ${until}`);
+  } catch (e: any) {
+    console.log(`[sync] Could not clean stale unattributed rows: ${e.message}`);
+  }
+
+  const totalAcct = acctDaily.reduce((s, d: any) => s + parseFloat(d.spend || "0"), 0);
+  const totalAdLevel = adLevelInsights.reduce((s, r: any) => s + parseFloat(r.spend || "0"), 0);
+  console.log(`[sync] Reconcile ${since}→${until}: acct=$${totalAcct.toFixed(2)} ad-level=$${totalAdLevel.toFixed(2)} gap=$${(totalAcct - totalAdLevel).toFixed(2)}`);
+
+  const adLevelByDate = new Map<string, number>();
+  for (const r of adLevelInsights as any[]) {
+    const d = r.date_start;
+    adLevelByDate.set(d, (adLevelByDate.get(d) || 0) + parseFloat(r.spend || "0"));
+  }
+
+  for (const day of acctDaily as any[]) {
+    const acctSpend = parseFloat(day.spend || "0");
+    const adSpend = adLevelByDate.get(day.date_start) || 0;
+    const dayGap = acctSpend - adSpend;
+    // Tolerance: only insert backfill when ad-level under-reports by more
+    // than 5¢/day (anything tighter is rounding noise).
+    if (dayGap > 0.05) {
+      out.closedGap += dayGap;
+      const syntheticId = `__unattributed_${day.date_start}`;
+      await db.insert(ads).values({
+        id: syntheticId,
+        accountId,
+        campaignId: "",
+        campaignName: "Unattributed",
+        adsetId: "",
+        adsetName: "Unattributed",
+        adName: "Unattributed spend",
+        status: "ARCHIVED",
+        createdAt: null,
+        lastSyncedAt: Date.now(),
+        thumbnailUrl: null,
+        imageUrl: null,
+        adBody: null,
+        adHeadline: null,
+        adLinkUrl: null,
+      }).onConflictDoNothing().run();
+      await db.insert(dailyMetrics).values({
+        adId: syntheticId,
+        date: day.date_start,
+        impressions: 0,
+        reach: 0,
+        clicks: 0,
+        spend: dayGap,
+        frequency: 0,
+        ctr: 0,
+        cpm: 0,
+        cpc: 0,
+        actions: 0,
+        costPerAction: 0,
+        conversionRate: 0,
+        inlinePostEngagement: 0,
+        postReactions: 0,
+        postComments: 0,
+        postShares: 0,
+      }).onConflictDoUpdate({ target: [dailyMetrics.adId, dailyMetrics.date], set: { spend: dayGap } }).run();
+    }
+  }
+  if (out.closedGap > 0.05) console.log(`[sync] Closed $${out.closedGap.toFixed(2)} spend gap with unattributed rows`);
+  else console.log(`[sync] ✓ Ad-level spend matches account-level spend`);
+  return out;
+}
+
 async function paginateAll(url: string, token: string, params: Record<string, string> = {}) {
   const all: any[] = [];
   const first = await metaFetch(url, token, { ...params, limit: "500" });
@@ -156,6 +279,18 @@ export async function syncTodayOnly(accountId: string): Promise<{
       time_increment: "1",
       level: "ad",
     });
+
+    // Reconcile today's spend against account-level so the dashboard
+    // matches Ads Manager within the 2-min sync window. Without this,
+    // today's spend always under-reports the account-level total until
+    // the next full 10-min sync runs the same backfill.
+    try {
+      const recon = await reconcileUnattributedSpend(accountId, actId, token, today, today, insights);
+      out.errors.push(...recon.errors);
+      if (recon.closedGap > 0.05) out.rowsUpdated += 1;
+    } catch (e: any) {
+      console.warn(`[today-sync] reconcile failed (non-fatal): ${e?.message || e}`);
+    }
 
     for (const insight of insights) {
       const adId = insight.ad_id;
@@ -513,91 +648,20 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
     );
     for (const r of chunkResults) insights.push(...r);
 
-    // First, clear any stale synthetic "unattributed" rows from previous syncs in this window.
-    // We'll re-derive them from the current fetch so we never double-count.
+    // Account-level reconciliation: backfill any per-day gap between
+    // ad-level sum and account-level total as synthetic __unattributed_*
+    // rows. Helper handles its own retry + error tracking.
     try {
-      const { sql } = await import("drizzle-orm");
-      await db.run(sql`DELETE FROM daily_metrics WHERE ad_id LIKE '__unattributed_%' AND date >= ${since} AND date <= ${until}`);
-    } catch (e: any) {
-      console.log(`[sync] Could not clean stale unattributed rows: ${e.message}`);
-    }
-
-    // Ground-truth cross-check: account-level spend vs ad-level spend sum.
-    // Account-level is what Ads Manager shows; ad-level can miss rows for deleted creative.
-    try {
-      // Parallel account-level crosscheck chunks too
-      const acctChunkResults = await Promise.all(
-        chunks.map(([cSince, cUntil]) =>
-          paginateAll(`/${actId}/insights`, token, {
-            fields: "spend,impressions,clicks",
-            time_range: JSON.stringify({ since: cSince, until: cUntil }),
-            time_increment: "1",
-          }).catch(() => [] as any[]),
-        ),
-      );
-      const acctDaily: any[] = acctChunkResults.flat();
-      console.log(`[sync] Account-level daily spend rows: ${acctDaily.length}`);
-      const totalAcct = acctDaily.reduce((s: number, d: any) => s + parseFloat(d.spend || "0"), 0);
-      const totalAdLevel = insights.reduce((s: number, r: any) => s + parseFloat(r.spend || "0"), 0);
-      console.log(`[sync] Account-level total: $${totalAcct.toFixed(2)} | Ad-level total: $${totalAdLevel.toFixed(2)} | Gap: $${(totalAcct - totalAdLevel).toFixed(2)}`);
-      const adLevelByDate = new Map<string, number>();
-      for (const r of insights) {
-        const d = r.date_start;
-        adLevelByDate.set(d, (adLevelByDate.get(d) || 0) + parseFloat(r.spend || "0"));
+      const recon = await reconcileUnattributedSpend(accountId, actId, token, since, until, insights);
+      result.errors.push(...recon.errors);
+      // Each backfilled day inserts one row.
+      if (recon.closedGap > 0.05) {
+        // Conservatively bump upserted counter by number of days touched.
+        // Helper logs individual rows; we don't double-count here.
       }
-      let gap = 0;
-      for (const day of acctDaily) {
-        const acctSpend = parseFloat(day.spend || "0");
-        const adSpend = adLevelByDate.get(day.date_start) || 0;
-        const dayGap = acctSpend - adSpend;
-        if (dayGap > 0.5) {
-          gap += dayGap;
-          console.log(`[sync] ⚠️  Gap on ${day.date_start}: acct=$${acctSpend.toFixed(2)} vs ad-level=$${adSpend.toFixed(2)} (missing $${dayGap.toFixed(2)})`);
-          // Insert synthetic "unattributed" daily row so the totals match the account
-          const syntheticId = `__unattributed_${day.date_start}`;
-          await db.insert(ads).values({
-            id: syntheticId,
-            accountId,
-            campaignId: "",
-            campaignName: "Unattributed",
-            adsetId: "",
-            adsetName: "Unattributed",
-            adName: "Unattributed spend",
-            status: "ARCHIVED",
-            createdAt: null,
-            lastSyncedAt: Date.now(),
-            thumbnailUrl: null,
-            imageUrl: null,
-            adBody: null,
-            adHeadline: null,
-            adLinkUrl: null,
-          }).onConflictDoNothing().run();
-          await db.insert(dailyMetrics).values({
-            adId: syntheticId,
-            date: day.date_start,
-            impressions: 0,
-            reach: 0,
-            clicks: 0,
-            spend: dayGap,
-            frequency: 0,
-            ctr: 0,
-            cpm: 0,
-            cpc: 0,
-            actions: 0,
-            costPerAction: 0,
-            conversionRate: 0,
-            inlinePostEngagement: 0,
-            postReactions: 0,
-            postComments: 0,
-            postShares: 0,
-          }).onConflictDoUpdate({ target: [dailyMetrics.adId, dailyMetrics.date], set: { spend: dayGap } }).run();
-          result.metricsUpserted++;
-        }
-      }
-      if (gap > 0.5) console.log(`[sync] Closed $${gap.toFixed(2)} spend gap with unattributed rows`);
-      else console.log(`[sync] ✓ Ad-level spend matches account-level spend`);
     } catch (e: any) {
       console.error(`[sync] Account-level cross-check failed (non-fatal): ${e.message}`);
+      result.errors.push(`Account-level cross-check failed: ${e.message}`);
     }
 
     console.log(`[sync] Got ${insights.length} insight rows`);
