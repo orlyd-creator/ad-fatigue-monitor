@@ -113,11 +113,20 @@ export default function Sidebar({ collapsed, onToggle, onMobileClose, isPublic =
 
   if (pathname === "/login" || pathname === "/") return null;
 
+  // Routes a public viewer cannot access — server-side redirects to /login.
+  // We intercept the click here so the permission popup actually persists
+  // (otherwise the Sidebar unmounts on /login and the popup flashes for ~0.1s).
+  const PUBLIC_BLOCKED = new Set<string>(["/settings", "/team"]);
+
   const handleNav = (href: string) => {
     // Block navigation while a sync is in flight, Orly kept losing mid-sync
     // state by clicking into Dashboard/Executive before the overlay cleared.
     if (showOverlay === "syncing") return;
     if (pathname === href) return;
+    if (isPublic && PUBLIC_BLOCKED.has(href)) {
+      setShowPermPrompt(true);
+      return;
+    }
     setNavigating(href);
     onMobileClose?.();
     // Use startTransition for instant visual feedback while navigating

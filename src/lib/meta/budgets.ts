@@ -72,9 +72,12 @@ export async function getAccountBudget(
       /* currency is cosmetic */
     }
 
-    // 2) Active campaigns with their daily_budget / lifetime_budget
+    // 2) Active campaigns with their daily_budget / lifetime_budget.
+    //    effective_status takes a JSON array — must be URL-encoded or Meta
+    //    400s with "Invalid parameter" intermittently. (Audit 2026-05-03.)
+    const activeFilter = encodeURIComponent(JSON.stringify(["ACTIVE"]));
     const campaignRes = await fetch(
-      `https://graph.facebook.com/v21.0/${actId}/campaigns?fields=id,name,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time&effective_status=["ACTIVE"]&limit=200&access_token=${token}`,
+      `https://graph.facebook.com/v21.0/${actId}/campaigns?fields=id,name,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time&effective_status=${activeFilter}&limit=200&access_token=${token}`,
     );
     if (!campaignRes.ok) {
       errors.push(`campaigns fetch ${campaignRes.status}`);
@@ -103,7 +106,7 @@ export async function getAccountBudget(
       // Sum active adsets
       try {
         const asRes = await fetch(
-          `https://graph.facebook.com/v21.0/${c.id}/adsets?fields=id,name,status,effective_status,daily_budget,lifetime_budget&effective_status=["ACTIVE"]&limit=200&access_token=${token}`,
+          `https://graph.facebook.com/v21.0/${c.id}/adsets?fields=id,name,status,effective_status,daily_budget,lifetime_budget&effective_status=${activeFilter}&limit=200&access_token=${token}`,
         );
         if (!asRes.ok) {
           errors.push(`adsets ${c.id} ${asRes.status}`);

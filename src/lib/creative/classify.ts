@@ -1,202 +1,177 @@
 /**
- * Heuristic creative classifier. No LLM call — pattern matching on the copy
- * and ad/adset/campaign names we already store. Cheap, fast, deterministic.
+ * Creative classifier for OD's account specifically. Reads signal from
+ * ad/adset/campaign NAMES (not body/headline, because the Meta sync isn't
+ * populating those fields for this account).
  *
- * Buckets are deliberately coarse so cluster sizes stay meaningful when you
- * only have ~50-200 ads in the account.
+ * Dimensions tuned to the actual naming convention seen in OD's account:
+ *   - "claude for cash flow dark design broad"
+ *   - "GPT, now for cash flow"
+ *   - "UGC ad-Okay, wait"
+ *   - "if this is how ur tracking cash flow, upgrade"
+ *   - "Cfos run on Obol ad"
+ *   - "from 2 hours to 2 min"
  */
 
 import type { Ad } from "@/lib/db/schema";
 
-export type Format =
-  | "video"
-  | "static"
-  | "carousel"
-  | "collection"
-  | "unknown";
-
-export type Hook =
-  | "price"        // discount, %, $, "save", "free"
-  | "problem"      // "tired of", "struggling", "stop"
-  | "social_proof" // "trusted by", "join", "loved by", "rated", reviews
-  | "urgency"      // "today", "limited", "ends", "now", "last chance"
-  | "question"     // copy starts with or contains a leading question
-  | "story"        // first-person narrative, "I", "we", "our journey"
-  | "feature"      // default for product/feature-led copy
-  | "unclassified";
-
-export type CTA =
-  | "book"      // book a demo, schedule, meet
-  | "try"       // try free, start trial
-  | "buy"       // buy, shop, order
-  | "learn"     // learn more, see how, read
-  | "signup"    // sign up, join, get started
-  | "download"  // download, get the app
+export type Theme =
+  | "ai_brand"        // GPT / Claude / Gemini / ChatGPT — "tool-led" framing
+  | "outcome"         // "from X to Y", replace, automate, save, "in minutes"
+  | "ugc"             // creator content, person name, "okay wait"
+  | "product"         // Obol / Cfos / qbo / specific product term
+  | "problem"         // "if this is how", "you're missing", "tired of"
   | "other";
 
-export type Length = "short" | "medium" | "long" | "none";
+export type Treatment =
+  | "dark"
+  | "studio"
+  | "plain"          // "no design"
+  | "ugc"            // overlap with theme but tracked separately
+  | "default";
+
+export type CtaStyle =
+  | "get_started"    // GET STARTED, start using, start
+  | "demo"           // get a demo, book a demo
+  | "upgrade"        // upgrade, replace, switch
+  | "form_test"      // explicit "form test" / "A/B test with form"
+  | "default";
+
+export type Audience =
+  | "broad"
+  | "retargeting"
+  | "lookalike"
+  | "custom"
+  | "interest"
+  | "other";
 
 export interface ClassifiedAd {
   adId: string;
-  format: Format;
-  hook: Hook;
-  cta: CTA;
-  length: Length;
-  bodyChars: number;
-  audience: string;       // parsed from adsetName
-  objective: string;      // parsed from campaignName
-  patternKey: string;     // canonical key like "video|price"
-  patternLabel: string;   // human label for the pattern
+  theme: Theme;
+  treatment: Treatment;
+  ctaStyle: CtaStyle;
+  audience: Audience;
+  isCopy: boolean;          // names ending with "Copy" / "Copy 2" — duplicate of a winner
+  themeLabel: string;
+  treatmentLabel: string;
+  ctaLabel: string;
+  audienceLabel: string;
+  patternKey: string;       // theme|treatment — the primary cluster key
+  patternLabel: string;
 }
+
+const THEME_LABEL: Record<Theme, string> = {
+  ai_brand: "AI-tool-led",
+  outcome: "Outcome-led",
+  ugc: "UGC / creator",
+  product: "Product-led",
+  problem: "Problem-led",
+  other: "Other",
+};
+
+const TREATMENT_LABEL: Record<Treatment, string> = {
+  dark: "Dark design",
+  studio: "Studio shot",
+  plain: "No-design / raw",
+  ugc: "UGC visual",
+  default: "Default visual",
+};
+
+const CTA_LABEL: Record<CtaStyle, string> = {
+  get_started: "Get started",
+  demo: "Book a demo",
+  upgrade: "Upgrade / replace",
+  form_test: "Form A/B test",
+  default: "No explicit CTA",
+};
+
+const AUDIENCE_LABEL: Record<Audience, string> = {
+  broad: "Broad",
+  retargeting: "Retargeting",
+  lookalike: "Lookalike",
+  custom: "Custom audience",
+  interest: "Interest",
+  other: "Unspecified",
+};
 
 const lc = (s: string | null | undefined) => (s || "").toLowerCase();
 
-function detectFormat(ad: Ad): Format {
-  const name = lc(ad.adName);
-  // Common naming conventions in Meta accounts.
-  if (/\b(vid|video|reel|tiktok|ugc|movie|mp4)\b/.test(name)) return "video";
-  if (/\b(carousel|carousels|carou|slide)\b/.test(name)) return "carousel";
-  if (/\b(static|image|img|jpeg|jpg|png|graphic)\b/.test(name)) return "static";
-  if (/\b(collection|catalog|cat)\b/.test(name)) return "collection";
-
-  // Soft tells from headline/body length: very short body + image url often = static
-  const hasImage = !!(ad.imageUrl || ad.thumbnailUrl);
-  const body = ad.adBody || "";
-  if (hasImage && body.length < 40) return "static";
-  return "unknown";
-}
-
-function detectHook(ad: Ad): Hook {
-  const text = `${ad.adHeadline || ""} ${ad.adBody || ""}`.toLowerCase().trim();
-  if (!text) return "unclassified";
-
-  // Order matters — first match wins. Price/urgency are most distinctive.
-  if (/(\d+\s*%\s*off|save\s+\$?\d|\$\d+\s*off|discount|free\s+trial|free\s+for|no\s+cost)/.test(text)) return "price";
-  if (/(today\s+only|limited\s+time|ends\s+(today|tonight|soon)|last\s+chance|act\s+now|while\s+supplies)/.test(text)) return "urgency";
-  if (/(tired\s+of|struggling\s+with|stop\s+(wasting|losing|paying)|fed\s+up|frustrated)/.test(text)) return "problem";
-  if (/(trusted\s+by|loved\s+by|rated\s+\d|join\s+\d|\d+\s*\+\s*(customers|users|teams|companies)|over\s+\d+\s+(customers|users|companies))/.test(text)) return "social_proof";
-
-  // Question hook: copy leads with or contains a clear leading question.
-  const firstSentence = text.split(/[.!?]/)[0] || "";
-  if (firstSentence.includes("?") || /^(what|why|how|are\s+you|do\s+you|ever\s+wonder)\b/.test(firstSentence)) return "question";
-
-  if (/^(i\s+|we\s+|when\s+i\s+|our\s+journey|my\s+story|here'?s\s+how\s+(i|we))/.test(text)) return "story";
-
-  return "feature";
-}
-
-function detectCTA(ad: Ad): CTA {
-  const text = lc(`${ad.adHeadline || ""} ${ad.adBody || ""}`);
-  if (!text) return "other";
-  if (/(book\s+a\s+(demo|call|meeting)|schedule\s+a|meet\s+with)/.test(text)) return "book";
-  if (/(try\s+(it\s+)?free|start\s+(your\s+)?(free\s+)?trial|start\s+free)/.test(text)) return "try";
-  if (/(buy\s+now|shop\s+(now|today)|order\s+now|add\s+to\s+cart)/.test(text)) return "buy";
-  if (/(sign\s+up|get\s+started|create\s+(an\s+|your\s+)?account|join\s+(now|today|us))/.test(text)) return "signup";
-  if (/(download|get\s+the\s+app|install)/.test(text)) return "download";
-  if (/(learn\s+more|see\s+how|read\s+more|find\s+out)/.test(text)) return "learn";
+function detectTheme(name: string): Theme {
+  // AI-tool-led wins if it's literally the headline of the ad name.
+  if (/(\bgpt\b|\bclaude\b|\bgemini\b|chatgpt|\bai\b for|\bai\b powered)/i.test(name)) return "ai_brand";
+  if (/\bugc\b|okay,?\s*wait|orly\s+ugc|mich\s+#?\d|narrator/i.test(name)) return "ugc";
+  if (/(from\s+\d+\s+\w+\s+to\s+\d+|replace\s|automate\s|in\s+minutes|save\s+\d|upgrade\s|stop\s+\w+ing)/i.test(name)) return "outcome";
+  if (/\bobol\b|\bcfos\b|\bcfo\b|qbo\s|qbo$|netsuite|quickbooks/i.test(name)) return "product";
+  if (/(if\s+this\s+is\s+how|you'?re\s+missing|tired\s+of|fed\s+up|are\s+you\s+still)/i.test(name)) return "problem";
   return "other";
 }
 
-function detectLength(ad: Ad): { length: Length; chars: number } {
-  const body = ad.adBody || "";
-  const chars = body.length;
-  if (chars === 0) return { length: "none", chars };
-  if (chars < 80) return { length: "short", chars };
-  if (chars < 220) return { length: "medium", chars };
-  return { length: "long", chars };
+function detectTreatment(name: string): Treatment {
+  const n = name.toLowerCase();
+  if (/\bdark\b|dark\s+design|dark\s+new/.test(n)) return "dark";
+  if (/\bstudio\b/.test(n)) return "studio";
+  if (/no\s+design|raw|plain/.test(n)) return "plain";
+  if (/\bugc\b/.test(n)) return "ugc";
+  return "default";
 }
 
-function detectAudience(ad: Ad): string {
-  // Try to extract a meaningful audience from the adset name: most accounts
-  // encode audience like "US | SMB | Lookalike 1%" or "Retargeting - 30d".
-  const adset = ad.adsetName || "";
-  if (!adset) return "unspecified";
-  // Common buckets we look for first.
-  const lc = adset.toLowerCase();
-  if (/(retarget|rtg|warm|website\s+visitor)/.test(lc)) return "retargeting";
-  if (/(lookalike|laL|lal\s*\d|1%|2%)/.test(lc)) return "lookalike";
-  if (/(broad|advantage\+|advantage plus|aa\b)/.test(lc)) return "broad";
-  if (/(interest|aud)/.test(lc)) return "interest";
-  if (/(custom\s+audience|ca\s*-)/.test(lc)) return "custom";
+function detectCtaStyle(name: string): CtaStyle {
+  const n = name.toLowerCase();
+  if (/get\s+started|start\s+using|start\s+free|started/.test(n)) return "get_started";
+  if (/get\s+a\s+demo|book\s+a\s+demo|book\s+a\s+call/.test(n)) return "demo";
+  if (/upgrade|replace|switch/.test(n)) return "upgrade";
+  if (/form\s+test|a\/b\s+test|ab\s+test/.test(n)) return "form_test";
+  return "default";
+}
+
+function detectAudience(adsetName: string | null | undefined, campaignName: string | null | undefined): Audience {
+  const t = `${adsetName || ""} ${campaignName || ""}`.toLowerCase();
+  if (!t.trim()) return "other";
+  if (/retarget|rtg|warm|website\s+visitor|engagers?/.test(t)) return "retargeting";
+  if (/lookalike|\blal\b|\blal\s*\d|\bla[l1]\s*%|1%|2%/.test(t)) return "lookalike";
+  if (/broad|advantage\+|advantage plus|\baa\b|general\s+ad/.test(t)) return "broad";
+  if (/custom\s+audience|customer\s+list|email\s+list/.test(t)) return "custom";
+  if (/interest|\bint\b|aud\s*-/.test(t)) return "interest";
   return "other";
 }
 
-function detectObjective(ad: Ad): string {
-  const c = lc(ad.campaignName);
-  if (!c) return "unspecified";
-  if (/(lead|leadgen|leads)/.test(c)) return "leadgen";
-  if (/(conv|conversion|purchase|sale|sales)/.test(c)) return "conversion";
-  if (/(traffic|click)/.test(c)) return "traffic";
-  if (/(awareness|reach|video\s+view|views)/.test(c)) return "awareness";
-  if (/(messages|engagement|engage)/.test(c)) return "engagement";
-  return "other";
+function detectIsCopy(name: string): boolean {
+  return /\bcopy\b|copy\s*\d/i.test(name);
 }
-
-const FORMAT_LABEL: Record<Format, string> = {
-  video: "Video",
-  static: "Static image",
-  carousel: "Carousel",
-  collection: "Collection",
-  unknown: "Unknown format",
-};
-
-const HOOK_LABEL: Record<Hook, string> = {
-  price: "Price-led",
-  problem: "Problem-led",
-  social_proof: "Social proof",
-  urgency: "Urgency",
-  question: "Question hook",
-  story: "Story",
-  feature: "Feature-led",
-  unclassified: "No clear hook",
-};
-
-const CTA_LABEL: Record<CTA, string> = {
-  book: "Book a demo",
-  try: "Try free",
-  buy: "Buy now",
-  learn: "Learn more",
-  signup: "Sign up",
-  download: "Download",
-  other: "Other CTA",
-};
-
-const LENGTH_LABEL: Record<Length, string> = {
-  none: "No body copy",
-  short: "Short copy",
-  medium: "Medium copy",
-  long: "Long copy",
-};
-
-export function formatLabel(f: Format) { return FORMAT_LABEL[f]; }
-export function hookLabel(h: Hook) { return HOOK_LABEL[h]; }
-export function ctaLabel(c: CTA) { return CTA_LABEL[c]; }
-export function lengthLabel(l: Length) { return LENGTH_LABEL[l]; }
 
 export function classify(ad: Ad): ClassifiedAd {
-  const format = detectFormat(ad);
-  const hook = detectHook(ad);
-  const cta = detectCTA(ad);
-  const { length, chars } = detectLength(ad);
-  const audience = detectAudience(ad);
-  const objective = detectObjective(ad);
-  const patternKey = `${format}|${hook}`;
-  const patternLabel = `${FORMAT_LABEL[format]} · ${HOOK_LABEL[hook]}`;
+  const adName = ad.adName || "";
+  const theme = detectTheme(adName);
+  const treatment = detectTreatment(adName);
+  const ctaStyle = detectCtaStyle(adName);
+  const audience = detectAudience(ad.adsetName, ad.campaignName);
+  const isCopy = detectIsCopy(adName);
+
+  const themeLabel = THEME_LABEL[theme];
+  const treatmentLabel = TREATMENT_LABEL[treatment];
+  const ctaLabel = CTA_LABEL[ctaStyle];
+  const audienceLabel = AUDIENCE_LABEL[audience];
 
   return {
     adId: ad.id,
-    format,
-    hook,
-    cta,
-    length,
-    bodyChars: chars,
+    theme,
+    treatment,
+    ctaStyle,
     audience,
-    objective,
-    patternKey,
-    patternLabel,
+    isCopy,
+    themeLabel,
+    treatmentLabel,
+    ctaLabel,
+    audienceLabel,
+    patternKey: `${theme}|${treatment}`,
+    patternLabel: `${themeLabel} · ${treatmentLabel}`,
   };
 }
 
 export function classifyAll(ads: Ad[]): ClassifiedAd[] {
   return ads.map(classify);
 }
+
+export const THEME_LABELS = THEME_LABEL;
+export const TREATMENT_LABELS = TREATMENT_LABEL;
+export const CTA_LABELS = CTA_LABEL;
+export const AUDIENCE_LABELS = AUDIENCE_LABEL;
