@@ -45,6 +45,15 @@ const links = [
     ),
   },
   {
+    href: "/creative-dna",
+    label: "Creative DNA",
+    icon: (
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 4.5c4 4 4 11 0 15M19.5 4.5c-4 4-4 11 0 15M7 6c3 0 6 0 10 0M7 12c3 0 6 0 10 0M7 18c3 0 6 0 10 0" />
+      </svg>
+    ),
+  },
+  {
     href: "/strategy",
     label: "Leads & Analytics",
     icon: (
