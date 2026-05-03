@@ -379,6 +379,39 @@ export default function LeadsClient({
         </div>
       )}
 
+      {/* MTD Spend vs MTD Leads (actual ATM count) */}
+      {runningData.length > 0 && hasHubSpot && (
+        <div className="lv-card p-6 mb-8">
+          <h2 className="text-[16px] font-semibold mb-1">MTD Spend vs MTD Leads</h2>
+          <p className="text-[12px] text-gray-500 mb-4">
+            Cumulative ad spend and the actual leads (ATMs) you generated, day by day. Both reset on the 1st so you can compare the same day across months.
+          </p>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={runningData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }}
+                  tickFormatter={(v) => { const d = new Date(v + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; }} />
+                <YAxis yAxisId="spend" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="leads" orientation="right" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => { const d = new Date(v + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }}
+                  formatter={(value: any, name: string) => {
+                    if (value === null || value === undefined) return ["-", name];
+                    if (name === "MTD spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "MTD leads") return [`${Number(value)} lead${Number(value) === 1 ? "" : "s"}`, name];
+                    return [value, name];
+                  }}
+                />
+                <Legend />
+                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" stroke="#6B93D8" strokeWidth={2} dot={false} name="MTD spend" />
+                <Line yAxisId="leads" type="monotone" dataKey="cumAtm" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 3, fill: "#F04E80" }} connectNulls name="MTD leads" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Daily Spend vs Clicks */}
       <div className="lv-card p-6 mb-8">
         <h2 className="text-[16px] font-semibold mb-1">Daily Spend vs Clicks</h2>

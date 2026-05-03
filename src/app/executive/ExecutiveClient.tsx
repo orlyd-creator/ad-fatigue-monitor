@@ -315,6 +315,68 @@ export default function ExecutiveClient({
         </div>
       )}
 
+      {/* Daily MTD Spend vs MTD Leads (actual ATM count) */}
+      {dailyMTD.length > 0 && (
+        <div className="lv-card p-6 mb-6">
+          <div className="mb-4">
+            <h2 className="text-[15px] font-semibold text-foreground">MTD Spend vs MTD Leads, day by day</h2>
+            <p className="text-[12px] text-muted-foreground">
+              Cumulative ad spend and the actual leads (ATMs) you generated this month, plotted side by side. Both reset on the 1st so you can compare the same day across months.
+            </p>
+          </div>
+          <div style={{ width: "100%", height: 300 }}>
+            <ResponsiveContainer>
+              <LineChart data={dailyMTD} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: "#6b7280" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return `${d.getMonth() + 1}/${d.getDate()}`;
+                  }}
+                />
+                <YAxis
+                  yAxisId="spend"
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={56}
+                  tickFormatter={(v) => formatMoney(Number(v))}
+                />
+                <YAxis
+                  yAxisId="leads"
+                  orientation="right"
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
+                />
+                <Tooltip
+                  contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                  labelFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  }}
+                  formatter={(value: any, name: string) => {
+                    if (value === null || value === undefined) return ["-", name];
+                    if (name === "MTD spend") return [`$${Number(value).toFixed(0)}`, name];
+                    if (name === "MTD leads") return [`${Number(value)} lead${Number(value) === 1 ? "" : "s"}`, name];
+                    return [value, name];
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Line yAxisId="spend" type="monotone" dataKey="cumSpend" name="MTD spend" stroke="#6B93D8" strokeWidth={2} dot={false} />
+                <Line yAxisId="leads" type="monotone" dataKey="cumAtm" name="MTD leads" stroke="#F04E80" strokeWidth={2.5} dot={{ r: 2.5, fill: "#F04E80" }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Efficiency charts, CPL + Cost per SQL + SQL rate */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="lv-card p-6">
