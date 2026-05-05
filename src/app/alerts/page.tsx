@@ -19,7 +19,8 @@ export default async function AlertsPage() {
   if (!accountId) redirect("/login");
   const allAccountIds: string[] = session.allAccountIds;
 
-  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  const { verifyActiveAdStatuses, refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await verifyActiveAdStatuses(allAccountIds);
   await refreshAdStatusesForAccounts(allAccountIds);
 
   const userAds = await db.select().from(ads).where(inArray(ads.accountId, allAccountIds)).all();

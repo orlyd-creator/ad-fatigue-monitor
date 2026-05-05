@@ -79,7 +79,8 @@ export default async function PublicExecutivePage({
 
   // Refresh any stale ad statuses from Meta so paused ads don't show as
   // ACTIVE to public viewers. Runs at most once per account per minute.
-  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  const { verifyActiveAdStatuses, refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await verifyActiveAdStatuses(allAccountIds);
   await refreshAdStatusesForAccounts(allAccountIds);
 
   const [allAds, metricsRaw, hubspotResult] = await Promise.all([

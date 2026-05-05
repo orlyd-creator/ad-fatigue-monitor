@@ -55,7 +55,8 @@ export default async function StrategyPage({
   // Refresh any stale ad statuses from Meta before reading the DB, so paused
   // ads don't show as ACTIVE (limited to 1 hit per account per minute, and
   // only when the freshest lastSyncedAt is > 5 min old).
-  const { refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  const { verifyActiveAdStatuses, refreshAdStatusesForAccounts } = await import("@/lib/meta/statusRefresh");
+  await verifyActiveAdStatuses(allAccountIds);
   await refreshAdStatusesForAccounts(allAccountIds);
   // Fetch ALL ads (needed for range-scoped spend totals that include paused /
   // archived / unattributed rows, matches Dashboard accuracy).

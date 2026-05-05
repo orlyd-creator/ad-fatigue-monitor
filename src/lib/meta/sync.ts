@@ -266,8 +266,12 @@ export async function syncTodayOnly(accountId: string): Promise<{
   try {
     // Refresh ad statuses through the retry-capable helper so transient 429s
     // don't leave paused ads stuck as ACTIVE until the next full sync.
+    // verifyActiveAdStatuses runs first (cheap, targeted at currently-ACTIVE
+    // ads) so a paused ad is never more than ~2 min stale regardless of how
+    // the bulk paginated fetch is doing.
     try {
-      const { refreshAdStatusesForAccounts } = await import("./statusRefresh");
+      const { verifyActiveAdStatuses, refreshAdStatusesForAccounts } = await import("./statusRefresh");
+      await verifyActiveAdStatuses([accountId]);
       await refreshAdStatusesForAccounts([accountId]);
     } catch (err: any) {
       console.warn(`[today-sync] status refresh failed (non-fatal):`, err?.message || err);
