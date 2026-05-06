@@ -190,118 +190,13 @@ export async function register() {
     console.error("[instrumentation] Schema bootstrap failed:", err);
   }
 
-  // ── Two-tier auto-sync ──
-  // Tier 1 (every 2 min): syncTodayOnly, pulls TODAY's insights only, ~3s
-  //   per account. Keeps today's spend / CTR / CPM as close to live as Meta
-  //   allows (Meta itself has 6-12h same-day lag on spend, so tighter than
-  //   2 min is pointless).
-  // Tier 2 (every 10 min): syncAccount, full 180-day window + ad metadata
-  //   + fatigue scoring. Catches historical corrections Meta publishes
-  //   after the fact.
-  // Guarded on a global to survive Next.js hot-reload in dev.
-  try {
-    const FULL_SYNC_MS = 10 * 60 * 1000;    // 10 min
-    const TODAY_SYNC_MS = 2 * 60 * 1000;    // 2 min
-    const g = globalThis as any;
-    if (!g.__metaAutoSyncStarted) {
-      g.__metaAutoSyncStarted = true;
-      // First full run 60s after boot so we don't fight deploy warm-up.
-      let firstRun = true;
-      const schedule = () => {
-        setTimeout(runAutoSync, firstRun ? 60000 : FULL_SYNC_MS);
-        firstRun = false;
-      };
-      const recordRun = async (
-        mode: string,
-        source: string,
-        accountId: string | null,
-        startedAt: number,
-        success: boolean,
-        adsFound: number,
-        metricsUpserted: number,
-        errors: string[],
-      ) => {
-        try {
-          const { createClient } = await import("@libsql/client");
-          const c = createClient({
-            url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
-            authToken: process.env.TURSO_AUTH_TOKEN,
-          });
-          await c.execute({
-            sql: `INSERT INTO sync_runs (mode, source, account_id, started_at, finished_at, success, ads_found, metrics_upserted, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            args: [mode, source, accountId, startedAt, Date.now(), success ? 1 : 0, adsFound, metricsUpserted, errors.length ? JSON.stringify(errors) : null],
-          });
-        } catch (e) {
-          console.error("[sync_runs] insert failed:", e);
-        }
-      };
-      const runAutoSync = async () => {
-        const tickStarted = Date.now();
-        try {
-          const { db } = await import("@/lib/db");
-          const { accounts } = await import("@/lib/db/schema");
-          const { syncAccount } = await import("@/lib/meta/sync");
-          const { clearHubSpotCache } = await import("@/lib/hubspot/client");
-          const rows = await db.select().from(accounts).all();
-          console.log(`[auto-sync] starting, ${rows.length} accounts`);
-          for (const account of rows) {
-            const accStart = Date.now();
-            if (account.tokenExpiresAt < Date.now()) {
-              console.warn(`[auto-sync] skipping ${account.id} (token expired)`);
-              await recordRun("full", "auto", account.id, accStart, false, 0, 0, ["Token expired, reconnect Meta at /login"]);
-              continue;
-            }
-            try {
-              const res = await syncAccount(account.id);
-              console.log(`[auto-sync] ${account.id}: ${res.adsFound} ads, ${res.metricsUpserted} metrics`);
-              const ok = (res.errors?.length ?? 0) === 0;
-              await recordRun("full", "auto", account.id, accStart, ok, res.adsFound, res.metricsUpserted, res.errors || []);
-            } catch (err: any) {
-              console.error(`[auto-sync] ${account.id} failed:`, err?.message || err);
-              await recordRun("full", "auto", account.id, accStart, false, 0, 0, [err?.message || String(err)]);
-            }
-          }
-          clearHubSpotCache();
-        } catch (err: any) {
-          console.error("[auto-sync] tick failed:", err?.message || err);
-          await recordRun("full", "auto", null, tickStarted, false, 0, 0, [err?.message || String(err)]);
-        } finally {
-          schedule();
-        }
-      };
-      schedule();
-      console.log("[instrumentation] 10-min full auto-sync registered");
-
-      // Tier 2: today-only micro-sync every 2 min.
-      const scheduleToday = () => setTimeout(runTodaySync, TODAY_SYNC_MS);
-      const runTodaySync = async () => {
-        try {
-          const { db } = await import("@/lib/db");
-          const { accounts } = await import("@/lib/db/schema");
-          const { syncTodayOnly } = await import("@/lib/meta/sync");
-          const rows = await db.select().from(accounts).all();
-          for (const account of rows) {
-            if (account.tokenExpiresAt < Date.now()) continue;
-            try {
-              const res = await syncTodayOnly(account.id);
-              if (res.rowsUpdated > 0) {
-                console.log(`[today-sync] ${account.id}: ${res.rowsUpdated} rows`);
-              }
-            } catch (err: any) {
-              console.error(`[today-sync] ${account.id} failed:`, err?.message || err);
-            }
-          }
-        } catch (err: any) {
-          console.error("[today-sync] tick failed:", err?.message || err);
-        } finally {
-          scheduleToday();
-        }
-      };
-      // First today-sync 90s after boot (after the full-sync warmup).
-      setTimeout(runTodaySync, 90000);
-      console.log("[instrumentation] 2-min today-only auto-sync registered");
-    }
-  } catch (err) {
-    console.error("[instrumentation] Auto-sync registration failed:", err);
-  }
+  // Auto-sync is driven by the external GitHub Actions cron in
+  // .github/workflows/meta-sync.yml (quick every 5 min, full hourly). It
+  // hits GET /api/sync with `Authorization: Bearer $CRON_SECRET`, which
+  // does NOT depend on whether the Next.js process is awake or whether
+  // anyone is looking at the dashboard. The previous in-process setTimeout
+  // loop died any time Railway restarted, slept, or OOM'd the container,
+  // which produced the recurring "Meta 17h ago" stale-data bug.
+  // Token refresh is also external: .github/workflows/refresh-tokens.yml
+  // hits /api/refresh-tokens daily.
 }
