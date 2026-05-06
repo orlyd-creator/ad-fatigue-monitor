@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
  * Keeps data live. On mount, if the last Meta sync is older than
- * the threshold, it fires a background /api/sync and refreshes the
- * Server Component tree when it finishes. Shows a subtle banner.
+ * the threshold, fire a synchronous quick-sync (~5s, today's metrics
+ * + ad statuses) and refresh the Server Component tree when it
+ * actually finishes. Re-checks every minute so a tab left open for
+ * an hour stays fresh too.
  *
- * Drop one of these into every data-facing page so users never see
- * stale ad statuses / spend without having to click Refresh manually.
+ * Quick mode is used here on purpose — full mode returns immediately
+ * with `{started: true}` and runs in the background, which means a
+ * router.refresh() right after the fetch re-fetches the same stale
+ * data and never retries. The 10-min server-side auto-sync in
+ * instrumentation.ts handles the historical 180-day window.
  */
 export default function FreshnessGuard({
   lastSyncedAt,
@@ -23,31 +28,44 @@ export default function FreshnessGuard({
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
   const [ageMin, setAgeMin] = useState<number | null>(null);
+  const inFlight = useRef(false);
 
   useEffect(() => {
-    if (!lastSyncedAt) {
-      setAgeMin(null);
+    if (isPublic) {
+      if (lastSyncedAt) {
+        setAgeMin(Math.floor((Date.now() - lastSyncedAt) / 60000));
+      }
       return;
     }
-    const minutes = Math.floor((Date.now() - lastSyncedAt) / 60000);
-    setAgeMin(minutes);
 
-    // Public viewers don't trigger sync, keep it owner-only so we don't
-    // burn Meta rate limits on every anonymous link click.
-    if (isPublic) return;
-    if (minutes < staleAfterMinutes) return;
-    if (status !== "idle") return;
+    const tryRefresh = async () => {
+      const ts = lastSyncedAt ?? 0;
+      const minutes = ts ? Math.floor((Date.now() - ts) / 60000) : null;
+      setAgeMin(minutes);
 
-    setStatus("syncing");
-    fetch("/api/sync", { method: "POST" })
-      .then((res) => {
+      if (ts && minutes !== null && minutes < staleAfterMinutes) return;
+      if (inFlight.current) return;
+      inFlight.current = true;
+      setStatus("syncing");
+      try {
+        const res = await fetch("/api/sync?mode=quick", { method: "POST" });
         if (!res.ok) throw new Error(String(res.status));
         setStatus("done");
         router.refresh();
-      })
-      .catch(() => setStatus("error"));
+      } catch {
+        setStatus("error");
+      } finally {
+        inFlight.current = false;
+      }
+    };
+
+    tryRefresh();
+    // Re-check every minute while the tab is open. The guard inside
+    // tryRefresh skips the fetch unless data is actually stale.
+    const interval = setInterval(tryRefresh, 60_000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastSyncedAt]);
+  }, [lastSyncedAt, isPublic, staleAfterMinutes]);
 
   // Traffic-light color for Meta freshness
   const metaColor =
