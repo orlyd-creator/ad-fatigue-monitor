@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { db, createRawDbClient } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
-import { createClient } from "@libsql/client";
 
 /**
  * Shows the real status of the most recent auto-sync tick for each of
@@ -35,10 +34,7 @@ export default async function SyncHealthBanner({ accountIds }: { accountIds: str
   };
   let latestByAccount = new Map<string, Run>();
   try {
-    const c = createClient({
-      url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
+    const c = createRawDbClient();
     const res = await c.execute({
       sql: `SELECT account_id, started_at, finished_at, success, ads_found, metrics_upserted, errors
             FROM sync_runs

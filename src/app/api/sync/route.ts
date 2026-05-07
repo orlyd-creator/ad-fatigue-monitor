@@ -133,11 +133,8 @@ async function _runSyncInner(accountIds: string[], mode: "full" | "quick" = "ful
     errors: string[],
   ) => {
     try {
-      const { createClient } = await import("@libsql/client");
-      const c = createClient({
-        url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
-        authToken: process.env.TURSO_AUTH_TOKEN,
-      });
+      const { createRawDbClient } = await import("@/lib/db");
+      const c = createRawDbClient();
       await c.execute({
         sql: `INSERT INTO sync_runs (mode, source, account_id, started_at, finished_at, success, ads_found, metrics_upserted, errors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [mode, "manual", accountId, startedAt, Date.now(), success ? 1 : 0, adsFound, metricsUpserted, errors.length ? JSON.stringify(errors) : null],

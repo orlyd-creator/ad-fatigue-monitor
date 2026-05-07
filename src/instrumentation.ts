@@ -9,11 +9,104 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   try {
-    const { createClient } = await import("@libsql/client");
-    const client = createClient({
-      url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
+    const { createRawDbClient } = await import("@/lib/db");
+    const client = createRawDbClient();
+
+    // Bootstrap the original schema. Idempotent (IF NOT EXISTS) so this
+    // is safe for both fresh DBs (e.g. a brand-new SQLite file on a Railway
+    // volume after migrating off Turso) AND the existing prod DB. Mirrors
+    // drizzle/0000_*.sql so we do not have to run the migrator on boot.
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        token_expires_at INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS ads (
+        id TEXT PRIMARY KEY NOT NULL,
+        account_id TEXT NOT NULL,
+        campaign_id TEXT NOT NULL,
+        campaign_name TEXT NOT NULL,
+        adset_id TEXT NOT NULL,
+        adset_name TEXT NOT NULL,
+        ad_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER,
+        first_seen_at INTEGER NOT NULL,
+        last_synced_at INTEGER,
+        thumbnail_url TEXT,
+        image_url TEXT,
+        ad_body TEXT,
+        ad_headline TEXT,
+        ad_link_url TEXT
+      )
+    `);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        fatigue_score REAL NOT NULL,
+        stage TEXT NOT NULL,
+        signals TEXT NOT NULL,
+        dismissed INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS daily_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        impressions INTEGER NOT NULL DEFAULT 0,
+        reach INTEGER NOT NULL DEFAULT 0,
+        clicks INTEGER NOT NULL DEFAULT 0,
+        spend REAL NOT NULL DEFAULT 0,
+        frequency REAL NOT NULL DEFAULT 0,
+        ctr REAL NOT NULL DEFAULT 0,
+        cpm REAL NOT NULL DEFAULT 0,
+        cpc REAL NOT NULL DEFAULT 0,
+        actions INTEGER NOT NULL DEFAULT 0,
+        cost_per_action REAL NOT NULL DEFAULT 0,
+        conversion_rate REAL NOT NULL DEFAULT 0,
+        inline_post_engagement INTEGER NOT NULL DEFAULT 0,
+        post_reactions INTEGER NOT NULL DEFAULT 0,
+        post_comments INTEGER NOT NULL DEFAULT 0,
+        post_shares INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    await client.execute(`CREATE UNIQUE INDEX IF NOT EXISTS daily_metrics_ad_date_idx ON daily_metrics (ad_id, date)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS daily_metrics_ad_date_desc_idx ON daily_metrics (ad_id, date)`);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY DEFAULT 1 NOT NULL,
+        sensitivity_preset TEXT NOT NULL DEFAULT 'medium',
+        ctr_weight REAL NOT NULL DEFAULT 0.2,
+        cpm_weight REAL NOT NULL DEFAULT 0.15,
+        frequency_weight REAL NOT NULL DEFAULT 0.25,
+        conversion_weight REAL NOT NULL DEFAULT 0.2,
+        cost_per_result_weight REAL NOT NULL DEFAULT 0.1,
+        engagement_weight REAL NOT NULL DEFAULT 0.1,
+        baseline_window_days INTEGER NOT NULL DEFAULT 7,
+        recent_window_days INTEGER NOT NULL DEFAULT 3,
+        min_data_days INTEGER NOT NULL DEFAULT 5
+      )
+    `);
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS hubspot_config (
+        id INTEGER PRIMARY KEY DEFAULT 1 NOT NULL,
+        api_key TEXT NOT NULL DEFAULT '',
+        atm_property TEXT NOT NULL DEFAULT 'agreed_to_meet_date___test_',
+        sql_classification TEXT NOT NULL DEFAULT 'hs_lead_status_sql',
+        mql_definition TEXT NOT NULL DEFAULT 'form_fill',
+        updated_at INTEGER
+      )
+    `);
 
     // sync_runs: durable record of every auto-sync tick so the dashboard
     // can show "last refresh succeeded / failed at HH:MM" and the actual

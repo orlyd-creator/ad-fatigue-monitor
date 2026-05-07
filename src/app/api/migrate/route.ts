@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@libsql/client";
+import { createRawDbClient } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -7,10 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const client = createClient({
-    url: process.env.TURSO_DATABASE_URL || "file:sqlite.db",
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  });
+  const client = createRawDbClient();
 
   const results: string[] = [];
 
