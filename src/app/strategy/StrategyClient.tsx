@@ -199,7 +199,7 @@ export default function StrategyClient({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="rounded-xl bg-gradient-to-r from-[#6B93D8]/10 to-[#9B7ED0]/10 p-4">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per Demo</div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost per Lead</div>
             <div className="text-[24px] font-bold text-foreground tabular-nums">
               {costPerDemo !== null ? formatCurrency(costPerDemo) : "-"}
             </div>
@@ -371,7 +371,7 @@ export default function StrategyClient({
 
           {/* Per-Campaign CPL + ROAS, Meta spend × HubSpot ATM leads + won revenue */}
           <div className="lv-card p-6">
-            <h2 className="text-[16px] font-semibold mb-1">Cost per Demo & ROAS by Campaign</h2>
+            <h2 className="text-[16px] font-semibold mb-1">Cost per Lead & ROAS by Campaign</h2>
             <p className="text-[12px] text-gray-500 mb-4">
               Spend ÷ ATM leads matched via utm_campaign. Revenue is closed-won deal value joined via the same utm match.
             </p>

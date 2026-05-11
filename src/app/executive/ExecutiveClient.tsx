@@ -203,7 +203,7 @@ export default function ExecutiveClient({
             <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.sqls.toLocaleString()}</div>
           </div>
           <div>
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wide">Cost per demo</div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wide">Cost per lead</div>
             <div className="text-[22px] font-bold text-foreground tabular-nums">{rangeTotals.cpl != null ? formatMoney(rangeTotals.cpl) : "-"}</div>
           </div>
           <div>
@@ -222,7 +222,7 @@ export default function ExecutiveClient({
         <StatCard label="Ad spend" value={formatMoney(thisMonth.spend)} delta={deltas.spend} />
         <StatCard label="Demos booked" value={thisMonth.atm.toLocaleString()} delta={deltas.atm} />
         <StatCard label="SQLs" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} />
-        <StatCard label="Cost per demo" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "-"} delta={deltas.cpl} invertDelta />
+        <StatCard label="Cost per lead" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "-"} delta={deltas.cpl} invertDelta />
       </div>
 
       {/* Main trend chart */}
@@ -381,7 +381,7 @@ export default function ExecutiveClient({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="lv-card p-6">
           <div className="mb-4">
-            <h2 className="text-[15px] font-semibold text-foreground">Cost per demo over time</h2>
+            <h2 className="text-[15px] font-semibold text-foreground">Cost per lead over time</h2>
             <p className="text-[12px] text-muted-foreground">Lower is better.</p>
           </div>
           <div style={{ width: "100%", height: 220 }}>
@@ -392,7 +392,7 @@ export default function ExecutiveClient({
                 <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => formatMoney(Number(v))} />
                 <Tooltip
                   contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                  formatter={(value: any) => [formatMoney(Number(value)), "Cost per demo"]}
+                  formatter={(value: any) => [formatMoney(Number(value)), "Cost per lead"]}
                 />
                 <Line type="monotone" dataKey="cpl" stroke="#F04E80" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
