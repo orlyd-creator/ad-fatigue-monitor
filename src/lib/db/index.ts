@@ -10,11 +10,22 @@ import * as schema from "./schema";
 //   3. file:sqlite.db — local dev fallback. Do not use in prod; Railway
 //      containers are ephemeral and the file is wiped on every redeploy.
 export function resolveDbConfig() {
+  let url =
+    process.env.DATABASE_URL ||
+    process.env.TURSO_DATABASE_URL ||
+    "file:sqlite.db";
+  // During `next build` (page-data collection), the Railway volume isn't
+  // mounted yet, so file:/data/app.db can't be opened (SQLITE_CANTOPEN, 14).
+  // Substitute a build-only tmp file so route module init succeeds. At
+  // runtime NEXT_PHASE is unset and the real path is used.
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" &&
+    url.startsWith("file:/data/")
+  ) {
+    url = "file:.next-build-shim.db";
+  }
   return {
-    url:
-      process.env.DATABASE_URL ||
-      process.env.TURSO_DATABASE_URL ||
-      "file:sqlite.db",
+    url,
     authToken:
       process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN,
   };
