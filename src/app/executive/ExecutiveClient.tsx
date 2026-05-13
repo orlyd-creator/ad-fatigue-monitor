@@ -46,6 +46,7 @@ type Props = {
   presets: Record<string, { from: string; to: string }>;
   thisMonth: { spend: number; atm: number; sqls: number; cpl: number | null };
   lastMonthLabel: string;
+  comparisonLabel?: string;
   deltas: {
     spend: number | null;
     atm: number | null;
@@ -80,7 +81,7 @@ function formatMoney(n: number): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
-function DeltaBadge({ pct, invert = false }: { pct: number | null; invert?: boolean }) {
+function DeltaBadge({ pct, invert = false, comparisonLabel = "vs last month" }: { pct: number | null; invert?: boolean; comparisonLabel?: string }) {
   if (pct == null) return <span className="text-[12px] text-muted-foreground">no data last month</span>;
   const isPositive = invert ? pct < 0 : pct > 0;
   const isNeutral = Math.abs(pct) < 0.5;
@@ -88,19 +89,19 @@ function DeltaBadge({ pct, invert = false }: { pct: number | null; invert?: bool
   const arrow = isNeutral ? "→" : pct > 0 ? "↑" : "↓";
   return (
     <span className={`text-[12px] font-medium ${color}`}>
-      {arrow} {Math.abs(pct).toFixed(1)}% vs last month
+      {arrow} {Math.abs(pct).toFixed(1)}% {comparisonLabel}
     </span>
   );
 }
 
 function StatCard({
-  label, value, delta, invertDelta = false,
-}: { label: string; value: string; delta: number | null; invertDelta?: boolean }) {
+  label, value, delta, invertDelta = false, comparisonLabel,
+}: { label: string; value: string; delta: number | null; invertDelta?: boolean; comparisonLabel?: string }) {
   return (
     <div className="lv-card p-6 flex flex-col gap-2">
       <div className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">{label}</div>
       <div className="text-[32px] font-bold text-foreground leading-none tracking-tight tabular-nums">{value}</div>
-      <DeltaBadge pct={delta} invert={invertDelta} />
+      <DeltaBadge pct={delta} invert={invertDelta} comparisonLabel={comparisonLabel} />
     </div>
   );
 }
@@ -139,7 +140,7 @@ function TopAdCard({ title, ad, metric }: { title: string; ad: TopAd; metric: "s
 export default function ExecutiveClient({
   basePath = "/executive",
   monthLabel, rangeLabel, rangeFrom, rangeTo, preset, presets,
-  thisMonth, lastMonthLabel, deltas, rangeTotals,
+  thisMonth, lastMonthLabel, comparisonLabel, deltas, rangeTotals,
   trend, monthlyTable, topCampaigns,
   topAdByConversions, topAdBySpend,
   dailyMTD = [],
@@ -213,16 +214,20 @@ export default function ExecutiveClient({
         </div>
       </div>
 
-      {/* This-month stat cards (for MoM deltas) */}
+      {/* Stat cards: show selected range data with MoM deltas when on "this-month" */}
       <div className="mb-2">
-        <div className="text-[13px] font-semibold text-foreground">This month ({monthLabel})</div>
-        <div className="text-[12px] text-muted-foreground">Compared to {lastMonthLabel}</div>
+        <div className="text-[13px] font-semibold text-foreground">
+          {lastMonthLabel ? `This month (${monthLabel})` : monthLabel}
+        </div>
+        {lastMonthLabel && (
+          <div className="text-[12px] text-muted-foreground">Compared to {lastMonthLabel}</div>
+        )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Ad spend" value={formatMoney(thisMonth.spend)} delta={deltas.spend} />
-        <StatCard label="Demos booked" value={thisMonth.atm.toLocaleString()} delta={deltas.atm} />
-        <StatCard label="SQLs" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} />
-        <StatCard label="Cost per lead" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "-"} delta={deltas.cpl} invertDelta />
+        <StatCard label="Ad spend" value={formatMoney(thisMonth.spend)} delta={deltas.spend} comparisonLabel={comparisonLabel} />
+        <StatCard label="Demos booked" value={thisMonth.atm.toLocaleString()} delta={deltas.atm} comparisonLabel={comparisonLabel} />
+        <StatCard label="SQLs" value={thisMonth.sqls.toLocaleString()} delta={deltas.sqls} comparisonLabel={comparisonLabel} />
+        <StatCard label="Cost per lead" value={thisMonth.cpl != null ? formatMoney(thisMonth.cpl) : "-"} delta={deltas.cpl} invertDelta comparisonLabel={comparisonLabel} />
       </div>
 
       {/* Main trend chart */}

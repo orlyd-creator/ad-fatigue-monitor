@@ -163,19 +163,19 @@ export default async function PublicExecutivePage({
     return Math.round(((curr - prev) / prev) * 1000) / 10;
   };
 
-  const thisSpend = thisMonth?.spend ?? 0;
-  const thisATM = thisMonth?.atm ?? 0;
-  const thisSQLs = thisMonth?.sqls ?? 0;
-  const thisCPL = thisATM > 0 ? Math.round((thisSpend / thisATM) * 100) / 100 : null;
+  const thisSpendVal = thisMonth?.spend ?? 0;
+  const thisATMVal = thisMonth?.atm ?? 0;
+  const thisSQLsVal = thisMonth?.sqls ?? 0;
+  const thisCPLVal = thisATMVal > 0 ? Math.round((thisSpendVal / thisATMVal) * 100) / 100 : null;
   const lastSpend = lastMonth?.spend ?? 0;
   const lastATM = lastMonth?.atm ?? 0;
   const lastSQLs = lastMonth?.sqls ?? 0;
   const lastCPL = lastATM > 0 ? Math.round((lastSpend / lastATM) * 100) / 100 : null;
-  const deltas = {
-    spend: pctDelta(thisSpend, lastSpend),
-    atm: pctDelta(thisATM, lastATM),
-    sqls: pctDelta(thisSQLs, lastSQLs),
-    cpl: lastCPL && thisCPL ? pctDelta(thisCPL, lastCPL) : null,
+  const momDeltas = {
+    spend: pctDelta(thisSpendVal, lastSpend),
+    atm: pctDelta(thisATMVal, lastATM),
+    sqls: pctDelta(thisSQLsVal, lastSQLs),
+    cpl: lastCPL && thisCPLVal ? pctDelta(thisCPLVal, lastCPL) : null,
   };
 
   const rangeTotals = buckets.reduce(
@@ -188,6 +188,21 @@ export default async function PublicExecutivePage({
   );
   const rangeCPL = rangeTotals.atm > 0 ? Math.round((rangeTotals.spend / rangeTotals.atm) * 100) / 100 : null;
   const rangeCostPerSQL = rangeTotals.sqls > 0 ? Math.round((rangeTotals.spend / rangeTotals.sqls) * 100) / 100 : null;
+
+  // When the user selects a range other than "this-month", stat cards should
+  // reflect the selected range, not the hardcoded current month.
+  const isThisMonthPreset = preset === "this-month";
+  const cardData = isThisMonthPreset
+    ? { spend: thisSpendVal, atm: thisATMVal, sqls: thisSQLsVal, cpl: thisCPLVal }
+    : {
+        spend: Math.round(rangeTotals.spend * 100) / 100,
+        atm: rangeTotals.atm,
+        sqls: rangeTotals.sqls,
+        cpl: rangeCPL,
+      };
+  const cardDeltas = isThisMonthPreset
+    ? momDeltas
+    : { spend: null, atm: null, sqls: null, cpl: null };
 
   const adStatsMap = new Map<string, { spend: number; conversions: number }>();
   for (const m of metrics) {
@@ -257,19 +272,23 @@ export default async function PublicExecutivePage({
       </div>
       <ExecutiveClient
         basePath={`/public/executive/${token}`}
-        monthLabel={format(now, "MMMM yyyy")}
+        monthLabel={isThisMonthPreset ? format(now, "MMMM yyyy") : (
+          buckets.length === 1
+            ? buckets[0].label
+            : `${format(fromDate, "MMM d, yyyy")} \u2013 ${format(toDate, "MMM d, yyyy")}`
+        )}
         rangeLabel={
           buckets.length === 1
             ? buckets[0].label
-            : `${format(fromDate, "MMM d, yyyy")}, ${format(toDate, "MMM d, yyyy")}`
+            : `${format(fromDate, "MMM d, yyyy")} \u2013 ${format(toDate, "MMM d, yyyy")}`
         }
         rangeFrom={rangeFromStr}
         rangeTo={rangeToStr}
         preset={preset}
         presets={presets}
-        thisMonth={{ spend: thisSpend, atm: thisATM, sqls: thisSQLs, cpl: thisCPL }}
-        lastMonthLabel={format(lastMonthStart, "MMMM")}
-        deltas={deltas}
+        thisMonth={cardData}
+        lastMonthLabel={isThisMonthPreset ? format(lastMonthStart, "MMMM") : ""}
+        deltas={cardDeltas}
         rangeTotals={{
           spend: Math.round(rangeTotals.spend * 100) / 100,
           atm: rangeTotals.atm,

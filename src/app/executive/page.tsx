@@ -145,9 +145,21 @@ export default async function ExecutivePage({
 
   // Current vs previous month (for top cards), computed from the ALL-metrics
   // set (metricsRaw) so the card works regardless of the selected range.
+  // MTD-fair: clip last month at the same day-of-month as today so May 1-13
+  // is compared against April 1-13, not all of April. Avoids false-cliff
+  // deltas mid-month. If today's day exceeds last month's last day (e.g.
+  // May 31 vs Feb), cap at last month's last day.
   const lastMonthStart = lastMonthStartLocal;
-  const lastMonthEnd = endOfMonth(lastMonthStart);
+  const lastMonthFullEnd = endOfMonth(lastMonthStart);
+  const todayDay = now.getDate();
+  const lastMonthLastDay = lastMonthFullEnd.getDate();
+  const cutoffDay = Math.min(todayDay, lastMonthLastDay);
+  const lastMonthEnd = new Date(lastMonthStart);
+  lastMonthEnd.setDate(cutoffDay);
+  lastMonthEnd.setHours(23, 59, 59, 999);
   const thisMonthEnd = endOfMonth(now);
+  // True when we're mid-month and comparing to a clipped slice of last month.
+  const isPartialMonth = todayDay < endOfMonth(now).getDate();
 
   let thisSpend = 0, lastSpend = 0;
   for (const m of metricsRaw) {
@@ -259,6 +271,26 @@ export default async function ExecutivePage({
 
   const lastSyncedAt = allAds.reduce((max, ad) => Math.max(max, ad.lastSyncedAt ?? 0), 0);
 
+  // When the user selects a range other than "this-month", the stat cards
+  // should reflect the selected range, not the hardcoded current month.
+  const isThisMonthPreset = preset === "this-month";
+  const cardData = isThisMonthPreset
+    ? { spend: thisSpend, atm: thisATM, sqls: thisSQLs, cpl: thisCPL }
+    : {
+        spend: Math.round(rangeTotals.spend * 100) / 100,
+        atm: rangeTotals.atm,
+        sqls: rangeTotals.sqls,
+        cpl: rangeCPL,
+      };
+  const cardDeltas = isThisMonthPreset
+    ? deltas
+    : { spend: null, atm: null, sqls: null, cpl: null };
+
+  const rangeLabel =
+    buckets.length === 1
+      ? buckets[0].label
+      : `${format(fromDate, "MMM d, yyyy")} \u2013 ${format(toDate, "MMM d, yyyy")}`;
+
   return (
     <div className="min-h-screen">
       <div className="px-8 pt-6">
@@ -267,19 +299,28 @@ export default async function ExecutivePage({
         <FreshnessGuard lastSyncedAt={lastSyncedAt || null} isPublic={!!session.isPublic} />
       </div>
       <ExecutiveClient
-        monthLabel={format(now, "MMMM yyyy")}
-        rangeLabel={
-          buckets.length === 1
-            ? buckets[0].label
-            : `${format(fromDate, "MMM d, yyyy")}, ${format(toDate, "MMM d, yyyy")}`
-        }
+        monthLabel={isThisMonthPreset ? format(now, "MMMM yyyy") : rangeLabel}
+        rangeLabel={rangeLabel}
         rangeFrom={rangeFromStr}
         rangeTo={rangeToStr}
         preset={preset}
         presets={presets}
-        thisMonth={{ spend: thisSpend, atm: thisATM, sqls: thisSQLs, cpl: thisCPL }}
-        lastMonthLabel={format(lastMonthStart, "MMMM")}
-        deltas={deltas}
+        thisMonth={cardData}
+        lastMonthLabel={
+          isThisMonthPreset
+            ? (isPartialMonth
+                ? `${format(lastMonthStart, "MMM")} 1-${cutoffDay}`
+                : format(lastMonthStart, "MMMM"))
+            : ""
+        }
+        comparisonLabel={
+          isThisMonthPreset
+            ? (isPartialMonth
+                ? `vs ${format(lastMonthStart, "MMM")} 1-${cutoffDay}`
+                : "vs last month")
+            : undefined
+        }
+        deltas={cardDeltas}
         rangeTotals={{
           spend: Math.round(rangeTotals.spend * 100) / 100,
           atm: rangeTotals.atm,

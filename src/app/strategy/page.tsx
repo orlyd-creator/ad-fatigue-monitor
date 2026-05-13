@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { ads, dailyMetrics, settings } from "@/lib/db/schema";
-import { eq, inArray, gte } from "drizzle-orm";
+import { eq, inArray, gte, lte, and } from "drizzle-orm";
 import { calculateFatigueScore } from "@/lib/fatigue/scoring";
 import type { ScoringSettings } from "@/lib/fatigue/types";
 import { DEFAULT_SETTINGS } from "@/lib/fatigue/types";
@@ -126,13 +126,15 @@ export default async function StrategyPage({
   const recentMetrics = await db
     .select()
     .from(dailyMetrics)
-    .where(gte(dailyMetrics.date, rangeStart))
+    .where(and(gte(dailyMetrics.date, rangeStart), lte(dailyMetrics.date, rangeEnd)))
     .all();
 
-  // Build date -> { adName: spend } map
+  // Build date -> { adName: spend } map across the SELECTED range (not hard-
+  // coded to current month). Use T12:00:00 to dodge timezone off-by-ones.
   const dailyMap = new Map<string, Record<string, number>>();
-  const monthStart = startOfMonth(new Date());
-  for (let d = new Date(monthStart); d <= new Date(); d.setDate(d.getDate() + 1)) {
+  const dailyMapStart = new Date(rangeStart + "T12:00:00");
+  const dailyMapEnd = new Date(rangeEnd + "T12:00:00");
+  for (let d = new Date(dailyMapStart); d <= dailyMapEnd; d.setDate(d.getDate() + 1)) {
     dailyMap.set(format(d, "yyyy-MM-dd"), {});
   }
 
@@ -163,7 +165,7 @@ export default async function StrategyPage({
   const rangeMetricsAll = await db
     .select()
     .from(dailyMetrics)
-    .where(gte(dailyMetrics.date, rangeStart))
+    .where(and(gte(dailyMetrics.date, rangeStart), lte(dailyMetrics.date, rangeEnd)))
     .all();
   const dedupeMap = new Map<string, typeof rangeMetricsAll[number]>();
   for (const m of rangeMetricsAll) {
@@ -545,7 +547,7 @@ export default async function StrategyPage({
         totalROAS={totalROAS}
         unmatchedRevenue={unmatchedRevenue}
         unmatchedRevenueTotal={Math.round(unmatchedRevenueTotal * 100) / 100}
-        rangeLabel={`${format(startOfMonth(now), "MMM d")} – ${format(now, "MMM d, yyyy")}`}
+        rangeLabel={`${format(new Date(rangeStart + "T12:00:00"), "MMM d")} – ${format(new Date(rangeEnd + "T12:00:00"), "MMM d, yyyy")}`}
       />
     </div>
   );
